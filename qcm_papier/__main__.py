@@ -1,4 +1,4 @@
-"""Point d'entrée de l'interface graphique GTK 3.
+"""Point d'entrée de l'interface graphique GTK 4.
 
 Lancé via ``python3 -m qcm_papier``. Si GTK n'est pas disponible, on bascule
 sur la CLI.
