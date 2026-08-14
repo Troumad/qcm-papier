@@ -968,22 +968,42 @@ def load_pages_from_file(path: str, dpi: int = 150) -> list[ScannedPage]:
     """Charge les pages d'un fichier PDF ou d'une image.
 
     Renvoie une liste de ``ScannedPage`` (une par page du PDF, ou une seule
-    pour une image). Utilise PyMuPDF pour les PDF et Pillow pour les images.
+    pour une image). Utilise **PyMuPDF** de préférence ; sinon **pdf2image**
+    (nécessite ``poppler-utils``) comme repli pour les PDF.
     """
     ext = os.path.splitext(path)[1].lower()
     pages: list[ScannedPage] = []
     if ext == ".pdf":
-        import pymupdf
-        doc = pymupdf.open(path)
-        for pdf_page in doc:
-            pix = pdf_page.get_pixmap(dpi=dpi)
-            img = Image.frombytes("RGB" if pix.alpha == 0 else "RGBA",
-                                  (pix.width, pix.height), pix.samples)
-            sp = ScannedPage(img=PixelImage(img))
-            pages.append(sp)
-        doc.close()
+        loaded = False
+        # 1) PyMuPDF (préférable : pas de dépendance système).
+        try:
+            import pymupdf
+            doc = pymupdf.open(path)
+            for pdf_page in doc:
+                pix = pdf_page.get_pixmap(dpi=dpi)
+                img = Image.frombytes("RGB" if pix.alpha == 0 else "RGBA",
+                                      (pix.width, pix.height), pix.samples)
+                pages.append(ScannedPage(img=PixelImage(img)))
+            doc.close()
+            loaded = True
+        except ImportError:
+            pass
+        # 2) Repli : pdf2image (nécessite poppler-utils installé).
+        if not loaded:
+            try:
+                from pdf2image import convert_from_path
+                images = convert_from_path(path, dpi=dpi)
+                for img in images:
+                    pages.append(ScannedPage(img=PixelImage(img)))
+                loaded = True
+            except ImportError:
+                pass
+        if not loaded:
+            raise RuntimeError(
+                "Aucune bibliothèque de rendu PDF disponible. Installez "
+                "PyMuPDF (``pip install --user pymupdf``) ou pdf2image + "
+                "poppler-utils (``urpmi python3-pdf2image poppler``).")
     else:
         img = Image.open(path)
-        sp = ScannedPage(img=PixelImage(img))
-        pages.append(sp)
+        pages.append(ScannedPage(img=PixelImage(img)))
     return pages

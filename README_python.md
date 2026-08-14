@@ -1,4 +1,4 @@
-# qcm-papier — Générateur/Correcteur de QCM papier (Python + GTK 3)
+# qcm-papier — Générateur/Correcteur de QCM papier (Python + GTK 4)
 
 Portage en Python du générateur/correcteur de QCM papier originellement écrit en
 HTML5 + JavaScript (Université Lyon 1, auteur original : Florent Ouchet).
@@ -35,7 +35,7 @@ qcm_papier/
 ├── cli.py            # Interface en ligne de commande
 └── ui/
     ├── __init__.py
-    ├── app.py        # Fenêtre principale GTK 3
+    ├── app.py        # Fenêtre principale GTK 4
     ├── editor.py     # Éditeur de structure
     ├── generate.py   # Onglet génération
     └── marking_ui.py # Onglet correction
@@ -48,48 +48,18 @@ qcm_papier/
 - openpyxl (fichiers Excel Scodoc)
 - Pillow (images scannées)
 - PyMuPDF (lecture des PDF scannés)
-- PyGObject + GTK 3 (interface graphique, paquets système
-  `gir1.2-gtk-3.0` + `python3-gi`)
+- PyGObject + GTK 4 (interface graphique, paquets système
+  `gir1.2-gtk-4.0` + `python3-gi`)
 
 ## Installation
 
-### Prérequis
-
-Python ≥ 3.10 doit être installé.
-
-### Debian / Ubuntu (apt)
-
 ```bash
-# Paquets système pour GTK 3
-sudo apt install python3-gi gir1.2-gtk-3.0
+# Paquets système (Debian/Ubuntu) pour GTK 4
+sudo apt-get install python3-gi gir1.2-gtk-4.0
 
-# Dépendances Python (depuis les dépôts ou PyPI)
-sudo apt install python3-reportlab python3-openpyxl python3-pil python3-pymupdf python3-pytest
-# ou, pour une version à jour :
+# Dépendances Python
 pip install -e .
 ```
-
-### Mageia (urpmi)
-
-```bash
-# Paquets système : GTK 3 + bindings Python + dépendances
-sudo urpmi python3-gobject3 lib64gtk-gir3.0 \
-            python3-reportlab python3-openpyxl python3-pillow python3-pymupdf \
-            python3-pytest
-```
-
-> Si un paquet manque (Mageia Cauldron), on peut le chercher avec `urpmq` :
-> `urpmq -y pymupdf` ou `urpmf -i pymupdf`.
->
-> En alternative, les dépendances Python peuvent être installées via `pip` :
-> `pip install --user reportlab openpyxl Pillow PyMuPDF pytest`.
-
-### Autres distributions
-
-Adaptez les noms de paquets ; les bibliothèques Python nécessaires sont :
-`reportlab`, `openpyxl`, `Pillow`, `PyMuPDF` (+ `PyGObject`/GTK 3 pour l'interface
-graphique, fourni par le paquet système `gir1.2-gtk-3.0` sous Debian/Ubuntu ou
-`python3-gobject3` + `lib64gtk-gir3.0` sous Mageia).
 
 ## Utilisation
 
