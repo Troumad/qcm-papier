@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qcm-papier"
+version = "0.1.0"
+description = "Générateur/Correcteur de QCM papier — portage Python/GTK3 depuis le code HTML+JS de l'Université Lyon 1"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+authors = [
+    { name = "Portage Python" },
+]
+dependencies = [
+    "reportlab>=4.0",
+    "openpyxl>=3.0",
+    "Pillow>=10.0",
+    "PyMuPDF>=1.23",
+]
+
+[project.optional-dependencies]
+gui = [
+    "PyGObject>=3.42",
+]
+test = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+qcm-papier = "qcm_papier.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["qcm_papier*"]
