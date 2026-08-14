@@ -1,14 +1,19 @@
-"""Éditeur de structure du QCM (exercices/questions/choix) en GTK 3.
+"""Éditeur de structure du QCM (exercices/questions/choix) en GTK 4.
 
 Permet de créer, modifier et supprimer exercices, questions et choix, avec
 leurs propriétés (gain, pénalité, type de question, barème de l'exercice).
 Les modifications sont synchronisées avec un objet ``Project``.
+
+Écrit pour GTK 4 (PyGObject) — utilise ``append``/``present`` au lieu de
+``add``/``show_all`` de GTK 3.
 """
 
 from __future__ import annotations
 
 from typing import Callable
 
+import gi
+gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk
 
 from ..model import Choice, Exercise, Project, Question
@@ -28,17 +33,16 @@ class StructureEditor(Gtk.Box):
 
         # Barre d'outils.
         toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        self.add(toolbar)
+        self.append(toolbar)
         btn_add_ex = Gtk.Button(label="Nouvel exercice")
         btn_add_ex.connect("clicked", self._on_add_exercise)
-        toolbar.add(btn_add_ex)
-        toolbar.add(Gtk.SeparatorToolItem())
+        toolbar.append(btn_add_ex)
+        toolbar.append(Gtk.Separator())
         self.combo_interval = Gtk.ComboBoxText()
         self.combo_interval.append_text("Exercices")
         self.combo_interval.set_active(0)
-        toolbar.add(Gtk.Label(label="Intervalle :"))
-        toolbar.add(self.combo_interval)
-        toolbar.show_all()
+        toolbar.append(Gtk.Label(label="Intervalle :"))
+        toolbar.append(self.combo_interval)
 
         # Liste des exercices (arbre).
         self.store = Gtk.TreeStore(str, str, object)  # nom, type, objet
@@ -50,20 +54,19 @@ class StructureEditor(Gtk.Box):
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
         scroll.set_hexpand(True)
-        scroll.add(self.tree)
-        self.pack_start(scroll, True, True, 0)
+        scroll.set_child(self.tree)
+        self.append(scroll)
 
         # Panneau de propriétés.
         self.props_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.props_box.set_margin_top(6)
-        self.pack_start(self.props_box, False, False, 0)
+        self.append(self.props_box)
 
         # Sélection.
         select = self.tree.get_selection()
         select.connect("changed", self._on_selection_changed)
 
         self._fill_tree()
-        self.show_all()
 
     def _notify(self) -> None:
         if self.on_change:
@@ -125,7 +128,7 @@ class StructureEditor(Gtk.Box):
 
     def _on_selection_changed(self, selection) -> None:
         model, treeiter = selection.get_selected()
-        for child in self.props_box.get_children():
+        for child in list(self.props_box):
             self.props_box.remove(child)
         if treeiter is None:
             return
@@ -137,74 +140,72 @@ class StructureEditor(Gtk.Box):
             self._edit_question(obj)
         elif kind == "choice":
             self._edit_choice(obj)
-        self.props_box.show_all()
 
     def _row(self, label: str, widget: Gtk.Widget) -> Gtk.Box:
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        row.add(Gtk.Label(label=label))
+        row.append(Gtk.Label(label=label))
         widget.set_hexpand(True)
-        row.add(widget)
+        row.append(widget)
         return row
 
     def _edit_exercise(self, exercise: Exercise) -> None:
         name = Gtk.Entry(text=exercise.name)
         name.connect("changed", lambda e: self._set_and_notify(exercise, "name", e.get_text()))
-        self.props_box.add(Gtk.Label(label="<b>Exercice</b>", use_markup=True))
-        self.props_box.add(self._row("Nom :", name))
+        self.props_box.append(Gtk.Label(label="<b>Exercice</b>", use_markup=True))
+        self.props_box.append(self._row("Nom :", name))
 
         btn_add_q = Gtk.Button(label="Ajouter une question")
         btn_add_q.connect("clicked", lambda _b: self.add_question(exercise))
-        self.props_box.add(btn_add_q)
+        self.props_box.append(btn_add_q)
 
         # Barème.
         validation = Gtk.CheckButton(label="Validation par seuil")
         validation.set_active(exercise.validation)
         validation.connect("toggled",
                            lambda b: self._set_and_notify(exercise, "validation", b.get_active()))
-        self.props_box.add(validation)
+        self.props_box.append(validation)
         gain = Gtk.SpinButton.new_with_range(0, 1000, 0.5)
         gain.set_value(exercise.gain)
         gain.connect("value-changed",
                     lambda b: self._set_and_notify(exercise, "gain", b.get_value()))
-        self.props_box.add(self._row("Gain si validé :", gain))
+        self.props_box.append(self._row("Gain si validé :", gain))
         threshold = Gtk.SpinButton.new_with_range(0, 1000, 0.5)
         threshold.set_value(exercise.threshold)
         threshold.connect("value-changed",
                           lambda b: self._set_and_notify(exercise, "threshold", b.get_value()))
-        self.props_box.add(self._row("Seuil :", threshold))
+        self.props_box.append(self._row("Seuil :", threshold))
 
         min0 = Gtk.CheckButton(label="Note minimale 0 (pas de points négatifs)")
         min0.set_active(exercise.min0)
         min0.connect("toggled",
                      lambda b: self._set_and_notify(exercise, "min0", b.get_active()))
-        self.props_box.add(min0)
+        self.props_box.append(min0)
 
     def _edit_question(self, question: Question) -> None:
         name = Gtk.Entry(text=question.name)
         name.connect("changed",
                      lambda e: self._set_and_notify(question, "name", e.get_text()))
-        self.props_box.add(Gtk.Label(label="<b>Question</b>", use_markup=True))
-        self.props_box.add(self._row("Nom :", name))
+        self.props_box.append(Gtk.Label(label="<b>Question</b>", use_markup=True))
+        self.props_box.append(self._row("Nom :", name))
 
         gain = Gtk.SpinButton.new_with_range(0, 1000, 0.5)
         gain.set_value(question.gain)
         gain.connect("value-changed",
                      lambda b: self._set_and_notify(question, "gain", b.get_value()))
-        self.props_box.add(self._row("Gain :", gain))
+        self.props_box.append(self._row("Gain :", gain))
         penalty = Gtk.SpinButton.new_with_range(0, 1000, 0.5)
         penalty.set_value(question.penalty)
         penalty.connect("value-changed",
                        lambda b: self._set_and_notify(question, "penalty", b.get_value()))
-        self.props_box.add(self._row("Malus :", penalty))
+        self.props_box.append(self._row("Malus :", penalty))
 
-        # Type de question.
-        type_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        single = Gtk.RadioButton(label="Choix unique")
+        # Type de question (CheckButton avec groupe en GTK 4).
+        single = Gtk.CheckButton(label="Choix unique")
         single.set_active(question.single)
-        multiple_exact = Gtk.RadioButton(label="Choix multiples (correspondance exacte)",
+        multiple_exact = Gtk.CheckButton(label="Choix multiples (correspondance exacte)",
                                           group=single)
         multiple_exact.set_active(question.multiple_exact)
-        multiple_prog = Gtk.RadioButton(label="Choix multiples (gain progressif)",
+        multiple_prog = Gtk.CheckButton(label="Choix multiples (gain progressif)",
                                          group=single)
         multiple_prog.set_active(question.multiple_progressive)
 
@@ -215,44 +216,43 @@ class StructureEditor(Gtk.Box):
         single.connect("toggled", on_type)
         multiple_exact.connect("toggled", on_type)
         multiple_prog.connect("toggled", on_type)
-        type_box.add(single)
-        type_box.add(multiple_exact)
-        type_box.add(multiple_prog)
-        self.props_box.add(Gtk.Label(label="Type :"))
-        self.props_box.add(type_box)
+        self.props_box.append(Gtk.Label(label="Type :"))
+        self.props_box.append(single)
+        self.props_box.append(multiple_exact)
+        self.props_box.append(multiple_prog)
 
         manual = Gtk.CheckButton(label="Correction manuelle (réponse libre)")
         manual.set_active(question.manual)
         manual.connect("toggled",
                        lambda b: self._set_and_notify(question, "manual", b.get_active()))
-        self.props_box.add(manual)
+        self.props_box.append(manual)
 
         btn_add_c = Gtk.Button(label="Ajouter un choix")
         btn_add_c.connect("clicked", lambda _b: self.add_choice(question))
-        self.props_box.add(btn_add_c)
+        self.props_box.append(btn_add_c)
 
     def _edit_choice(self, choice: Choice) -> None:
         name = Gtk.Entry(text=choice.name)
         name.connect("changed",
                      lambda e: self._set_and_notify(choice, "name", e.get_text()))
-        self.props_box.add(Gtk.Label(label="<b>Choix</b>", use_markup=True))
-        self.props_box.add(self._row("Nom :", name))
+        self.props_box.append(Gtk.Label(label="<b>Choix</b>", use_markup=True))
+        self.props_box.append(self._row("Nom :", name))
 
         correct = Gtk.CheckButton(label="Réponse correcte")
         correct.set_active(choice.correct)
         correct.connect("toggled",
                         lambda b: self._set_and_notify(choice, "correct", b.get_active()))
-        self.props_box.add(correct)
+        self.props_box.append(correct)
         neutral = Gtk.CheckButton(label="Choix neutre")
         neutral.set_active(choice.neutral)
         neutral.connect("toggled",
                         lambda b: self._set_and_notify(choice, "neutral", b.get_active()))
-        self.props_box.add(neutral)
+        self.props_box.append(neutral)
         penalty = Gtk.CheckButton(label="Choix pénalisant")
         penalty.set_active(choice.penalty)
         penalty.connect("toggled",
                         lambda b: self._set_and_notify(choice, "penalty", b.get_active()))
-        self.props_box.add(penalty)
+        self.props_box.append(penalty)
 
     def _set_and_notify(self, obj, attr, value) -> None:
         setattr(obj, attr, value)
