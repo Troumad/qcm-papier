@@ -53,13 +53,43 @@ qcm_papier/
 
 ## Installation
 
-```bash
-# Paquets système (Debian/Ubuntu) pour GTK 3
-sudo apt-get install python3-gi gir1.2-gtk-3.0
+### Prérequis
 
-# Dépendances Python
+Python ≥ 3.10 doit être installé.
+
+### Debian / Ubuntu (apt)
+
+```bash
+# Paquets système pour GTK 3
+sudo apt install python3-gi gir1.2-gtk-3.0
+
+# Dépendances Python (depuis les dépôts ou PyPI)
+sudo apt install python3-reportlab python3-openpyxl python3-pil python3-pymupdf python3-pytest
+# ou, pour une version à jour :
 pip install -e .
 ```
+
+### Mageia (urpmi)
+
+```bash
+# Paquets système : GTK 3 + bindings Python + dépendances
+sudo urpmi python3-gobject3 lib64gtk-gir3.0 \
+            python3-reportlab python3-openpyxl python3-pillow python3-pymupdf \
+            python3-pytest
+```
+
+> Si un paquet manque (Mageia Cauldron), on peut le chercher avec `urpmq` :
+> `urpmq -y pymupdf` ou `urpmf -i pymupdf`.
+>
+> En alternative, les dépendances Python peuvent être installées via `pip` :
+> `pip install --user reportlab openpyxl Pillow PyMuPDF pytest`.
+
+### Autres distributions
+
+Adaptez les noms de paquets ; les bibliothèques Python nécessaires sont :
+`reportlab`, `openpyxl`, `Pillow`, `PyMuPDF` (+ `PyGObject`/GTK 3 pour l'interface
+graphique, fourni par le paquet système `gir1.2-gtk-3.0` sous Debian/Ubuntu ou
+`python3-gobject3` + `lib64gtk-gir3.0` sous Mageia).
 
 ## Utilisation
 
