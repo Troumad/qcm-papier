@@ -88,6 +88,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.notebook = Gtk.Notebook()
         self.set_child(self.notebook)
 
+        self._build_info_tab()
         self._build_structure_tab()
         self._build_generate_tab()
         self._build_marking_tab()
@@ -98,35 +99,87 @@ class QcmWindow(Gtk.ApplicationWindow):
     # Onglet Structure
     # ------------------------------------------------------------------
 
-    def _build_structure_tab(self) -> None:
+    def _build_info_tab(self) -> None:
+        """Onglet Informations : regroupement des champs info."""
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         box.set_margin_start(8)
         box.set_margin_end(8)
         box.set_margin_top(8)
         box.set_margin_bottom(8)
 
-        # Informations du QCM (champs principaux).
-        info_grid = Gtk.Grid(column_spacing=8, row_spacing=4)
-        self._entries: dict[str, Gtk.Entry] = {}
-        fields = [
-            ("establishment", "Établissement"),
-            ("formation", "Formation"),
-            ("year", "Année (dans code-barre)"),
-            ("module_short", "Module (abrégé, code-barre)"),
-            ("evaluation_short", "Évaluation (abrégé, code-barre)"),
-            ("date", "Date"),
-            ("duration", "Durée"),
-        ]
-        for i, (attr, label) in enumerate(fields):
-            info_grid.attach(Gtk.Label(label=label), 0, i, 1, 1)
-            entry = Gtk.Entry()
-            entry.set_hexpand(True)
-            entry.set_text(getattr(self.project.settings, attr))
-            entry.connect("changed",
-                          lambda e, a=attr: setattr(self.project.settings, a, e.get_text()))
-            info_grid.attach(entry, 1, i, 1, 1)
-            self._entries[attr] = entry
-        box.append(info_grid)
+        # Ligne 1 : Établissement et Formation
+        grid1 = Gtk.Grid(column_spacing=8, row_spacing=4)
+        grid1.attach(Gtk.Label(label="Établissement :"), 0, 0, 1, 1)
+        self.entry_establishment = Gtk.Entry()
+        self.entry_establishment.set_hexpand(True)
+        self.entry_establishment.set_text(self.project.settings.establishment)
+        self.entry_establishment.connect("changed",
+            lambda e: setattr(self.project.settings, "establishment", e.get_text()))
+        grid1.attach(self.entry_establishment, 1, 0, 1, 1)
+        
+        grid1.attach(Gtk.Label(label="Formation :"), 2, 0, 1, 1)
+        self.entry_formation = Gtk.Entry()
+        self.entry_formation.set_hexpand(True)
+        self.entry_formation.set_text(self.project.settings.formation)
+        self.entry_formation.connect("changed",
+            lambda e: setattr(self.project.settings, "formation", e.get_text()))
+        grid1.attach(self.entry_formation, 3, 0, 1, 1)
+        box.append(grid1)
+
+        # Ligne 2 : Année et Module
+        grid2 = Gtk.Grid(column_spacing=8, row_spacing=4)
+        grid2.attach(Gtk.Label(label="Année :"), 0, 0, 1, 1)
+        self.entry_year = Gtk.Entry()
+        self.entry_year.set_hexpand(True)
+        self.entry_year.set_text(self.project.settings.year)
+        self.entry_year.connect("changed",
+            lambda e: setattr(self.project.settings, "year", e.get_text()))
+        grid2.attach(self.entry_year, 1, 0, 1, 1)
+        
+        grid2.attach(Gtk.Label(label="Module :"), 2, 0, 1, 1)
+        self.entry_module_short = Gtk.Entry()
+        self.entry_module_short.set_hexpand(True)
+        self.entry_module_short.set_text(self.project.settings.module_short)
+        self.entry_module_short.connect("changed",
+            lambda e: setattr(self.project.settings, "module_short", e.get_text()))
+        grid2.attach(self.entry_module_short, 3, 0, 1, 1)
+        box.append(grid2)
+
+        # Ligne 3 : Évaluation, Date et Durée
+        grid3 = Gtk.Grid(column_spacing=8, row_spacing=4)
+        grid3.attach(Gtk.Label(label="Évaluation :"), 0, 0, 1, 1)
+        self.entry_evaluation_short = Gtk.Entry()
+        self.entry_evaluation_short.set_hexpand(True)
+        self.entry_evaluation_short.set_text(self.project.settings.evaluation_short)
+        self.entry_evaluation_short.connect("changed",
+            lambda e: setattr(self.project.settings, "evaluation_short", e.get_text()))
+        grid3.attach(self.entry_evaluation_short, 1, 0, 1, 1)
+        
+        grid3.attach(Gtk.Label(label="Date :"), 2, 0, 1, 1)
+        self.entry_date = Gtk.Entry()
+        self.entry_date.set_hexpand(True)
+        self.entry_date.set_text(self.project.settings.date)
+        self.entry_date.connect("changed",
+            lambda e: setattr(self.project.settings, "date", e.get_text()))
+        grid3.attach(self.entry_date, 3, 0, 1, 1)
+        
+        grid3.attach(Gtk.Label(label="Durée :"), 4, 0, 1, 1)
+        self.entry_duration = Gtk.Entry()
+        self.entry_duration.set_hexpand(True)
+        self.entry_duration.set_text(self.project.settings.duration)
+        self.entry_duration.connect("changed",
+            lambda e: setattr(self.project.settings, "duration", e.get_text()))
+        grid3.attach(self.entry_duration, 5, 0, 1, 1)
+        box.append(grid3)
+
+        self.notebook.append_page(box, Gtk.Label(label="Informations"))
+
+    def _build_structure_tab(self) -> None:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box.set_margin_start(8)
+        box.set_margin_end(8)
+        box.set_margin_top(8)
+        box.set_margin_bottom(8)
 
         # Éditeur de structure.
         self.editor = StructureEditor(self.project, on_change=self._on_structure_changed)
@@ -369,8 +422,13 @@ class QcmWindow(Gtk.ApplicationWindow):
             self.editor.project = self.project
             self.editor._fill_tree()
             # Synchroniser les champs d'info.
-            for attr, entry in self._entries.items():
-                entry.set_text(getattr(self.project.settings, attr))
+            self.entry_establishment.set_text(self.project.settings.establishment)
+            self.entry_formation.set_text(self.project.settings.formation)
+            self.entry_year.set_text(self.project.settings.year)
+            self.entry_module_short.set_text(self.project.settings.module_short)
+            self.entry_evaluation_short.set_text(self.project.settings.evaluation_short)
+            self.entry_date.set_text(self.project.settings.date)
+            self.entry_duration.set_text(self.project.settings.duration)
             self.entry_variants.set_text(self.project.settings.generate_variants)
             self.spin_students.set_value(self.project.settings.generate_students)
             self.spin_count.set_value(self.project.settings.generate_count)
