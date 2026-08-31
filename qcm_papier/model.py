@@ -540,3 +540,49 @@ class Project:
         }
         return cls(settings=settings, variants=variants,
                    structure=structure, students=students)
+
+    def get_mark_range(self) -> tuple[float, float]:
+        """Calcule l'intervalle de notes du QCM (min, max).
+        
+        Pour chaque exercice, calcule la note minimale et maximale possible,
+        puis retourne la somme des mins et la somme des max.
+        """
+        global_min = 0.0
+        global_max = 0.0
+        
+        for exercise in self.structure:
+            # Calcul du min/max pour cet exercice
+            # Basé sur la logique du code original (index.html lignes ~5170-5180)
+            exercise_min = 0.0
+            exercise_max = 0.0
+            
+            for question in exercise.questions:
+                # Note maximale de la question = gain
+                exercise_max += question.gain
+                
+                # Note minimale : 0 par défaut, sauf si pénalités possibles
+                # Si la question a des choix avec penalty=True, on peut avoir des points négatifs
+                has_penalty = any(choice.penalty for choice in question.choices)
+                if has_penalty and not question.min0:
+                    # Avec pénalités, le min peut être négatif
+                    # On soustrait le gain maximum (pire cas : toutes les mauvaises réponses cochées)
+                    exercise_min -= question.penalty
+                # Sinon min reste à 0
+            
+            # Appliquer les paramètres de l'exercice
+            if exercise.sum_bias:
+                exercise_max -= exercise.bias
+                exercise_min -= exercise.bias
+            
+            if exercise.min0:
+                exercise_min = 0.0
+            
+            if exercise.scale and exercise.max > 0:
+                # Remise à l'échelle
+                exercise_min = exercise_min * exercise.max / exercise_max if exercise_max > 0 else 0
+                exercise_max = exercise.max
+            
+            global_min += exercise_min
+            global_max += exercise_max
+        
+        return (global_min, global_max)
