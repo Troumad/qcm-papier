@@ -486,9 +486,32 @@ class ProjectSettings:
     def from_dict(cls, d: dict[str, Any]) -> "ProjectSettings":
         s = cls()
         known = s.__dict__
+        
+        # Mapping des champs info_* vers les champs du modèle
+        info_mapping = {
+            'info_university': 'establishment',
+            'info_college': 'institute',
+            'info_departement': 'formation',
+            'info_year': 'year',
+            'info_semester': 'semester',
+            'info_course_unit': 'teaching_unit',
+            'info_course_long': 'module_full',
+            'info_course_short': 'module_short',
+            'info_name_long': 'evaluation_full',
+            'info_name_short': 'evaluation_short',
+            'info_authors_short': 'teachers',
+            'info_date': 'date',
+            'info_duration': 'duration',
+        }
+        
         for key, value in d.items():
             if key in known:
                 setattr(s, key, copy.deepcopy(value))
+            elif key in info_mapping:
+                # Mapper les champs info_* vers les champs du modèle
+                target_key = info_mapping[key]
+                if target_key in known:
+                    setattr(s, target_key, copy.deepcopy(value))
         return s
 
 
