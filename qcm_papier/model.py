@@ -80,6 +80,7 @@ class Question:
     single: bool = True
     multiple_exact: bool = False
     multiple_progressive: bool = False
+    min0: bool = True  # Si True, la note minimale est 0 (pas de points négatifs)
     choices: list[Choice] = field(default_factory=list)
     index: int = 0
 
@@ -98,6 +99,7 @@ class Question:
             "single": self.single,
             "multiple_exact": self.multiple_exact,
             "multiple_progressive": self.multiple_progressive,
+            "min0": self.min0,
             "choices": [c.to_dict() for c in self.choices],
         }
 
@@ -117,6 +119,7 @@ class Question:
             single=bool(d.get("single", True)),
             multiple_exact=bool(d.get("multiple_exact", False)),
             multiple_progressive=bool(d.get("multiple_progressive", False)),
+            min0=bool(d.get("min0", True)),
             choices=[Choice.from_dict(c) for c in d.get("choices", [])],
         )
 
@@ -546,13 +549,13 @@ class Project:
         
         Pour chaque exercice, calcule la note minimale et maximale possible,
         puis retourne la somme des mins et la somme des max.
+        Basé sur la logique du code original (index.html lignes ~5150-5180).
         """
         global_min = 0.0
         global_max = 0.0
         
         for exercise in self.structure:
             # Calcul du min/max pour cet exercice
-            # Basé sur la logique du code original (index.html lignes ~5170-5180)
             exercise_min = 0.0
             exercise_max = 0.0
             
@@ -560,12 +563,16 @@ class Project:
                 # Note maximale de la question = gain
                 exercise_max += question.gain
                 
-                # Note minimale : 0 par défaut, sauf si pénalités possibles
-                # Si la question a des choix avec penalty=True, on peut avoir des points négatifs
-                has_penalty = any(choice.penalty for choice in question.choices)
-                if has_penalty and not question.min0:
+                # Note minimale : 0 par défaut, sauf si pénalités possibles ET min0=False
+                # Le min0 peut être défini au niveau de la question OU de l'exercice
+                question_min0 = question.min0 if hasattr(question, 'min0') else True
+                exercise_min0 = exercise.min0
+                # Si min0 est True au niveau exercice, il l'emporte sur celui de la question
+                effective_min0 = exercise_min0 or question_min0
+                
+                if not effective_min0:
                     # Avec pénalités, le min peut être négatif
-                    # On soustrait le gain maximum (pire cas : toutes les mauvaises réponses cochées)
+                    # Pire cas : toutes les mauvaises réponses cochées
                     exercise_min -= question.penalty
                 # Sinon min reste à 0
             
@@ -574,13 +581,14 @@ class Project:
                 exercise_max -= exercise.bias
                 exercise_min -= exercise.bias
             
-            if exercise.min0:
-                exercise_min = 0.0
-            
             if exercise.scale and exercise.max > 0:
                 # Remise à l'échelle
-                exercise_min = exercise_min * exercise.max / exercise_max if exercise_max > 0 else 0
-                exercise_max = exercise.max
+                if exercise_max > 0:
+                    exercise_min = exercise_min * exercise.max / exercise_max
+                    exercise_max = exercise.max
+                else:
+                    exercise_min = 0.0
+                    exercise_max = exercise.max
             
             global_min += exercise_min
             global_max += exercise_max
