@@ -42,10 +42,32 @@ def _file_dialog(parent, title: str, action, filters=None, initial_name=None):
             dialog.add_filter(filt)
     if initial_name and action == Gtk.FileChooserAction.SAVE:
         dialog.set_current_name(initial_name)
-    response = dialog.run()
-    path = dialog.get_file().get_path() if response == Gtk.ResponseType.ACCEPT else None
+    
+    # GTK4: FileChooserNative uses open()/save() with callback instead of run()
+    from gi.repository import GLib
+    loop = GLib.MainLoop()
+    path = [None]  # Use list to allow modification in callback
+    
+    def on_response(dialog, result, *user_data):
+        try:
+            if action == Gtk.FileChooserAction.OPEN:
+                file_obj = dialog.open_finish(result)
+            else:
+                file_obj = dialog.save_finish(result)
+            path[0] = file_obj.get_path() if file_obj else None
+        except Exception:
+            path[0] = None
+        loop.quit()
+    
+    # Call open() or save() with callback
+    if action == Gtk.FileChooserAction.OPEN:
+        dialog.open(parent, None, on_response)
+    else:
+        dialog.save(parent, None, on_response)
+    
+    loop.run()
     dialog.destroy()
-    return path
+    return path[0]
 
 
 class QcmWindow(Gtk.ApplicationWindow):
