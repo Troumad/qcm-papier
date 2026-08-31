@@ -128,6 +128,20 @@ class Question:
         """Vrai si la question accepte plusieurs réponses (exact ou progressive)."""
         return self.multiple_exact or self.multiple_progressive
 
+    def get_mark_range(self) -> tuple[float, float]:
+        """Calcule l'intervalle de notes pour cette question (min, max).
+        
+        - max = gain si la question a au moins un choix correct, sinon 0
+        - min = -penalty si la question a au moins un choix pénalisant, sinon 0
+        """
+        has_correct = any(c.correct for c in self.choices)
+        has_penalty = any(c.penalty for c in self.choices)
+        
+        question_max = self.gain if has_correct else 0.0
+        question_min = -self.penalty if has_penalty else 0.0
+        
+        return (question_min, question_max)
+
 
 # ---------------------------------------------------------------------------
 # Exercice
