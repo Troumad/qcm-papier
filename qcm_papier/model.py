@@ -547,48 +547,47 @@ class Project:
     def get_mark_range(self) -> tuple[float, float]:
         """Calcule l'intervalle de notes du QCM (min, max).
         
-        Pour chaque exercice, calcule la note minimale et maximale possible,
-        puis retourne la somme des mins et la somme des max.
-        Basé sur la logique du code original (index.html lignes ~5150-5180).
+        Basé sur la logique du code original (index.html lignes ~5140-5180).
+        Pour chaque exercice :
+        - max = somme des gains des questions QUI ONT des choix corrects (si sum=True)
+          ou exercise.max (si sum=False)
+        - min = -somme des pénalités des questions QUI ONT des choix pénalisants
+        - Applique sum_bias, puis scale, puis min0 (dans cet ordre)
         """
         global_min = 0.0
         global_max = 0.0
         
         for exercise in self.structure:
-            # Calcul du min/max pour cet exercice
             exercise_min = 0.0
             exercise_max = 0.0
             
-            for question in exercise.questions:
-                # Note maximale de la question = gain
-                exercise_max += question.gain
-                
-                # Note minimale : 0 par défaut, sauf si pénalités possibles ET min0=False
-                # Le min0 peut être défini au niveau de la question OU de l'exercice
-                question_min0 = question.min0 if hasattr(question, 'min0') else True
-                exercise_min0 = exercise.min0
-                # Si min0 est True au niveau exercice, il l'emporte sur celui de la question
-                effective_min0 = exercise_min0 or question_min0
-                
-                if not effective_min0:
-                    # Avec pénalités, le min peut être négatif
-                    # Pire cas : toutes les mauvaises réponses cochées
-                    exercise_min -= question.penalty
-                # Sinon min reste à 0
+            # Calcul du max
+            if exercise.sum:
+                for question in exercise.questions:
+                    # Seules les questions avec au moins un choix correct contribuent
+                    if any(c.correct for c in question.choices):
+                        exercise_max += question.gain
+            else:
+                exercise_max = exercise.max
             
-            # Appliquer les paramètres de l'exercice
+            # Calcul du min : soustraire les pénalités des questions avec choix pénalisants
+            for question in exercise.questions:
+                if any(c.penalty for c in question.choices):
+                    exercise_min -= question.penalty
+            
+            # Appliquer sum_bias
             if exercise.sum_bias:
                 exercise_max -= exercise.bias
                 exercise_min -= exercise.bias
             
-            if exercise.scale and exercise.max > 0:
-                # Remise à l'échelle
-                if exercise_max > 0:
-                    exercise_min = exercise_min * exercise.max / exercise_max
-                    exercise_max = exercise.max
-                else:
-                    exercise_min = 0.0
-                    exercise_max = exercise.max
+            # Appliquer scale
+            if exercise.scale and exercise.max > 0 and exercise_max > 0:
+                exercise_min = exercise_min * exercise.max / exercise_max
+                exercise_max = exercise.max
+            
+            # Appliquer min0 (dernière étape, comme dans le code original)
+            if exercise.min0:
+                exercise_min = 0.0
             
             global_min += exercise_min
             global_max += exercise_max
