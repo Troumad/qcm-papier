@@ -76,7 +76,8 @@ class StructureEditor(Gtk.Box):
             ex_label = f"Exercice {i+1} : {exercise.name}"
             ex_iter = self.store.append(None, [ex_label, "exercise", exercise])
             for j, question in enumerate(exercise.questions):
-                q_label = f"  Q{j+1} : {question.name}"
+                q_min, q_max = question.get_mark_range()
+                q_label = f"  Q{j+1} : {question.name} {q_min} 🡕 {q_max}"
                 q_iter = self.store.append(ex_iter, [q_label, "question", question])
                 for k, choice in enumerate(question.choices):
                     c_label = f"    {choice.name}"
