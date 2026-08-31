@@ -73,7 +73,8 @@ class StructureEditor(Gtk.Box):
     def _fill_tree(self) -> None:
         self.store.clear()
         for i, exercise in enumerate(self.project.structure):
-            ex_label = f"Exercice {i+1} : {exercise.name}"
+            ex_min, ex_max = exercise.get_mark_range()
+            ex_label = f"Exercice {i+1} : {exercise.name} {ex_min:.1f} \ud83e\udc55 {ex_max:.1f}"
             ex_iter = self.store.append(None, [ex_label, "exercise", exercise])
             for j, question in enumerate(exercise.questions):
                 q_min, q_max = question.get_mark_range()
@@ -263,5 +264,5 @@ class StructureEditor(Gtk.Box):
     def _update_interval_label(self) -> None:
         """Met à jour le label d'intervalle de notes avec les valeurs actuelles."""
         global_min, global_max = self.project.get_mark_range()
-        # Utilise le symbole 🏆 comme dans l'original
-        self.label_interval.set_text(f"Intervalle : {global_min:.1f} 🏆 {global_max:.1f}")
+        # Utilise le symbole 🡕 comme dans l'original
+        self.label_interval.set_text(f"Intervalle : {global_min:.1f} 🡕 {global_max:.1f}")

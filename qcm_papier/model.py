@@ -171,6 +171,49 @@ class Exercise:
     questions: list[Question] = field(default_factory=list)
     index: int = 0
 
+    def get_mark_range(self) -> tuple[float, float]:
+        """Calcule l'intervalle de notes pour cet exercice (min, max).
+        
+        Basé sur la logique du code original (index.html lignes ~5140-5180).
+        Pour cet exercice :
+        - max = somme des gains des questions QUI ONT des choix corrects (si sum=True)
+          ou exercise.max (si sum=False)
+        - min = -somme des pénalités des questions QUI ONT des choix pénalisants
+        - Applique sum_bias, puis scale, puis min0 (dans cet ordre)
+        """
+        exercise_min = 0.0
+        exercise_max = 0.0
+        
+        # Calcul du max
+        if self.sum:
+            for question in self.questions:
+                # Seules les questions avec au moins un choix correct contribuent
+                if any(c.correct for c in question.choices):
+                    exercise_max += question.gain
+        else:
+            exercise_max = self.max
+        
+        # Calcul du min : soustraire les pénalités des questions avec choix pénalisants
+        for question in self.questions:
+            if any(c.penalty for c in question.choices):
+                exercise_min -= question.penalty
+        
+        # Appliquer sum_bias
+        if self.sum_bias:
+            exercise_max -= self.bias
+            exercise_min -= self.bias
+        
+        # Appliquer scale
+        if self.scale and self.max > 0 and exercise_max > 0:
+            exercise_min = exercise_min * self.max / exercise_max
+            exercise_max = self.max
+        
+        # Appliquer min0 (dernière étape, comme dans le code original)
+        if self.min0:
+            exercise_min = 0.0
+        
+        return (exercise_min, exercise_max)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "index": self.index,
