@@ -42,31 +42,22 @@ def _file_dialog(parent, title: str, action, filters=None, initial_name=None):
             dialog.add_filter(filt)
     if initial_name and action == Gtk.FileChooserAction.SAVE:
         dialog.set_current_name(initial_name)
-    
-    # GTK4: FileChooserNative uses open()/save() with callback instead of run()
-    from gi.repository import GLib
-    loop = GLib.MainLoop()
-    path = [None]  # Use list to allow modification in callback
-    
-    def on_response(dialog, result, *user_data):
-        try:
-            if action == Gtk.FileChooserAction.OPEN:
-                file_obj = dialog.open_finish(result)
-            else:
-                file_obj = dialog.save_finish(result)
+
+    # GTK4: FileChooserNative utilise des signaux, pas open()/save()
+    path = [None]  # Stockage du chemin dans une liste pour le callback
+
+    def on_response(native, response):
+        if response == Gtk.ResponseType.ACCEPT:
+            file_obj = dialog.get_file()
             path[0] = file_obj.get_path() if file_obj else None
-        except Exception:
+        else:
             path[0] = None
-        loop.quit()
-    
-    # Call open() or save() with callback
-    if action == Gtk.FileChooserAction.OPEN:
-        dialog.open(parent, None, on_response)
-    else:
-        dialog.save(parent, None, on_response)
-    
-    loop.run()
-    dialog.destroy()
+        dialog.destroy()
+
+    dialog.connect("response", on_response)
+    dialog.present()  # Affiche le dialogue (GTK4)
+    from gi.repository import GLib
+    GLib.MainLoop().run()  # Attend la réponse (modal)
     return path[0]
 
 
