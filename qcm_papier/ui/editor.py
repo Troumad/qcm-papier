@@ -38,11 +38,9 @@ class StructureEditor(Gtk.Box):
         btn_add_ex.connect("clicked", self._on_add_exercise)
         toolbar.append(btn_add_ex)
         toolbar.append(Gtk.Separator())
-        self.combo_interval = Gtk.ComboBoxText()
-        self.combo_interval.append_text("Exercices")
-        self.combo_interval.set_active(0)
-        toolbar.append(Gtk.Label(label="Intervalle :"))
-        toolbar.append(self.combo_interval)
+        # Label pour afficher l'intervalle de notes du QCM
+        self.label_interval = Gtk.Label(label="Intervalle : ")
+        toolbar.append(self.label_interval)
 
         # Liste des exercices (arbre).
         self.store = Gtk.TreeStore(str, str, object)  # nom, type, objet
@@ -84,6 +82,7 @@ class StructureEditor(Gtk.Box):
                     c_label = f"    {choice.name}"
                     self.store.append(q_iter, [c_label, "choice", choice])
         self.tree.expand_all()
+        self._update_interval_label()
 
     # ------------------------------------------------------------------
     # Ajout d'éléments
@@ -257,4 +256,11 @@ class StructureEditor(Gtk.Box):
     def _set_and_notify(self, obj, attr, value) -> None:
         setattr(obj, attr, value)
         self._fill_tree()
+        self._update_interval_label()
         self._notify()
+
+    def _update_interval_label(self) -> None:
+        """Met à jour le label d'intervalle de notes avec les valeurs actuelles."""
+        global_min, global_max = self.project.get_mark_range()
+        # Utilise le symbole 🏆 comme dans l'original
+        self.label_interval.set_text(f"Intervalle : {global_min:.1f} 🏆 {global_max:.1f}")
