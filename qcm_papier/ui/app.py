@@ -19,7 +19,7 @@ import os
 
 import gi
 gi.require_version('Gtk', '4.0')
-from gi.repository import Gtk
+from gi.repository import Gtk, Gdk
 
 from .. import generator, pdf_writer, project as project_mod, scanner, scodoc
 from ..model import Project
@@ -66,14 +66,21 @@ class QcmWindow(Gtk.ApplicationWindow):
 
     def __init__(self, **kwargs):
         super().__init__(title="Générateur/Correcteur de QCM papier",
-                         default_width=1000, default_height=700, **kwargs)
+                        default_width=1000, default_height=700, **kwargs)
+        
+                
         self.project = Project()
 
-        # Barre d'en-tête.
+        # Crée un HeaderBar manuellement
         header = Gtk.HeaderBar()
         header.set_show_title_buttons(True)
-        self.set_titlebar(header)
+        self.set_titlebar(header)  # ← **Définir le HeaderBar**
 
+        # Ajoute un Label pour le titre
+        #self.title_label = Gtk.Label(label="Générateur/Correcteur de QCM papier")
+        #header.set_title_widget(self.title_label)  # ← **Place le Label au centre**
+
+        # Ajoute les boutons
         btn_new = Gtk.Button(label="Nouveau")
         btn_new.connect("clicked", self._on_new)
         btn_open = Gtk.Button(label="Ouvrir")
@@ -87,6 +94,19 @@ class QcmWindow(Gtk.ApplicationWindow):
         # Notebook (onglets).
         self.notebook = Gtk.Notebook()
         self.set_child(self.notebook)
+        
+        style_provider = Gtk.CssProvider()
+        style_provider.load_from_data(b"""
+            .suggestion {
+                color: #666;
+                font-style: italic;
+            }
+        """)
+        Gtk.StyleContext.add_provider_for_display(
+            Gdk.Display.get_default(),
+            style_provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )       
 
         self._build_info_tab()
         self._build_structure_tab()
@@ -94,83 +114,178 @@ class QcmWindow(Gtk.ApplicationWindow):
         self._build_marking_tab()
 
         self._last_notes: dict[str, float] = {}
+        # Ouverture sur l'onglet Structure
+        self.notebook.set_current_page(1)  # 0=Informations, 1=Structure, 2=Génération, 3=Correction
 
     # ------------------------------------------------------------------
     # Onglet Structure
     # ------------------------------------------------------------------
 
     def _build_info_tab(self) -> None:
-        """Onglet Informations : regroupement des champs info."""
+        """Onglet Informations : tous les champs du QCM avec valeurs par défaut."""
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         box.set_margin_start(8)
         box.set_margin_end(8)
         box.set_margin_top(8)
         box.set_margin_bottom(8)
 
-        # Ligne 1 : Établissement et Formation
+        # --- Ligne 1 : Établissement, Institut, Formation ---
         grid1 = Gtk.Grid(column_spacing=8, row_spacing=4)
         grid1.attach(Gtk.Label(label="Établissement :"), 0, 0, 1, 1)
         self.entry_establishment = Gtk.Entry()
         self.entry_establishment.set_hexpand(True)
-        self.entry_establishment.set_text(self.project.settings.establishment)
+        default_establishment = self.project.settings.establishment or "Université Lyon 1"
+        self.entry_establishment.set_text(default_establishment)
         self.entry_establishment.connect("changed",
             lambda e: setattr(self.project.settings, "establishment", e.get_text()))
+        if not self.project.settings.establishment:
+            self.entry_establishment.get_style_context().add_class("suggestion")
         grid1.attach(self.entry_establishment, 1, 0, 1, 1)
-        
-        grid1.attach(Gtk.Label(label="Formation :"), 2, 0, 1, 1)
+
+        grid1.attach(Gtk.Label(label="Institut :"), 2, 0, 1, 1)
+        self.entry_institute = Gtk.Entry()
+        self.entry_institute.set_hexpand(True)
+        default_institute = self.project.settings.institute or "IUT LYON 1"
+        self.entry_institute.set_text(default_institute)
+        self.entry_institute.connect("changed",
+            lambda e: setattr(self.project.settings, "institute", e.get_text()))
+        if not self.project.settings.institute:
+            self.entry_institute.get_style_context().add_class("suggestion")
+        grid1.attach(self.entry_institute, 3, 0, 1, 1)
+
+        grid1.attach(Gtk.Label(label="Formation :"), 4, 0, 1, 1)
         self.entry_formation = Gtk.Entry()
         self.entry_formation.set_hexpand(True)
-        self.entry_formation.set_text(self.project.settings.formation)
+        default_formation = self.project.settings.formation or "Département GEii"
+        self.entry_formation.set_text(default_formation)
         self.entry_formation.connect("changed",
             lambda e: setattr(self.project.settings, "formation", e.get_text()))
-        grid1.attach(self.entry_formation, 3, 0, 1, 1)
+        if not self.project.settings.formation:
+            self.entry_formation.get_style_context().add_class("suggestion")
+        grid1.attach(self.entry_formation, 5, 0, 1, 1)
         box.append(grid1)
 
-        # Ligne 2 : Année et Module
+        # --- Ligne 2 : Année, Semestre, Unité d'enseignement ---
         grid2 = Gtk.Grid(column_spacing=8, row_spacing=4)
         grid2.attach(Gtk.Label(label="Année :"), 0, 0, 1, 1)
         self.entry_year = Gtk.Entry()
         self.entry_year.set_hexpand(True)
-        self.entry_year.set_text(self.project.settings.year)
+        default_year = self.project.settings.year or "2026"
+        self.entry_year.set_text(default_year)
         self.entry_year.connect("changed",
             lambda e: setattr(self.project.settings, "year", e.get_text()))
+        if not self.project.settings.year:
+            self.entry_year.get_style_context().add_class("suggestion")
         grid2.attach(self.entry_year, 1, 0, 1, 1)
-        
-        grid2.attach(Gtk.Label(label="Module :"), 2, 0, 1, 1)
-        self.entry_module_short = Gtk.Entry()
-        self.entry_module_short.set_hexpand(True)
-        self.entry_module_short.set_text(self.project.settings.module_short)
-        self.entry_module_short.connect("changed",
-            lambda e: setattr(self.project.settings, "module_short", e.get_text()))
-        grid2.attach(self.entry_module_short, 3, 0, 1, 1)
+
+        grid2.attach(Gtk.Label(label="Semestre :"), 2, 0, 1, 1)
+        self.entry_semester = Gtk.Entry()
+        self.entry_semester.set_hexpand(True)
+        default_semester = self.project.settings.semester or "S1"
+        self.entry_semester.set_text(default_semester)
+        self.entry_semester.connect("changed",
+            lambda e: setattr(self.project.settings, "semester", e.get_text()))
+        if not self.project.settings.semester:
+            self.entry_semester.get_style_context().add_class("suggestion")
+        grid2.attach(self.entry_semester, 3, 0, 1, 1)
+
+        grid2.attach(Gtk.Label(label="Unité d'enseignement :"), 4, 0, 1, 1)
+        self.entry_teaching_unit = Gtk.Entry()
+        self.entry_teaching_unit.set_hexpand(True)
+        default_teaching_unit = self.project.settings.teaching_unit or "UE3"
+        self.entry_teaching_unit.set_text(default_teaching_unit)
+        self.entry_teaching_unit.connect("changed",
+            lambda e: setattr(self.project.settings, "teaching_unit", e.get_text()))
+        if not self.project.settings.teaching_unit:
+            self.entry_teaching_unit.get_style_context().add_class("suggestion")
+        grid2.attach(self.entry_teaching_unit, 5, 0, 1, 1)
         box.append(grid2)
 
-        # Ligne 3 : Évaluation, Date et Durée
+        # --- Ligne 3 : Module complet, Module abrégé ---
         grid3 = Gtk.Grid(column_spacing=8, row_spacing=4)
-        grid3.attach(Gtk.Label(label="Évaluation :"), 0, 0, 1, 1)
+        grid3.attach(Gtk.Label(label="Module complet :"), 0, 0, 1, 1)
+        self.entry_module_full = Gtk.Entry()
+        self.entry_module_full.set_hexpand(True)
+        default_module_full = self.project.settings.module_full or "Mathématiques"
+        self.entry_module_full.set_text(default_module_full)
+        self.entry_module_full.connect("changed",
+            lambda e: setattr(self.project.settings, "module_full", e.get_text()))
+        if not self.project.settings.module_full:
+            self.entry_module_full.get_style_context().add_class("suggestion")
+        grid3.attach(self.entry_module_full, 1, 0, 1, 1)
+
+        grid3.attach(Gtk.Label(label="Module abrégé :"), 2, 0, 1, 1)
+        self.entry_module_short = Gtk.Entry()
+        self.entry_module_short.set_hexpand(True)
+        default_module_short = self.project.settings.module_short or "OML1"
+        self.entry_module_short.set_text(default_module_short)
+        self.entry_module_short.connect("changed",
+            lambda e: setattr(self.project.settings, "module_short", e.get_text()))
+        if not self.project.settings.module_short:
+            self.entry_module_short.get_style_context().add_class("suggestion")
+        grid3.attach(self.entry_module_short, 3, 0, 1, 1)
+        box.append(grid3)
+
+        # --- Ligne 4 : Évaluation complète, Évaluation abrégée ---
+        grid4 = Gtk.Grid(column_spacing=8, row_spacing=4)
+        grid4.attach(Gtk.Label(label="Évaluation complète :"), 0, 0, 1, 1)
+        self.entry_evaluation_full = Gtk.Entry()
+        self.entry_evaluation_full.set_hexpand(True)
+        default_evaluation_full = self.project.settings.evaluation_full or "QCM Mathématiques"
+        self.entry_evaluation_full.set_text(default_evaluation_full)
+        self.entry_evaluation_full.connect("changed",
+            lambda e: setattr(self.project.settings, "evaluation_full", e.get_text()))
+        if not self.project.settings.evaluation_full:
+            self.entry_evaluation_full.get_style_context().add_class("suggestion")
+        grid4.attach(self.entry_evaluation_full, 1, 0, 1, 1)
+
+        grid4.attach(Gtk.Label(label="Évaluation abrégée :"), 2, 0, 1, 1)
         self.entry_evaluation_short = Gtk.Entry()
         self.entry_evaluation_short.set_hexpand(True)
-        self.entry_evaluation_short.set_text(self.project.settings.evaluation_short)
+        default_evaluation_short = self.project.settings.evaluation_short or "OML1"
+        self.entry_evaluation_short.set_text(default_evaluation_short)
         self.entry_evaluation_short.connect("changed",
             lambda e: setattr(self.project.settings, "evaluation_short", e.get_text()))
-        grid3.attach(self.entry_evaluation_short, 1, 0, 1, 1)
-        
-        grid3.attach(Gtk.Label(label="Date :"), 2, 0, 1, 1)
+        if not self.project.settings.evaluation_short:
+            self.entry_evaluation_short.get_style_context().add_class("suggestion")
+        grid4.attach(self.entry_evaluation_short, 3, 0, 1, 1)
+        box.append(grid4)
+
+        # --- Ligne 5 : Enseignants, Date, Durée ---
+        grid5 = Gtk.Grid(column_spacing=8, row_spacing=4)
+        grid5.attach(Gtk.Label(label="Enseignants :"), 0, 0, 1, 1)
+        self.entry_teachers = Gtk.Entry()
+        self.entry_teachers.set_hexpand(True)
+        default_teachers = self.project.settings.teachers or "BS"
+        self.entry_teachers.set_text(default_teachers)
+        self.entry_teachers.connect("changed",
+            lambda e: setattr(self.project.settings, "teachers", e.get_text()))
+        if not self.project.settings.teachers:
+            self.entry_teachers.get_style_context().add_class("suggestion")
+        grid5.attach(self.entry_teachers, 1, 0, 1, 1)
+
+        grid5.attach(Gtk.Label(label="Date :"), 2, 0, 1, 1)
         self.entry_date = Gtk.Entry()
         self.entry_date.set_hexpand(True)
-        self.entry_date.set_text(self.project.settings.date)
+        default_date = self.project.settings.date or "09/10/2026"
+        self.entry_date.set_text(default_date)
         self.entry_date.connect("changed",
             lambda e: setattr(self.project.settings, "date", e.get_text()))
-        grid3.attach(self.entry_date, 3, 0, 1, 1)
-        
-        grid3.attach(Gtk.Label(label="Durée :"), 4, 0, 1, 1)
+        if not self.project.settings.date:
+            self.entry_date.get_style_context().add_class("suggestion")
+        grid5.attach(self.entry_date, 3, 0, 1, 1)
+
+        grid5.attach(Gtk.Label(label="Durée :"), 4, 0, 1, 1)
         self.entry_duration = Gtk.Entry()
         self.entry_duration.set_hexpand(True)
-        self.entry_duration.set_text(self.project.settings.duration)
+        default_duration = self.project.settings.duration or "1h"
+        self.entry_duration.set_text(default_duration)
         self.entry_duration.connect("changed",
             lambda e: setattr(self.project.settings, "duration", e.get_text()))
-        grid3.attach(self.entry_duration, 5, 0, 1, 1)
-        box.append(grid3)
+        if not self.project.settings.duration:
+            self.entry_duration.get_style_context().add_class("suggestion")
+        grid5.attach(self.entry_duration, 5, 0, 1, 1)
+        box.append(grid5)
 
         self.notebook.append_page(box, Gtk.Label(label="Informations"))
 
@@ -411,6 +526,8 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.copies_store.clear()
         self.results_store.clear()
         self.generate_status.set_text("Nouveau projet.")
+        self.set_title("Générateur/Correcteur de QCM papier - Nouveau")
+        self.present()
 
     def _on_open(self, _btn) -> None:
         path = _file_dialog(self, "Ouvrir un projet", Gtk.FileChooserAction.OPEN,
@@ -421,22 +538,56 @@ class QcmWindow(Gtk.ApplicationWindow):
             self.project = project_mod.load_project(path)
             self.editor.project = self.project
             self.editor._fill_tree()
-            # Synchroniser les champs d'info.
-            self.entry_establishment.set_text(self.project.settings.establishment)
-            self.entry_formation.set_text(self.project.settings.formation)
-            self.entry_year.set_text(self.project.settings.year)
-            self.entry_module_short.set_text(self.project.settings.module_short)
-            self.entry_evaluation_short.set_text(self.project.settings.evaluation_short)
-            self.entry_date.set_text(self.project.settings.date)
-            self.entry_duration.set_text(self.project.settings.duration)
+            self.editor._update_interval_label()
+
+            # --- Synchroniser les champs d'info avec valeurs par défaut si vides ---
+            def set_entry_with_default(entry, value, default, attr):
+                """Applique une valeur par défaut et le style si vide."""
+                if not value:
+                    entry.set_text(default)
+                    entry.get_style_context().add_class("suggestion")
+                    setattr(self.project.settings, attr, default)
+                else:
+                    entry.set_text(value)
+                    entry.get_style_context().remove_class("suggestion")
+
+            # Ligne 1
+            set_entry_with_default(self.entry_establishment, self.project.settings.establishment, "Université Lyon 1", "establishment")
+            set_entry_with_default(self.entry_institute, self.project.settings.institute, "IUT LYON 1", "institute")
+            set_entry_with_default(self.entry_formation, self.project.settings.formation, "Département GEii", "formation")
+
+            # Ligne 2
+            set_entry_with_default(self.entry_year, self.project.settings.year, "2026", "year")
+            set_entry_with_default(self.entry_semester, self.project.settings.semester, "S1", "semester")
+            set_entry_with_default(self.entry_teaching_unit, self.project.settings.teaching_unit, "UE3", "teaching_unit")
+
+            # Ligne 3
+            set_entry_with_default(self.entry_module_full, self.project.settings.module_full, "Mathématiques", "module_full")
+            set_entry_with_default(self.entry_module_short, self.project.settings.module_short, "OML1", "module_short")
+
+            # Ligne 4
+            set_entry_with_default(self.entry_evaluation_full, self.project.settings.evaluation_full, "QCM Mathématiques", "evaluation_full")
+            set_entry_with_default(self.entry_evaluation_short, self.project.settings.evaluation_short, "OML1", "evaluation_short")
+
+            # Ligne 5
+            set_entry_with_default(self.entry_teachers, self.project.settings.teachers, "BS", "teachers")
+            set_entry_with_default(self.entry_date, self.project.settings.date, "09/10/2026", "date")
+            set_entry_with_default(self.entry_duration, self.project.settings.duration, "1h", "duration")
+
+            # Champs Génération
             self.entry_variants.set_text(self.project.settings.generate_variants)
-            self.spin_students.set_value(self.project.settings.generate_students)
-            self.spin_count.set_value(self.project.settings.generate_count)
+            # affichage du nom du fichier dans la barre de titre
+            self.set_title(f"Générateur/Correcteur de QCM papier - {os.path.basename(path)}")
+            self.spin_students.set_value(max(1, min(1000, self.project.settings.generate_students)))  # Force la valeur dans [1, 1000]
+            self.spin_count.set_value(max(1, min(4096, self.project.settings.generate_count)))      # Force la valeur dans [1, 4096]
+            self.present()
+            
             self.generate_status.set_text(f"Projet chargé : {path}")
         except Exception as e:
             self.generate_status.set_text(f"Erreur : {e}")
-
+        
     def _on_save(self, _btn) -> None:
+        """Enregistre le projet dans un fichier JSON."""
         name = self.project.settings.evaluation_short or "qcm_papier"
         path = _file_dialog(self, "Enregistrer le projet",
                             Gtk.FileChooserAction.SAVE,
