@@ -185,13 +185,10 @@ class Exercise:
         exercise_max = 0.0
         
         # Calcul du max
-        if self.sum:
-            for question in self.questions:
-                # Seules les questions avec au moins un choix correct contribuent
-                if any(c.correct for c in question.choices):
-                    exercise_max += question.gain
-        else:
-            exercise_max = self.max
+        for question in self.questions:
+            # Seules les questions avec au moins un choix correct contribuent
+            if any(c.correct for c in question.choices):
+                exercise_max += question.gain
         
         # Calcul du min : soustraire les pénalités des questions avec choix pénalisants
         for question in self.questions:
@@ -529,7 +526,7 @@ class ProjectSettings:
     def from_dict(cls, d: dict[str, Any]) -> "ProjectSettings":
         s = cls()
         known = s.__dict__
-        
+
         # Mapping des champs info_* vers les champs du modèle
         info_mapping = {
             'info_university': 'establishment',
@@ -546,17 +543,38 @@ class ProjectSettings:
             'info_date': 'date',
             'info_duration': 'duration',
         }
-        
+
+        # Champs à convertir en int (même s'ils sont stockés en string dans le JSON)
+        int_fields = {
+            'generate_students', 'generate_count', 'generate_retry', 'generate_stop',
+            'generate_per_variant', 'generate_per_student', 'exercise_new_exercises',
+            'exercise_new_questions', 'exercise_new_choices', 'question_new_questions',
+            'question_new_choices', 'choice_new_choices', 'choice_checked_never',
+            'choice_checked_always', 'choice_checked_sometimes', 'choice_joker_always',
+            'choice_joker_never', 'exercise_new_never', 'exercise_new_always',
+            'exercise_new_sometimes', 'question_new_never', 'question_new_always',
+            'question_new_sometimes', 'choice_new_never', 'choice_new_always',
+            'choice_new_sometimes', 'exercise_order_never', 'exercise_order_always',
+            'exercise_order_sometimes', 'question_order_never', 'question_order_always',
+            'question_order_sometimes', 'choice_order_never', 'choice_order_always',
+            'choice_order_sometimes'
+        }
+
         for key, value in d.items():
             if key in known:
-                setattr(s, key, copy.deepcopy(value))
+                # Conversion automatique pour les champs entiers
+                if key in int_fields and isinstance(value, str):
+                    setattr(s, key, int(value))
+                else:
+                    setattr(s, key, copy.deepcopy(value))
             elif key in info_mapping:
-                # Mapper les champs info_* vers les champs du modèle
                 target_key = info_mapping[key]
                 if target_key in known:
-                    setattr(s, target_key, copy.deepcopy(value))
+                    if target_key in int_fields and isinstance(value, str):
+                        setattr(s, target_key, int(value))
+                    else:
+                        setattr(s, target_key, copy.deepcopy(value))
         return s
-
 
 # ---------------------------------------------------------------------------
 # Étudiant (table Scodoc)
@@ -615,14 +633,24 @@ class Project:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "Project":
-        settings = ProjectSettings.from_dict(d.get("settings", {}))
+        # Gérer les anciens JSON où les champs sont à la racine
+        settings_dict = d.get("settings", {})
+
+        # Si pas de "settings" mais des champs info_* à la racine → ancien format
+        if not settings_dict and any(k.startswith("info_") for k in d.keys()):
+            # Extraire tous les champs connus + info_* pour le mapping
+            known_fields = {f.name for f in ProjectSettings.__dataclass_fields__.values()}
+            settings_dict = {k: v for k, v in d.items()
+                        if k.startswith("info_") or k in known_fields}
+
+        settings = ProjectSettings.from_dict(settings_dict)
         variants = VariantStore.from_plain_dict(d.get("variants", {}))
         structure = [Exercise.from_dict(e) for e in d.get("structure", [])]
         students = {
             k: Student.from_dict(v) for k, v in d.get("students", {}).items()
         }
         return cls(settings=settings, variants=variants,
-                   structure=structure, students=students)
+                structure=structure, students=students)
 
     def get_mark_range(self) -> tuple[float, float]:
         """Calcule l'intervalle de notes du QCM (min, max).
@@ -641,14 +669,11 @@ class Project:
             exercise_min = 0.0
             exercise_max = 0.0
             
-            # Calcul du max
-            if exercise.sum:
-                for question in exercise.questions:
-                    # Seules les questions avec au moins un choix correct contribuent
-                    if any(c.correct for c in question.choices):
-                        exercise_max += question.gain
-            else:
-                exercise_max = exercise.max
+            # Calcul du max : TOUJOURS la somme des gains des questions avec choix corrects
+            # (Le champ exercise.max n'est utilisé que pour la mise à l'échelle si scale=True)
+            for question in exercise.questions:
+                if any(c.correct for c in question.choices):
+                    exercise_max += question.gain
             
             # Calcul du min : soustraire les pénalités des questions avec choix pénalisants
             for question in exercise.questions:
@@ -671,5 +696,6 @@ class Project:
             
             global_min += exercise_min
             global_max += exercise_max
+
         
         return (global_min, global_max)
