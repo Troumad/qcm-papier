@@ -14,14 +14,13 @@ from typing import IO, Any
 
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas as canvaslib
+from reportlab.lib.pagesizes import A4, landscape
 
 from .code39 import CODE39
 from .model import Layout, Project, Variant, VariantStore
 
-
 # Format ReportLab : 'A3', 'A4', 'A5' en majuscule.
 _REPORTLAB_FORMATS = {"a3": "A3", "a4": "A4", "a5": "A5"}
-
 
 def _page_size(layout: Layout) -> tuple[float, float]:
     """Taille de page ReportLab (largeur, hauteur en points) selon le layout."""
@@ -33,18 +32,8 @@ def _page_size(layout: Layout) -> tuple[float, float]:
         return landscape(base)
     return portrait(base)
 
-
 def _draw_code39(c: canvaslib.Canvas, variant: Variant, layout: Layout) -> None:
-    """Dessine le code-barres Code 39 de la variante.
-
-    Reprend la boucle sur ``variant.barcode_text`` (index.html ~6920-6940) :
-    chaque caractère produit 9 barres (pleines '1' = 3*résolution, fines '0' =
-    résolution), et seules les barres d'indice pair sont noires.
-
-    Toutes les coordonnées sont en mm dans le modèle ; ReportLab attend des
-    points, donc on convertit via ``* mm`` (et l'axe y du PDF est vers le haut
-    alors que le modèle a y vers le bas : on inverse avec ``page_height - y``).
-    """
+    """Dessine le code-barres Code 39 de la variante."""
     page_h = layout.page_height
     bar_left = variant.barcode_left * mm
     res = layout.barcode_resolution * mm
@@ -60,21 +49,13 @@ def _draw_code39(c: canvaslib.Canvas, variant: Variant, layout: Layout) -> None:
             bar_left += width
         bar_left += res  # espace inter-caractère
 
-
 def _reverse_lines(text: str) -> str:
-    """Inverse l'ordre des lignes (pied de page).
-
-    Reprend ``process_text`` du pied de page (index.html ~6905-6916).
-    """
+    """Inverse l'ordre des lignes (pied de page)."""
     lines = text.split("\n")
     return "\n".join(reversed(lines))
 
-
 def _draw_header_footer(c: canvaslib.Canvas, layout: Layout) -> None:
-    """Dessine l'en-tête (en haut) et le pied de page (en bas, lignes inversées).
-
-    Reprend ``doc.text(...)`` du code original (index.html ~6895-6925).
-    """
+    """Dessine l'en-tête (en haut) et le pied de page (en bas, lignes inversées)."""
     margin_left = layout.margin_left
     margin_top = layout.margin_top
     margin_right = layout.margin_right
@@ -84,17 +65,26 @@ def _draw_header_footer(c: canvaslib.Canvas, layout: Layout) -> None:
     margin_bottom = layout.margin_bottom
 
     c.setFont("Helvetica", 12)
-    # En-tête (alignements gauche/centre/droite, baseline 'top').
+    line_height_mm = 7  # Espacement entre les lignes
+
+    # En-tête (avec décalage vertical pour éviter la superposition)
     if layout.header_left:
-        c.drawString(margin_left * mm, (page_h - margin_top) * mm,
-                     layout.header_left)
+        lines = layout.header_left.split('\n')
+        for i, line in enumerate(lines):
+            y = (page_h - margin_top - i * line_height_mm) * mm
+            c.drawString(margin_left * mm, y, line.strip())
     if layout.header_middle:
-        c.drawCentredString(center * mm, (page_h - margin_top) * mm,
-                            layout.header_middle)
+        lines = layout.header_middle.split('\n')
+        for i, line in enumerate(lines):
+            y = (page_h - margin_top - i * line_height_mm) * mm
+            c.drawCentredString(center * mm, y, line.strip())
     if layout.header_right:
-        c.drawRightString((page_w - margin_right) * mm,
-                          (page_h - margin_top) * mm, layout.header_right)
-    # Pied de page (lignes inversées, baseline 'bottom').
+        lines = layout.header_right.split('\n')
+        for i, line in enumerate(lines):
+            y = (page_h - margin_top - i * line_height_mm) * mm
+            c.drawRightString((page_w - margin_right) * mm, y, line.strip())
+
+    # Pied de page (lignes inversées)
     if layout.footer_left:
         c.drawString(margin_left * mm, margin_bottom * mm,
                      _reverse_lines(layout.footer_left))
@@ -105,7 +95,6 @@ def _draw_header_footer(c: canvaslib.Canvas, layout: Layout) -> None:
         c.drawRightString((page_w - margin_right) * mm, margin_bottom * mm,
                           _reverse_lines(layout.footer_right))
 
-
 def _draw_shapes(c: canvaslib.Canvas, layout: Layout) -> None:
     """Dessine les 5 repères d'alignement (cercles pleins noirs)."""
     for i in range(len(layout.shapes_x)):
@@ -114,37 +103,9 @@ def _draw_shapes(c: canvaslib.Canvas, layout: Layout) -> None:
         r = layout.shapes_r[i] * mm
         c.circle(x, y, r, stroke=0, fill=1)
 
-
-def _draw_identification(c: canvaslib.Canvas, variant: Variant) -> None:
-    """Dessine les cercles et étiquettes du numéro étudiant.
-
-    Reprend la boucle sur ``id_columns``/``id_lines`` (index.html ~6948-6975).
-    Chaque intersection reçoit une étiquette (chiffre/lettre) et un cercle
-    contour quand il y a une étiquette.
-    """
-    c.setFont("Helvetica", 7)
-    page_h_mm = 0  # recalculé plus bas via le layout passé en paramètre
-    for i, x in enumerate(variant.id_columns):
-        for j, y in enumerate(variant.id_lines):
-            label = "_"
-            if j > 0 and len(variant.id_lines) == 11:
-                label = chr(47 + j)  # '0' = 48, mais le JS commence à '/'
-            elif i > 0 and len(variant.id_columns) == 11:
-                label = chr(47 + i)
-            # drawCentredString attend des points.
-            # NB : le code original place y croissant vers le bas ; en PDF,
-            # l'axe y est vers le haut, on doit donc convertir.
-            pass  # conversion gérée dans _draw_variant via le layout
-
-
 def _draw_variant(c: canvaslib.Canvas, variant: Variant,
                   layout: Layout, page_height_mm: float) -> None:
-    """Dessine tous les éléments d'une variante sur la page courante.
-
-    Reprend les boucles finales de ``FileView`` (index.html ~6950-7050) :
-    cases d'identification, textes, cercles (pleins/contour/pointillés),
-    rectangles.
-    """
+    """Dessine tous les éléments d'une variante sur la page courante."""
     def to_pdf_y(y_mm: float) -> float:
         # Le JS utilise y croissant vers le bas ; PDF y croissant vers le haut.
         return (page_height_mm - y_mm) * mm
@@ -164,7 +125,8 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant,
                 label = chr(47 + j)
             elif i > 0 and len(variant.id_columns) == 11:
                 label = chr(47 + i)
-            c.drawCentredString(x * mm, to_pdf_y(y), label)
+            # Centrage vertical dans les cercles
+            c.drawCentredString(x * mm, to_pdf_y(y) - 1 * mm, label)
             if ((j > 0 and len(variant.id_lines) == 11)
                     or (i > 0 and len(variant.id_columns) == 11)):
                 c.setStrokeColorRGB(0, 0, 0)
@@ -176,7 +138,8 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant,
     for text in variant.texts:
         if text.get("center"):
             c.setFont("Helvetica", 7)
-            c.drawCentredString(text["x"] * mm, to_pdf_y(text["y"]),
+            # Centrage vertical dans les cercles
+            c.drawCentredString(text["x"] * mm, to_pdf_y(text["y"]) - 1 * mm,
                                 text.get("t", ""))
             c.setFont("Helvetica", 12)
         else:
@@ -198,7 +161,6 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant,
         if r > 0:
             c.circle(x, y, abs(r) * mm, stroke=1, fill=0)
         else:
-            # Cercle pré-coché : noircir 1 case sur 2 (heuristique du JS).
             coups += 2
             if (nb % coups) % 2 == 0:
                 c.setFillColorRGB(0, 0, 0)
@@ -212,35 +174,24 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant,
     c.setLineWidth(0.2)
     for rect in variant.rects:
         x = rect.get("x", 0) * mm
-        y = to_pdf_y(rect.get("y", 0) + rect.get("h", 0))  # coin bas-gauche
-        c.rect(x, y, rect.get("w", 0) * mm, rect.get("h", 0) * mm,
+        y = to_pdf_y(rect.get("y", 0))  # Coin haut-gauche pour encadrer correctement
+        c.rect(x, y, rect.get("w", 0) * mm, -rect.get("h", 0) * mm,
                stroke=1, fill=0)
-
-
+        
 def generate_pdf(project: Project, output: str | IO[bytes] | None = None,
                  per_student: bool = False) -> bytes:
-    """Génère le PDF sujet pour toutes les variantes du projet.
+    """Génère le PDF sujet pour toutes les variantes du projet."""
+    from reportlab.lib.pagesizes import A4, landscape
 
-    Reprend ``FileView`` (index.html ~6839-7050). Si ``per_student`` est True,
-    on génère ``generate_students`` copies (une par étudiant, en bouclant sur
-    les variantes) ; sinon une copie par variante.
-
-    Renvoie le contenu PDF en octets (et écrit dans ``output`` si fourni).
-    """
     variant_ids = [k for k in project.variants.keys() if k not in ("p", "l")]
     if not variant_ids:
         raise ValueError("Aucune variante à générer : lancez d'abord la "
                          "génération des variantes.")
 
-    copy_count = len(variant_ids)
-    if per_student:
-        copy_count = project.settings.generate_students
+    copy_count = project.settings.generate_students if per_student else len(variant_ids)
 
     buffer = io.BytesIO()
-    first_page = True
     c = None
-    current_layout: Layout | None = None
-    page_height_mm = 0.0
 
     for i in range(copy_count):
         variant = project.variants.variant(variant_ids[i % len(variant_ids)])
@@ -249,21 +200,25 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None,
         layout = project.variants.layout(variant.layout)
         if layout is None:
             continue
-        page_size = _page_size(layout)
-        page_height_mm = layout.page_height
 
-        if first_page:
+        # 1. Détermination unique du format de la page
+        page_size = landscape(A4) if variant.layout == "l" else A4
+
+        # 2. Initialisation ou création d'une nouvelle page avec la bonne taille
+        if c is None:
             c = canvaslib.Canvas(buffer, pagesize=page_size)
-            first_page = False
         else:
-            c.setPageSize(page_size)
+            c.setPageSize(page_size)  # On change la taille AVANT de dessiner la nouvelle page
+
+        # 3. Dessin sur la page courante
+        _draw_header_footer(c, layout)
+        _draw_variant(c, variant, layout, layout.page_height)
+        
+        # 4. On valide la page (sauf si c'est la toute dernière, géré par le save)
+        if i < copy_count - 1:
             c.showPage()
 
-        _draw_header_footer(c, layout)
-        _draw_variant(c, variant, layout, page_height_mm)
-
     if c is not None:
-        c.showPage()
         c.save()
 
     data = buffer.getvalue()

@@ -479,6 +479,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
     """
     settings = project.settings
     variant = Variant(layout="p", id=variant_id)
+    MM_TO_PT = 72/ 25.4
 
     # Orientation portrait/paysage.
     if rg.pseudo_random(variant_id, 0, 0, _choice(settings, "paper_orientation")):
@@ -641,8 +642,8 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         _merge_arrays(variant.marks, questions_marks, exercise_x, exercise_y)
 
         # Dépassement du format ?
-        if ((exercise_x + exercise_width) > (layout.page_width - layout.margin_right)
-                or (exercise_y + exercise_height) > layout.barcode_top):
+        if ((exercise_x + exercise_width) > (layout.page_width - layout.margin_right)*MM_TO_PT
+                or (exercise_y + exercise_height) > layout.barcode_top*MM_TO_PT):
             has_error = True
 
         # Mise à jour de la position pour l'exercice suivant.
@@ -687,16 +688,10 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
 def generate_all(project: Project,
                 retry: bool = True,
                 max_errors: int = 10) -> tuple[list[int], list[int]]:
-    """Génère toutes les variantes demandées par les paramètres.
-
-    Reprend la logique de réessai de ``FileGenerate`` : si une variante échoue
-    et que ``retry`` est True, un nouvel id aléatoire (0..4095) est tiré.
-    Renvoie ``(ids_ok, ids_échoués)``.
-    """
+    """Génère toutes les variantes demandées par les paramètres."""
     import random
 
     if not project.settings.generate_variants:
-        # Comme le JS : si vide, on génère une liste d'ids.
         count = project.settings.generate_count
         ids = [random.randint(0, 4095) for _ in range(count)]
         project.settings.generate_variants = ";".join(str(i) for i in ids)
@@ -704,13 +699,15 @@ def generate_all(project: Project,
     variant_ids = [int(x) for x in project.settings.generate_variants.split(";") if x]
     error_count = 0
     failed: list[int] = []
+    success: list[int] = []  # Liste des IDs qui ont réellement réussi
     page_index = 0
+
     while page_index < len(variant_ids):
         variant_id = variant_ids[page_index]
         try:
             variant = generate_variant(project, variant_id)
             project.variants[str(variant_id)] = variant
-            error_count = 0
+            success.append(variant_id)
             page_index += 1
         except GenerateError:
             error_count += 1
@@ -718,10 +715,11 @@ def generate_all(project: Project,
             if error_count >= max_errors:
                 break
             if retry:
-                # Réessayer avec un nouvel id aléatoire.
                 variant_ids[page_index] = random.randint(0, 4095)
             else:
-                # Variante abandonnée (elle déborde du format) : on passe à la suivante.
                 page_index += 1
+                
+
+    # Stocker TOUS les IDs (succès + remplacements) pour la prochaine génération
     project.settings.generate_variants = ";".join(str(i) for i in variant_ids)
-    return variant_ids, failed
+    return success, failed  # ✅ Retourne UNIQUEMENT les succès et échecs
