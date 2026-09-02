@@ -348,9 +348,15 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.project.settings.generate_students = int(self.spin_students.get_value())
         self.project.settings.generate_count = int(self.spin_count.get_value())
         self.project.settings.generate_variants = self.entry_variants.get_text()
-        ids, failed = generator.generate_all(self.project, retry=True)
-        self.entry_variants.set_text(";".join(str(i) for i in ids))
-        msg = f"{len(ids)} variantes générées."
+
+        success, failed = generator.generate_all(self.project, retry=True)
+
+        # 🔧 CORRECTION: Stocker TOUS les IDs (succès + échecs + remplacements)
+        all_ids = success + failed
+        self.entry_variants.set_text(";".join(str(i) for i in all_ids))
+
+        # ✅ Message exact : seul le nombre de succès est affiché
+        msg = f"{len(success)} variantes générées."
         if failed:
             msg += f" {len(failed)} en échec."
         self.generate_status.set_text(msg)
