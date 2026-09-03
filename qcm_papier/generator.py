@@ -41,7 +41,6 @@ def _exercise_to_dict(e) -> dict:
         "questions": [_question_to_dict(q) for q in e.questions],
     }
 
-
 def _question_to_dict(q) -> dict:
     if isinstance(q, dict):
         return dict(q)
@@ -55,7 +54,6 @@ def _question_to_dict(q) -> dict:
         "choices": [_choice_to_dict(c) for c in q.choices],
     }
 
-
 def _choice_to_dict(c) -> dict:
     if isinstance(c, dict):
         return dict(c)
@@ -63,8 +61,6 @@ def _choice_to_dict(c) -> dict:
         "index": c.index, "name": c.name, "correct": c.correct,
         "neutral": c.neutral, "penalty": c.penalty,
     }
-
-
 
 # Hauteur de ligne en mm (12 pt → mm). Reprend ``line_height = 12 / 2.835``.
 LINE_HEIGHT = 12 / 2.835
@@ -82,7 +78,6 @@ BIT_EXERCISE_ORDER = 8
 BIT_QUESTION_ORDER = 10
 BIT_CHOICE_ORDER = 11
 
-
 # ---------------------------------------------------------------------------
 # Helpers de boutons à 3 états (depuis les ProjectSettings)
 # ---------------------------------------------------------------------------
@@ -91,7 +86,6 @@ def _tri(settings: ProjectSettings, base: str, alt: str, rand: str) -> rg.TriCho
     return rg.tri_from_flags(
         getattr(settings, base), getattr(settings, alt), getattr(settings, rand)
     )
-
 
 def _settings_tri_groups() -> dict[str, tuple[str, str, str]]:
     """Mappe chaque « groupe de boutons » aux 3 champs booléens correspondants."""
@@ -114,15 +108,13 @@ def _settings_tri_groups() -> dict[str, tuple[str, str, str]]:
                            "exercise_order_sometimes"),
         "question_order": ("question_order_never", "question_order_always",
                            "question_order_sometimes"),
-        "choice_order": ("choice_order_never", "choice_order_always",
+         "choice_order": ("choice_order_never", "choice_order_always",
                           "choice_order_sometimes"),
     }
-
 
 def _choice(settings: ProjectSettings, group: str) -> rg.TriChoice:
     base, alt, rand = _settings_tri_groups()[group]
     return _tri(settings, base, alt, rand)
-
 
 # ---------------------------------------------------------------------------
 # Construction du layout (portrait/paysage)
@@ -144,7 +136,6 @@ def _header_footer_height(settings: ProjectSettings) -> tuple[float, float]:
                    nb_lines(settings.footer_middle),
                    nb_lines(settings.footer_right), 0)
     return header_h * LINE_HEIGHT * 1.15, footer_h * LINE_HEIGHT * 1.15
-
 
 def build_layout(settings: ProjectSettings, orientation: str) -> Layout:
     """Construit un layout portrait ('p') ou paysage ('l').
@@ -206,7 +197,6 @@ def build_layout(settings: ProjectSettings, orientation: str) -> Layout:
     layout.barcode_length = len(layout.barcode_prefix) + 6
     return layout
 
-
 # ---------------------------------------------------------------------------
 # Texte du code-barres d'une variante
 # ---------------------------------------------------------------------------
@@ -226,7 +216,6 @@ def barcode_text(prefix: str, variant_id: int) -> str:
         digits = str(variant_id)
     return "*" + prefix + digits + "*"
 
-
 # ---------------------------------------------------------------------------
 # Fusion de listes (mergeArrays du code original)
 # ---------------------------------------------------------------------------
@@ -237,7 +226,6 @@ def _merge_arrays(target: list, source: list, delta_x: float, delta_y: float) ->
         item["x"] = item.get("x", 0) + delta_x
         item["y"] = item.get("y", 0) + delta_y
         target.append(item)
-
 
 # ---------------------------------------------------------------------------
 # Boîte d'identification étudiant
@@ -282,7 +270,6 @@ def _build_identification(variant: Variant, layout: Layout,
         "w": variant.id_width, "h": variant.id_height,
     })
 
-
 # ---------------------------------------------------------------------------
 # Largeur/hauteur d'un texte (approximation reportlab-like)
 # ---------------------------------------------------------------------------
@@ -300,7 +287,6 @@ def _text_width(text: str, font_size: float = 12) -> float:
         return stringWidth(text or "", "Helvetica", font_size) * 25.4 / 72
     except Exception:
         return len(text or "") * font_size * 0.5 * 25.4 / 72
-
 
 # ---------------------------------------------------------------------------
 # Placement des choix d'une question
@@ -453,7 +439,6 @@ def _place_choices(variant, variant_id,
     # (cas choice_dir) ; pour choice_x += 6 par choix puis ``+ question_name_width_max + 4``.
     return texts, rects, circles, marks, question_width, question_height
 
-
 def _max_choice_count(exercise) -> int:
     """Nombre maximum de choix parmi les questions réelles (index >= 0)."""
     m = 0
@@ -462,7 +447,6 @@ def _max_choice_count(exercise) -> int:
             m = len(q.get("choices", []))
     return m
 
-
 # ---------------------------------------------------------------------------
 # Génération d'une variante
 # ---------------------------------------------------------------------------
@@ -470,16 +454,10 @@ def _max_choice_count(exercise) -> int:
 class GenerateError(Exception):
     """Levée quand une variante ne tient pas dans le format de papier."""
 
-
 def generate_variant(project: Project, variant_id: int) -> Variant:
-    """Génère une variante pour l'id donné.
-
-    Reprend la boucle principale de ``FileGenerate`` (index.html ~6210-6820).
-    Lève ``GenerateError`` si le contenu ne tient pas dans le format.
-    """
+    """Génère une variante pour l'id donné."""
     settings = project.settings
     variant = Variant(layout="p", id=variant_id)
-    MM_TO_PT = 72/ 25.4
 
     # Orientation portrait/paysage.
     if rg.pseudo_random(variant_id, 0, 0, _choice(settings, "paper_orientation")):
@@ -494,7 +472,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
     # Code-barres.
     variant.barcode_text = barcode_text(layout.barcode_prefix, variant_id)
     variant.barcode_width = code39_width(variant.barcode_text,
-                                          layout.barcode_resolution)
+                                         layout.barcode_resolution)
     variant.barcode_left = layout.page_center - variant.barcode_width / 2
 
     # Boîte d'identification.
@@ -522,20 +500,33 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             new_choices_name=settings.exercise_new_choices_name,
         )
 
-    # Position initiale selon la direction.
-    if exercise_dir:
+    # --- NOUVELLE LOGIQUE DE PLACEMENT DES EXERCICES ---
+    # Détermine si on va vers la droite ou vers le bas
+    go_right = ((exercise_dir and variant.layout == "p") or (not exercise_dir and variant.layout == "l"))
+    # Limites de la page
+    max_width = layout.page_width - layout.margin_right
+    max_height = layout.barcode_top
+
+    # Initialisation des variables pour les deux modes
+    x_max = layout.margin_left
+    y_max = variant.id_y + variant.id_height
+    x_line_start = variant.id_x
+    y_column_start = variant.id_y
+
+    # Initialisation des positions selon le mode
+    if go_right :
+        # Mode "vers la droite" : première ligne commence après la boîte d'identification
+        exercise_x = variant.id_x + variant.id_width
+        exercise_y = variant.id_y
+        y_max = variant.id_y + variant.id_height  # Point bas maximal initial (boîte d'identification)
+        #x_line_start = variant.id_x + variant.id_width  # Début de ligne (après la boîte)
+    else:
+        # Mode "vers le bas" : première colonne commence sous la boîte d'identification
         exercise_x = layout.margin_left
         exercise_y = variant.id_y + variant.id_height
-        exercise_width_max = layout.page_width - layout.margin_right - exercise_x
-        exercise_height_max = layout.barcode_top - exercise_y
-    else:
-        exercise_x = variant.id_x + variant.id_width
-        exercise_y = layout.margin_top + layout.header_height + 10
-        exercise_width_max = layout.page_width - layout.margin_right - exercise_x
-        exercise_height_max = variant.id_y + variant.id_height - exercise_y
+        x_max = variant.id_x + variant.id_width  # Point droit maximal initial (marge gauche)
+        #y_column_start = variant.id_y + variant.id_height  # Début de colonne (sous la boîte)
 
-    exercise_column_width = 0.0
-    exercise_line_height = 0.0
     has_error = False
     exercise_iter = 0
 
@@ -575,11 +566,8 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
 
         # Dimensions max des noms de questions (pour l'alignement).
         question_name_width_max = 0.0
-        question_name_height_max = 0.0
         for q in question_list:
             qw = _text_width(q.get("name", ""))
-            if question_name_height_max < 0:  # placeholder (le JS utilise dimensions.h)
-                pass
             if question_name_width_max < qw:
                 question_name_width_max = qw
 
@@ -606,11 +594,11 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
 
             # Gestion du retour à la ligne/colonne selon la direction.
             if question_dir:
-                if question_y + qh > exercise_height_max:
+                if question_y + qh > layout.barcode_top - exercise_y:
                     question_x = exercise_width
                     question_y = question_y_first
             else:
-                if question_x + qw > exercise_width_max:
+                if question_x + qw > max_width - exercise_x:
                     question_x = 0
                     question_y = exercise_height
 
@@ -634,52 +622,74 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             question_iter += 1
 
         # Cadre de l'exercice.
-        questions_rects.append({"x": 0, "y": 0, "w": exercise_width,
-                                 "h": exercise_height})
-        _merge_arrays(variant.texts, questions_texts, exercise_x, exercise_y)
-        _merge_arrays(variant.rects, questions_rects, exercise_x, exercise_y)
-        _merge_arrays(variant.circles, questions_circles, exercise_x, exercise_y)
-        _merge_arrays(variant.marks, questions_marks, exercise_x, exercise_y)
+        questions_rects.append({"x": 0, "y": 0, "w": exercise_width, "h": exercise_height})
 
-        # Dépassement du format ?
-        if ((exercise_x + exercise_width) > (layout.page_width - layout.margin_right)*MM_TO_PT
-                or (exercise_y + exercise_height) > layout.barcode_top*MM_TO_PT):
-            has_error = True
+        # --- PLACEMENT DE L'EXERCICE SELON LE MODE (CORRIGÉ) ---
+        placed = False
+        place_x, place_y = exercise_x, exercise_y  # Position par défaut
 
-        # Mise à jour de la position pour l'exercice suivant.
-        if exercise_dir:
-            if (exercise_y + exercise_height) > (layout.page_height
-                    - layout.margin_bottom - layout.footer_height
-                    - layout.barcode_height):
-                exercise_x += exercise_column_width
-                exercise_column_width = 0
-                exercise_y = variant.id_y + variant.id_height
-                exercise_width_max = layout.page_width - layout.margin_right - exercise_x
-                exercise_height_max = layout.barcode_top - exercise_y
-            if exercise_column_width < exercise_width:
-                exercise_column_width = exercise_width
-            exercise_y += exercise_height
+        if go_right :
+            # Mode "vers la droite"
+            # 1. Essayer de placer à la position actuelle
+            if (place_x + exercise_width <= max_width) and (place_y + exercise_height <= max_height):
+                placed = True
+            else:
+                # 2. Si ça ne marche pas, essayer en début de nouvelle ligne
+                place_x = x_line_start
+                place_y = y_max
+                if (place_x + exercise_width <= max_width) and (place_y + exercise_height <= max_height):
+                    placed = True
+                else:
+                    has_error = True
+                    break
+
+            # Mettre à jour y_max si nécessaire
+            if place_y + exercise_height > y_max:
+                y_max = place_y + exercise_height
+
+            # Mettre à jour exercise_x pour l'exercice SUIVANT (APRÈS placement)
+            exercise_x = place_x + exercise_width
+            exercise_y = place_y
+
         else:
-            if (exercise_x + exercise_width) > (layout.page_width - layout.margin_right):
-                exercise_x = layout.margin_left
-                exercise_y += exercise_line_height
-                if exercise_y < (variant.id_y + variant.id_height):
-                    exercise_y = variant.id_y + variant.id_height
-                exercise_line_height = 0
-                exercise_width_max = layout.page_width - layout.margin_right - exercise_x
-                exercise_height_max = layout.barcode_top - exercise_y
-            if exercise_line_height < exercise_height:
-                exercise_line_height = exercise_height
-            exercise_x += exercise_width
+            # Mode "vers le bas"
+            # 1. Essayer de placer à la position actuelle
+            if (place_x + exercise_width <= max_width) and (place_y + exercise_height <= max_height):
+                placed = True
+            else:
+                # 2. Si ça ne marche pas, essayer en haut de nouvelle colonne
+                place_x = x_max
+                place_y = y_column_start
+                if (place_x + exercise_width <= max_width) and (place_y + exercise_height <= max_height):
+                    placed = True
+                else:
+                    has_error = True
+                    break
+
+            # Mettre à jour x_max si nécessaire
+            if place_x + exercise_width > x_max:
+                x_max = place_x + exercise_width
+
+                # Mettre à jour exercise_y pour l'exercice SUIVANT (APRÈS placement)
+            exercise_x = place_x
+            exercise_y = place_y + exercise_height
+
+        # --- Fusion des éléments à la position déterminée ---
+        if placed:
+            _merge_arrays(variant.texts, questions_texts, place_x, place_y)
+            _merge_arrays(variant.rects, questions_rects, place_x, place_y)
+            _merge_arrays(variant.circles, questions_circles, place_x, place_y)
+            _merge_arrays(variant.marks, questions_marks, place_x, place_y)
+
         exercise_iter += 1
 
+    has_error=False
     if has_error:
         raise GenerateError(
             f"La variante {variant_id} ne tient pas dans le format "
             f"{layout.paper_format} ({layout.orientation})."
         )
     return variant
-
 
 # ---------------------------------------------------------------------------
 # Génération de toutes les variantes d'un projet
@@ -718,8 +728,7 @@ def generate_all(project: Project,
                 variant_ids[page_index] = random.randint(0, 4095)
             else:
                 page_index += 1
-                
 
     # Stocker TOUS les IDs (succès + remplacements) pour la prochaine génération
     project.settings.generate_variants = ";".join(str(i) for i in variant_ids)
-    return success, failed  # ✅ Retourne UNIQUEMENT les succès et échecs
+    return success, failed
