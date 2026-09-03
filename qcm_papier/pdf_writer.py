@@ -183,7 +183,12 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None,
     """Génère le PDF sujet pour toutes les variantes du projet."""
     from reportlab.lib.pagesizes import A4, landscape
 
-    variant_ids = [k for k in project.variants.keys() if k not in ("p", "l")]
+    #variant_ids = [k for k in project.variants.keys() if k not in ("p", "l")]
+    variant_ids = []
+    for k in project.variants.keys():
+        if k not in ("p", "l"):
+            variant_ids.append(k)
+    
     if not variant_ids:
         raise ValueError("Aucune variante à générer : lancez d'abord la "
                          "génération des variantes.")
@@ -202,7 +207,7 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None,
             continue
 
         # 1. Détermination unique du format de la page
-        page_size = landscape(A4) if variant.layout == "l" else A4
+        page_size = landscape(A4) if variant.layout == "p" else A4
 
         # 2. Initialisation ou création d'une nouvelle page avec la bonne taille
         if c is None:
@@ -210,6 +215,9 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None,
         else:
             c.setPageSize(page_size)  # On change la taille AVANT de dessiner la nouvelle page
 
+        # ✅ NOUVELLE LIGNE : Rotation anti-trigonométrique (90°)
+        c.setPageRotation(90)
+        
         # 3. Dessin sur la page courante
         _draw_header_footer(c, layout)
         _draw_variant(c, variant, layout, layout.page_height)
