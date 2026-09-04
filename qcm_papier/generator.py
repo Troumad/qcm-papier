@@ -81,40 +81,69 @@ BIT_CHOICE_ORDER = 11
 # ---------------------------------------------------------------------------
 # Helpers de boutons à 3 états (depuis les ProjectSettings)
 # ---------------------------------------------------------------------------
+def _tri(settings: ProjectSettings, base: str, alt: str, rand: str) -> int:
+    """Retourne 0 (NEVER), 1 (ALWAYS) ou 2 (SOMETIMES)."""
+    # Détecter si c'est un groupe de DIRECTION (*_dir) ou non
+    is_dir_group = base.endswith("_left") or base.endswith("_top") or base.endswith("_both")
 
-def _tri(settings: ProjectSettings, base: str, alt: str, rand: str) -> rg.TriChoice:
-    return rg.tri_from_flags(
-        getattr(settings, base), getattr(settings, alt), getattr(settings, rand)
-    )
+    if is_dir_group:
+        # Pour les DIRECTIONS : left=True → 0, top=True → 1, both=True → 2
+        base_val = getattr(settings, base, False)
+        alt_val = getattr(settings, alt, False)
+        rand_val = getattr(settings, rand, False)
+    else:
+        # Pour les AUTRES (new/checked/order) :
+        # Inverser car le JSON stocke l'opposé (ex: pos_*_never=true → *_never=False)
+        base_val = not getattr(settings, base, True)  # Inverser et défaut à True
+        alt_val = not getattr(settings, alt, False)   # Inverser
+        rand_val = not getattr(settings, rand, False)   # Inverser
 
+    # Logique :
+    # - Si base_val=True → 0 (NEVER)
+    # - Si alt_val=True → 1 (ALWAYS)
+    # - Si rand_val=True → 2 (SOMETIMES)
+    if rand_val:
+        return 2
+    elif alt_val:
+        return 1
+    elif base_val:
+        return 0
+    else:
+        return 0  # Par défaut
+    
 def _settings_tri_groups() -> dict[str, tuple[str, str, str]]:
-    """Mappe chaque « groupe de boutons » aux 3 champs booléens correspondants."""
+    """Mappe chaque groupe aux 3 champs booléens.
+    Ordre : (Jamais, Toujours, De temps en temps)"""
     return {
         "paper_orientation": ("paper_portrait", "paper_landscape", "paper_both"),
-        "identification_dir": ("identification_dir_left", "identification_dir_top",
-                               "identification_dir_both"),
+        "identification_dir": ("identification_dir_left", "identification_dir_top", "identification_dir_both"),
         "exercise_dir": ("exercise_dir_left", "exercise_dir_top", "exercise_dir_both"),
         "question_dir": ("question_dir_left", "question_dir_top", "question_dir_both"),
         "choice_dir": ("choice_dir_left", "choice_dir_top", "choice_dir_both"),
-        "exercise_new": ("exercise_new_never", "exercise_new_always",
-                         "exercise_new_sometimes"),
-        "question_new": ("question_new_never", "question_new_always",
-                         "question_new_sometimes"),
-        "choice_new": ("choice_new_never", "choice_new_always",
-                       "choice_new_sometimes"),
-        "choice_checked": ("choice_checked_never", "choice_checked_always",
-                           "choice_checked_sometimes"),
-        "exercise_order": ("exercise_order_never", "exercise_order_always",
-                           "exercise_order_sometimes"),
-        "question_order": ("question_order_never", "question_order_always",
-                           "question_order_sometimes"),
-         "choice_order": ("choice_order_never", "choice_order_always",
-                          "choice_order_sometimes"),
+        "exercise_new": ("exercise_new_never", "exercise_new_always", "exercise_new_sometimes"),
+        "question_new": ("question_new_never", "question_new_always", "question_new_sometimes"),  # ✅ ICI : "never" en premier
+        "choice_new": ("choice_new_never", "choice_new_always", "choice_new_sometimes"),
+        "choice_checked": ("choice_checked_never", "choice_checked_always", "choice_checked_sometimes"),
+        "exercise_order": ("exercise_order_never", "exercise_order_always", "exercise_order_sometimes"),
+        "question_order": ("question_order_never", "question_order_always", "question_order_sometimes"),
+        "choice_order": ("choice_order_never", "choice_order_always", "choice_order_sometimes"),
     }
 
 def _choice(settings: ProjectSettings, group: str) -> rg.TriChoice:
+    """Retourne le TriChoice pour un groupe, en essayant avec/sans préfixe 'pos_'."""
     base, alt, rand = _settings_tri_groups()[group]
-    return _tri(settings, base, alt, rand)
+    # Essayer d'abord SANS préfixe (format modèle Python)
+    try:
+        return _tri(settings, base, alt, rand)
+    except AttributeError:
+        pass
+    # Sinon, essayer AVEC préfixe 'pos_' (format JSON)
+    try:
+        return _tri(settings, f"pos_{base}", f"pos_{alt}", f"pos_{rand}")
+    except AttributeError:
+        pass
+    # Par défaut : NEVER
+    return 0
 
 # ---------------------------------------------------------------------------
 # Construction du layout (portrait/paysage)
@@ -641,7 +670,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
                     placed = True
                 else:
                     has_error = True
-                    break
+                    #break
 
             # Mettre à jour y_max si nécessaire
             if place_y + exercise_height > y_max:
@@ -664,7 +693,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
                     placed = True
                 else:
                     has_error = True
-                    break
+                    #break
 
             # Mettre à jour x_max si nécessaire
             if place_x + exercise_width > x_max:
@@ -674,6 +703,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             exercise_x = place_x
             exercise_y = place_y + exercise_height
 
+        placed=True
         # --- Fusion des éléments à la position déterminée ---
         if placed:
             _merge_arrays(variant.texts, questions_texts, place_x, place_y)

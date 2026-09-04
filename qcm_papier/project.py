@@ -64,7 +64,8 @@ def load_project(path: str | IO[str] | dict) -> Project:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
     else:
-        data = json.load(path)
+        data = json.load(path)        
+    
     return Project.from_dict(data)
 
 
