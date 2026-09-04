@@ -50,15 +50,15 @@ class Choice:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Choice":
-        return cls(
-            index=int(d.get("index", 0)),
-            name=str(d.get("name", "")),
-            correct=bool(d.get("correct", False)),
-            neutral=bool(d.get("neutral", True)),
-            penalty=bool(d.get("penalty", False)),
-        )
-
+    def from_dict(cls, d: dict[str, Any]) -> "ProjectSettings":
+        """Charge les paramètres depuis un dictionnaire.
+        Gère les clés avec ou sans préfixe 'pos_'."""
+        final_dict = {}
+        for key, value in d.items():
+            # Supprimer le préfixe 'pos_' si présent
+            clean_key = key[4:] if key.startswith("pos_") else key
+            final_dict[clean_key] = value
+        return cls(**final_dict)
 
 # ---------------------------------------------------------------------------
 # Question
@@ -459,15 +459,15 @@ class ProjectSettings:
     exercise_new_exercises_name: str = "Exercice"
     exercise_new_questions_name: str = "Question"
     exercise_new_choices_name: str = "X"
-    question_new_never: bool = False
-    question_new_always: bool = True
+    question_new_never: bool = True
+    question_new_always: bool = False
     question_new_sometimes: bool = False
     question_new_questions: int = 1
     question_new_choices: int = 4
     question_new_questions_name: str = "Question"
     question_new_choices_name: str = "X"
-    choice_new_never: bool = False
-    choice_new_always: bool = True
+    choice_new_never: bool = True
+    choice_new_always: bool = False
     choice_new_sometimes: bool = False
     choice_new_choices_name: str = "X"
     choice_new_choices: int = 1
