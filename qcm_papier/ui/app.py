@@ -972,11 +972,21 @@ class QcmWindow(Gtk.ApplicationWindow):
             import json
             with open(path, 'r', encoding='utf-8') as f:
                 json_data = json.load(f)
+            
+            # Afficher TOUTES les clés du JSON qui contiennent 'checked'
+            print("\n=== DEBUG: TOUTES LES CLÉS 'checked' DANS LE JSON ===")
+            for key in sorted(json_data.keys()):
+                if 'checked' in key.lower():
+                    print(f"  {key}: {json_data[key]}")
+            
             print("\n=== DEBUG: CHOIX FANTÔMES PRÉCOCHÉS ===")
             print(f"JSON - pos_choice_checked_never: {json_data.get('pos_choice_checked_never', '❌ NON TROUVÉ')}")
+            print(f"JSON - choice_checked_never: {json_data.get('choice_checked_never', '❌ NON TROUVÉ')}")
             print(f"JSON - pos_choice_checked_always: {json_data.get('pos_choice_checked_always', '❌ NON TROUVÉ')}")
+            print(f"JSON - choice_checked_always: {json_data.get('choice_checked_always', '❌ NON TROUVÉ')}")
             print(f"JSON - pos_choice_checked_sometimes: {json_data.get('pos_choice_checked_sometimes', '❌ NON TROUVÉ')}")
-            print(f"ProjectSettings - choice_checked_never: {self.project.settings.choice_checked_never}")
+            print(f"JSON - choice_checked_sometimes: {json_data.get('choice_checked_sometimes', '❌ NON TROUVÉ')}")
+            print(f"\nProjectSettings - choice_checked_never: {self.project.settings.choice_checked_never}")
             print(f"ProjectSettings - choice_checked_always: {self.project.settings.choice_checked_always}")
             print(f"ProjectSettings - choice_checked_sometimes: {self.project.settings.choice_checked_sometimes}")
             print(f"checked_combo active: {self.checked_combo.get_active()}")
