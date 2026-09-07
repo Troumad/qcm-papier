@@ -82,40 +82,43 @@ BIT_CHOICE_ORDER = 11
 # Helpers de boutons à 3 états (depuis les ProjectSettings)
 # ---------------------------------------------------------------------------
 def _tri(settings: ProjectSettings, base: str, alt: str, rand: str) -> int:
-    """Retourne 0 (NEVER), 1 (ALWAYS) ou 2 (SOMETIMES)."""
-    # Détecter si c'est un groupe de DIRECTION (*_dir) ou d'ORDRE (*_order)
+    """Retourne 0 (NEVER), 1 (ALWAYS) ou 2 (SOMETIMES).
+    base, alt et rand sont les noms des 3 champs booléens d'un même groupe.
+    Exemple: base="question_order_never", alt="question_order_always", rand="question_order_sometimes".
+    Retourne 0, 1 ou 2 selon lequel des 3 est True dans settings.
+    Priorité : SOMETIMES > ALWAYS > NEVER (pour gérer les conflits).
+    """
+    # Détecter le type de groupe
     is_dir_group = base.endswith("_left") or base.endswith("_top") or base.endswith("_both")
     is_order_group = "order" in base
 
+    # Récupérer les valeurs (avec inversion si nécessaire)
     if is_dir_group:
-        # Pour les DIRECTIONS : left=True → 0, top=True → 1, both=True → 2
-        base_val = getattr(settings, base, False)
-        alt_val = getattr(settings, alt, False)
-        rand_val = getattr(settings, rand, False)
+        base_val, alt_val, rand_val = (
+            getattr(settings, base, False),
+            getattr(settings, alt, False),
+            getattr(settings, rand, False),
+        )
     elif is_order_group:
-        # Pour les ORDRES : pas d'inversion, les valeurs JSON sont directes
-        base_val = getattr(settings, base, True)
-        alt_val = getattr(settings, alt, False)
-        rand_val = getattr(settings, rand, False)
-    else:
-        # Pour les AUTRES (new/checked) :
-        # Inverser car le JSON stocke l'opposé (ex: pos_*_never=true → *_never=False)
-        base_val = not getattr(settings, base, True)  # Inverser et défaut à True
-        alt_val = not getattr(settings, alt, False)   # Inverser
-        rand_val = not getattr(settings, rand, False)   # Inverser
-
-    # Logique :
-    # - Si base_val=True → 0 (NEVER)
-    # - Si alt_val=True → 1 (ALWAYS)
-    # - Si rand_val=True → 2 (SOMETIMES)
-    if rand_val:
+        base_val, alt_val, rand_val = (
+            getattr(settings, base, True),
+            getattr(settings, alt, False),
+            getattr(settings, rand, False),
+        )
+    else:  # new/checked
+        base_val, alt_val, rand_val = (
+            getattr(settings, base, True),
+            getattr(settings, alt, False),
+            getattr(settings, rand, False),
+        )
+    
+    # Priorité : SOMETIMES ou (ALWAYS et NEVER) > ALWAYS > NEVER
+    if rand_val or (alt_val and base_val):  # ← Gestion des conflits, ce serait un bug dans les données
         return 2
     elif alt_val:
         return 1
-    elif base_val:
-        return 0
-    else:
-        return 0  # Par défaut
+    else:  # si base_val ou aucun
+        return 0    
     
 def _settings_tri_groups() -> dict[str, tuple[str, str, str]]:
     """Mappe chaque groupe aux 3 champs booléens.
@@ -136,20 +139,9 @@ def _settings_tri_groups() -> dict[str, tuple[str, str, str]]:
     }
 
 def _choice(settings: ProjectSettings, group: str) -> rg.TriChoice:
-    """Retourne le TriChoice pour un groupe, en essayant avec/sans préfixe 'pos_'."""
     base, alt, rand = _settings_tri_groups()[group]
-    # Essayer d'abord SANS préfixe (format modèle Python)
-    try:
-        return _tri(settings, base, alt, rand)
-    except AttributeError:
-        pass
-    # Sinon, essayer AVEC préfixe 'pos_' (format JSON)
-    try:
-        return _tri(settings, f"pos_{base}", f"pos_{alt}", f"pos_{rand}")
-    except AttributeError:
-        pass
-    # Par défaut : NEVER
-    return 0
+    
+    return _tri(settings, base, alt, rand)  # Plus besoin de try/except !
 
 # ---------------------------------------------------------------------------
 # Construction du layout (portrait/paysage)
