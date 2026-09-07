@@ -583,6 +583,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         question_random = rg.pseudo_random(variant_id, exercise_iter,
                                             BIT_QUESTION_ORDER,
                                             _choice(settings, "question_order"))
+        print(f"[DEBUG] question_dir={question_dir}, question_new={question_new}, question_random={question_random}, _choice_order={_choice(settings, 'question_order')}")
         question_list = [_question_to_dict(q) for q in exercise.get("questions", [])]
         if question_new and exercise.get("index", -1) >= 0:
             rg.insert_questions(
