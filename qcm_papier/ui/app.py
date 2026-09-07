@@ -487,6 +487,15 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.choice_new_choices_name_entry = Gtk.Entry()
         self.choice_new_choices_name_entry.set_text("X")
         new_grid.attach(self.choice_new_choices_name_entry, 4, 10, 1, 1)
+        # Choix fantômes précochés
+        new_grid.attach(Gtk.Label(label="Choix fantômes précochés:"), 0, 11, 1, 1)
+        self.checked_combo = Gtk.ComboBoxText()
+        self.checked_combo.append_text("Jamais")
+        self.checked_combo.append_text("Toujours")
+        self.checked_combo.append_text("De temps en temps")
+        self.checked_combo.set_active(0)
+        new_grid.attach(self.checked_combo, 1,11, 1, 1)
+
 
         params_box2.append(new_frame)
 
@@ -503,15 +512,6 @@ class QcmWindow(Gtk.ApplicationWindow):
         other_grid.attach(Gtk.Label(label="Choix 'seconde chance':"), 0, 0, 1, 1)
         self.joker_check = Gtk.CheckButton()
         other_grid.attach(self.joker_check, 1, 0, 1, 1)
-
-        # Choix fantômes précochés
-        other_grid.attach(Gtk.Label(label="Choix fantômes précochés:"), 0, 1, 1, 1)
-        self.checked_combo = Gtk.ComboBoxText()
-        self.checked_combo.append_text("Jamais")
-        self.checked_combo.append_text("Toujours")
-        self.checked_combo.append_text("De temps en temps")
-        self.checked_combo.set_active(0)
-        other_grid.attach(self.checked_combo, 1, 1, 1, 1)
 
         params_box1.append(other_frame)
 
