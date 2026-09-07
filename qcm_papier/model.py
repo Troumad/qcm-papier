@@ -556,27 +556,21 @@ class ProjectSettings:
 
         # Champs à convertir en int (même s'ils sont stockés en string dans le JSON)
         int_fields = {
-            'generate_students', 'generate_count', 'generate_retry', 'generate_stop',
-            'generate_per_variant', 'generate_per_student', 'exercise_new_exercises',
-            'exercise_new_questions', 'exercise_new_choices', 'question_new_questions',
-            'question_new_choices', 'choice_new_choices', 'choice_checked_never',
-            'choice_checked_always', 'choice_checked_sometimes', 'choice_joker_always',
-            'choice_joker_never', 'exercise_new_never', 'exercise_new_always',
-            'exercise_new_sometimes', 'question_new_never', 'question_new_always',
-            'question_new_sometimes', 'choice_new_never', 'choice_new_always',
-            'choice_new_sometimes', 'exercise_order_never', 'exercise_order_always',
-            'exercise_order_sometimes', 'question_order_never', 'question_order_always',
-            'question_order_sometimes', 'choice_order_never', 'choice_order_always',
-            'choice_order_sometimes'
+            'generate_students', 'generate_count',
+            'exercise_new_exercises', 'exercise_new_questions', 'exercise_new_choices',
+            'question_new_questions', 'question_new_choices', 'choice_new_choices',
         }
 
         for key, value in d.items():
-            if key in known:
+            # Convertir les clés JSON avec préfixe pos_ en clés internes
+            internal_key = config.to_internal_key(key)
+            
+            if internal_key in known:
                 # Conversion automatique pour les champs entiers
-                if key in int_fields and isinstance(value, str):
-                    setattr(s, key, int(value))
+                if internal_key in int_fields and isinstance(value, str):
+                    setattr(s, internal_key, int(value))
                 else:
-                    setattr(s, key, copy.deepcopy(value))
+                    setattr(s, internal_key, copy.deepcopy(value))
             elif key in info_mapping:
                 target_key = info_mapping[key]
                 if target_key in known:

@@ -525,13 +525,6 @@ class QcmWindow(Gtk.ApplicationWindow):
             ("question_new", self.question_new_combo, "question_new_never", "question_new_always", "question_new_sometimes"),
             ("choice_new", self.choice_new_combo, "choice_new_never", "choice_new_always", "choice_new_sometimes")
         ]
-        print("\n--- Valeurs de exercise et question_new ---")
-        print(f"exercise_new_never: {settings.exercise_new_never} (type: {type(settings.exercise_new_never).__name__})")
-        print(f"exercise_new_always: {settings.exercise_new_always} (type: {type(settings.exercise_new_always).__name__})")
-        print(f"exercise_new_sometimes: {settings.exercise_new_sometimes} (type: {type(settings.exercise_new_sometimes).__name__})")
-        print(f"question_new_never: {settings.question_new_never} (type: {type(settings.question_new_never).__name__})")
-        print(f"question_new_always: {settings.question_new_always} (type: {type(settings.question_new_always).__name__})")
-        print(f"question_new_sometimes: {settings.question_new_sometimes} (type: {type(settings.question_new_sometimes).__name__})")
         for group, combo, never_attr, always_attr, sometimes_attr in new_groups:
             for attr in (never_attr, always_attr, sometimes_attr):
                 if not hasattr(settings, attr):
@@ -551,8 +544,6 @@ class QcmWindow(Gtk.ApplicationWindow):
                 combo.set_active(0)  # Jamais
             else:
                 combo.set_active(0)  # Par défaut
-            active = combo.get_active()
-            print(f"{group} : {active} => never_val={never_val}, always_val={always_val}, sometimes_val={sometimes_val}")
 
         # ===== AUTRES OPTIONS =====
         if not hasattr(settings, "choice_joker_always"):
@@ -870,35 +861,40 @@ class QcmWindow(Gtk.ApplicationWindow):
         if path is None:
             return
         try:
-            self.project = project_mod.load_project(path)
-
-            # ✅ Afficher TOUS les attributs de ProjectSettings (pour voir ce qui existe VRAIMENT)
-            print("\n=== TOUS LES ATTRIBUTS DE ProjectSettings ===")
-            all_attrs = [attr for attr in dir(self.project.settings) if not attr.startswith('_')]
-            for attr in sorted(all_attrs):
-                value = getattr(self.project.settings, attr, "❌ ERREUR LECTURE")
-                print(f"{attr}: {value} (type: {type(value).__name__})")
-
-            # ✅ Vérifier spécifiquement si choice_new_always existe
-            print("\n=== VÉRIFICATION SPÉCIFIQUE ===")
-            print(f"hasattr(settings, 'choice_new_always'): {hasattr(self.project.settings, 'choice_new_always')}")
-            print(f"hasattr(settings, 'choice_new_never'): {hasattr(self.project.settings, 'choice_new_never')}")
-            print(f"hasattr(settings, 'pos_choice_new_always'): {hasattr(self.project.settings, 'pos_choice_new_always')}")
+            # 1) Afficher les valeurs par défaut AVANT la lecture
+            print("\n=== 1) VALEURS PAR DÉFAUT (avant lecture) ===")
+            print(f"exercise_new_never: {self.project.settings.exercise_new_never}")
+            print(f"exercise_new_always: {self.project.settings.exercise_new_always}")
+            print(f"exercise_new_sometimes: {self.project.settings.exercise_new_sometimes}")
+            print(f"question_new_never: {self.project.settings.question_new_never}")
+            print(f"question_new_always: {self.project.settings.question_new_always}")
+            print(f"question_new_sometimes: {self.project.settings.question_new_sometimes}")
             
-            # ✅ Afficher les valeurs pos_* pour question_new
-            print("\n--- Valeurs pos_question_new (depuis le JSON) ---")
-            print(f"question_new_never: {getattr(self.project.settings, 'question_new_never', '❌ ATTRIBUT MANQUANT')}")
-            print(f"question_new_always: {getattr(self.project.settings, 'question_new_always', '❌ ATTRIBUT MANQUANT')}")
-            print(f"question_new_sometimes: {getattr(self.project.settings, 'question_new_sometimes', '❌ ATTRIBUT MANQUANT')}")
-            print("\n--- Valeurs pos_choice_new (depuis le JSON) ---")
-            print(f"choice_new_never: {getattr(self.project.settings,     'choice_new_never', '❌ ATTRIBUT MANQUANT')}")
-            print(f"choice_new_always: {getattr(self.project.settings,    'choice_new_always', '❌ ATTRIBUT MANQUANT')}")
-            print(f"choice_new_sometimes: {getattr(self.project.settings, 'choice_new_sometimes', '❌ ATTRIBUT MANQUANT')}")
-            print("\n--- Valeurs pos_exercise_new (depuis le JSON) ---")
-            print(f"exercise_new_never: {getattr(self.project.settings, 'exercise_new_never', '❌ ATTRIBUT MANQUANT')}")
-            print(f"exercise_new_always: {getattr(self.project.settings, 'exercise_new_always', '❌ ATTRIBUT MANQUANT')}")
-            print(f"exercise_new_sometimes: {getattr(self.project.settings, 'exercise_new_sometimes', '❌ ATTRIBUT MANQUANT')}")
+            self.project = project_mod.load_project(path)
+            
+            # 2) Afficher les valeurs lues depuis le JSON
+            import json
+            with open(path, 'r', encoding='utf-8') as f:
+                json_data = json.load(f)
+            print("\n=== 2) VALEURS DANS LE FICHIER JSON ===")
+            print(f"pos_exercise_new_always: {json_data.get('pos_exercise_new_always', '❌ NON TROUVÉ')}")
+            print(f"pos_exercise_new_never: {json_data.get('pos_exercise_new_never', '❌ NON TROUVÉ')}")
+            print(f"pos_exercise_new_sometimes: {json_data.get('pos_exercise_new_sometimes', '❌ NON TROUVÉ')}")
+            print(f"pos_question_new_always: {json_data.get('pos_question_new_always', '❌ NON TROUVÉ')}")
+            print(f"pos_question_new_never: {json_data.get('pos_question_new_never', '❌ NON TROUVÉ')}")
+            print(f"pos_question_new_sometimes: {json_data.get('pos_question_new_sometimes', '❌ NON TROUVÉ')}")
+            print(f"pos_choice_new_always: {json_data.get('pos_choice_new_always', '❌ NON TROUVÉ')}")
+            print(f"pos_choice_new_never: {json_data.get('pos_choice_new_never', '❌ NON TROUVÉ')}")
+            print(f"pos_choice_new_sometimes: {json_data.get('pos_choice_new_sometimes', '❌ NON TROUVÉ')}")
 
+            # 3) Afficher les valeurs APRES la lecture
+            print("\n=== 3) VALEURS APRÈS LECTURE ===")
+            print(f"exercise_new_never: {self.project.settings.exercise_new_never}")
+            print(f"exercise_new_always: {self.project.settings.exercise_new_always}")
+            print(f"exercise_new_sometimes: {self.project.settings.exercise_new_sometimes}")
+            print(f"question_new_never: {self.project.settings.question_new_never}")
+            print(f"question_new_always: {self.project.settings.question_new_always}")
+            print(f"question_new_sometimes: {self.project.settings.question_new_sometimes}")
             
             self.editor.project = self.project
             self.editor._fill_tree()
@@ -936,19 +932,7 @@ class QcmWindow(Gtk.ApplicationWindow):
 
             entry.set_title(f"Générateur/Correcteur de QCM papier - {os.path.basename(path)}")
             entry.present()
-            entry.generate_status.set_text(f"Projet chargé : {path}")
-
-            # ✅ Afficher les valeurs pos_* pour question_new
-            print("\n--- Valeurs pos_question_new (depuis le JSON) ---")
-            print(f"pos_question_new_never: {getattr(self.project.settings, 'pos_question_new_never', '❌ ATTRIBUT MANQUANT')}")
-            print(f"pos_question_new_always: {getattr(self.project.settings, 'pos_question_new_always', '❌ ATTRIBUT MANQUANT')}")
-            print(f"pos_question_new_sometimes: {getattr(self.project.settings, 'pos_question_new_sometimes', '❌ ATTRIBUT MANQUANT')}")
-
-            # Afficher aussi les valeurs sans préfixe (pour comparaison)
-            print("\n--- Valeurs question_new (dans le modèle Python) ---")
-            print(f"question_new_never: {self.project.settings.question_new_never}")
-            print(f"question_new_always: {self.project.settings.question_new_always}")
-            print(f"question_new_sometimes: {self.project.settings.question_new_sometimes}")            
+            entry.generate_status.set_text(f"Projet chargé : {path}")            
 
         except Exception as e:
             self.generate_status.set_text(f"Erreur : {e}")
