@@ -452,8 +452,8 @@ class ProjectSettings:
     choice_joker_always: bool = True
     choice_joker_never: bool = False
     exercise_new_never: bool = False
-    exercise_new_always: bool = False
-    exercise_new_sometimes: bool = True
+    exercise_new_always: bool = True
+    exercise_new_sometimes: bool = False
     exercise_new_exercises: int = 1
     exercise_new_questions: int = 1
     exercise_new_choices: int = 4
@@ -461,31 +461,31 @@ class ProjectSettings:
     exercise_new_questions_name: str = "Question"
     exercise_new_choices_name: str = "X"
     question_new_never: bool = False
-    question_new_always: bool = False
-    question_new_sometimes: bool = True
+    question_new_always: bool = True
+    question_new_sometimes: bool = False
     question_new_questions: int = 1
     question_new_choices: int = 4
     question_new_questions_name: str = "Question"
     question_new_choices_name: str = "X"
     choice_new_never: bool = False
-    choice_new_always: bool = False
-    choice_new_sometimes: bool = True
+    choice_new_always: bool = True
+    choice_new_sometimes: bool = False
     choice_new_choices_name: str = "X"
     choice_new_choices: int = 1
     choice_checked_never: bool = False
-    choice_checked_always: bool = False
-    choice_checked_sometimes: bool = True
+    choice_checked_always: bool = True
+    choice_checked_sometimes: bool = False
 
     # Ordre aléatoire.
-    exercise_order_never: bool = False
+    exercise_order_never: bool = True
     exercise_order_always: bool = False
-    exercise_order_sometimes: bool = True
-    question_order_never: bool = False
+    exercise_order_sometimes: bool = False
+    question_order_never: bool = True
     question_order_always: bool = False
-    question_order_sometimes: bool = True
-    choice_order_never: bool = False
+    question_order_sometimes: bool = False
+    choice_order_never: bool = True
     choice_order_always: bool = False
-    choice_order_sometimes: bool = True
+    choice_order_sometimes: bool = False
 
     # Génération des variantes.
     generate_students: int = 1
