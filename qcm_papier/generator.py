@@ -572,6 +572,8 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             exercise_index = 0
         exercise = exercise_list[exercise_index]
         exercise_list.pop(exercise_index)
+        
+        print(f"[GÉNÉRATION] Insertion exercice: {exercise.get('name', 'SANS NOM')} (index: {exercise.get('index', -1)})")
 
         questions_texts: list[dict] = []
         questions_rects: list[dict] = []
@@ -620,6 +622,8 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
                 question_index = 0
             question = question_list[question_index]
             question_list.pop(question_index)
+            
+            print(f"[GÉNÉRATION]   Insertion question: {question.get('name', 'SANS NOM')} (index: {question.get('index', -1)})")
 
             qt, qr, qc, qm, qw, qh = _place_choices(
                 variant, variant_id, exercise, question,
