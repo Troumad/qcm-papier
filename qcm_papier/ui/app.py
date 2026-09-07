@@ -308,11 +308,11 @@ class QcmWindow(Gtk.ApplicationWindow):
         # Boutons
         btn_generate = Gtk.Button(label="Générer les variantes")
         btn_generate.connect("clicked", self._on_generate_variants)
-        box.append(btn_generate)
+        grid.attach(btn_generate,1,1,2,1)
 
-        btn_pdf = Gtk.Button(label="Générer le PDF")
+        btn_pdf = Gtk.Button(label="      Générer le PDF      ")
         btn_pdf.connect("clicked", self._on_generate_pdf)
-        box.append(btn_pdf)
+        grid.attach(btn_pdf,4,1,3,1)
 
         self.generate_status = Gtk.Label(label="")
         box.append(self.generate_status)
@@ -380,7 +380,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         params_box1.append(dir_frame)
 
         # ===== AJOUTS FANTÔMES =====
-        new_frame = Gtk.Frame(label="Ajouts fantômes")
+        new_frame = Gtk.Frame(label="Les fantômes")
         new_grid = Gtk.Grid(column_spacing=10, row_spacing=5)
         new_frame.set_child(new_grid)  # GTK4
         new_frame.set_margin_start(8)
@@ -389,7 +389,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         new_frame.set_margin_bottom(8)
 
         # Exercices fantômes
-        new_grid.attach(Gtk.Label(label="Exercices fantômes:"), 0, 0, 1, 1)
+        new_grid.attach(Gtk.Label(label="Exercices fantômes :"), 0, 0, 1, 1)
         self.exercise_new_combo = Gtk.ComboBoxText()
         self.exercise_new_combo.append_text("Jamais")
         self.exercise_new_combo.append_text("Toujours")
@@ -432,58 +432,61 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.exercise_new_choices_name_entry.set_text("X")
         new_grid.attach(self.exercise_new_choices_name_entry, 4, 3, 1, 1)
 
+        new_grid.attach(Gtk.Label(label="-----------------------------------"), 0, 4, 4, 1)
         # Questions fantômes
-        new_grid.attach(Gtk.Label(label="Questions fantômes:"), 0, 4, 1, 1)
+        new_grid.attach(Gtk.Label(label="Questions fantômes :"), 0, 5, 1, 1)
         self.question_new_combo = Gtk.ComboBoxText()
         self.question_new_combo.append_text("Jamais")
         self.question_new_combo.append_text("Toujours")
         self.question_new_combo.append_text("De temps en temps")
         self.question_new_combo.set_active(0)
-        new_grid.attach(self.question_new_combo, 1, 4, 1, 1)
+        new_grid.attach(self.question_new_combo, 1, 5, 1, 1)
 
         # Paramètres détaillés pour questions fantômes
-        new_grid.attach(Gtk.Label(label="Ajout"), 0, 5, 1, 1)
+        new_grid.attach(Gtk.Label(label="Ajout"), 0, 6, 1, 1)
         self.question_new_questions_spin = Gtk.SpinButton()
         self.question_new_questions_spin.set_range(1, 9)
         self.question_new_questions_spin.set_increments(1, 1)
         self.question_new_questions_spin.set_value(1)
-        new_grid.attach(self.question_new_questions_spin, 1, 5, 1, 1)
-        new_grid.attach(Gtk.Label(label="question(s) intitulée(s)"), 2, 5, 2, 1)
+        new_grid.attach(self.question_new_questions_spin, 1, 6, 1, 1)
+        new_grid.attach(Gtk.Label(label="question(s) intitulée(s)"), 2, 6, 2, 1)
         self.question_new_questions_name_entry = Gtk.Entry()
         self.question_new_questions_name_entry.set_text("Question")
-        new_grid.attach(self.question_new_questions_name_entry, 4, 5, 1, 1)
+        new_grid.attach(self.question_new_questions_name_entry, 4, 6, 1, 1)
 
-        new_grid.attach(Gtk.Label(label="contenant"), 0, 6, 1, 1)
+        new_grid.attach(Gtk.Label(label="contenant"), 0, 7, 1, 1)
         self.question_new_choices_spin = Gtk.SpinButton()
         self.question_new_choices_spin.set_range(1, 9)
         self.question_new_choices_spin.set_increments(1, 1)
         self.question_new_choices_spin.set_value(4)
-        new_grid.attach(self.question_new_choices_spin, 1, 6, 1, 1)
-        new_grid.attach(Gtk.Label(label="choix intitulé(s)"), 2, 6, 2, 1)
+        new_grid.attach(self.question_new_choices_spin, 1, 7, 1, 1)
+        new_grid.attach(Gtk.Label(label="choix intitulé(s)"), 2, 7, 2, 1)
         self.question_new_choices_name_entry = Gtk.Entry()
         self.question_new_choices_name_entry.set_text("X")
-        new_grid.attach(self.question_new_choices_name_entry, 4, 6, 1, 1)
+        new_grid.attach(self.question_new_choices_name_entry, 4, 7, 1, 1)
+
+        new_grid.attach(Gtk.Label(label="------------------------------------"), 0, 8, 4, 1)
 
         # Choix fantômes
-        new_grid.attach(Gtk.Label(label="Choix fantômes:"), 0, 7, 1, 1)
+        new_grid.attach(Gtk.Label(label="Choix fantômes:"), 0, 9, 1, 1)
         self.choice_new_combo = Gtk.ComboBoxText()
         self.choice_new_combo.append_text("Jamais")
         self.choice_new_combo.append_text("Toujours")
         self.choice_new_combo.append_text("De temps en temps")
         self.choice_new_combo.set_active(0)
-        new_grid.attach(self.choice_new_combo, 1, 7, 1, 1)
+        new_grid.attach(self.choice_new_combo, 1, 9, 1, 1)
 
         # Paramètres détaillés pour choix fantômes
-        new_grid.attach(Gtk.Label(label="Ajout"), 0, 8, 1, 1)
+        new_grid.attach(Gtk.Label(label="Ajout"), 0, 10, 1, 1)
         self.choice_new_choices_spin = Gtk.SpinButton()
         self.choice_new_choices_spin.set_range(1, 9)
         self.choice_new_choices_spin.set_increments(1, 1)
         self.choice_new_choices_spin.set_value(1)
-        new_grid.attach(self.choice_new_choices_spin, 1, 8, 1, 1)
-        new_grid.attach(Gtk.Label(label="choix intitulé(s)"), 2, 8, 2, 1)
+        new_grid.attach(self.choice_new_choices_spin, 1, 10, 1, 1)
+        new_grid.attach(Gtk.Label(label="choix intitulé(s)"), 2, 10, 2, 1)
         self.choice_new_choices_name_entry = Gtk.Entry()
         self.choice_new_choices_name_entry.set_text("X")
-        new_grid.attach(self.choice_new_choices_name_entry, 4, 8, 1, 1)
+        new_grid.attach(self.choice_new_choices_name_entry, 4, 10, 1, 1)
 
         params_box2.append(new_frame)
 
@@ -548,7 +551,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.choice_order_combo.set_active(0)
         order_grid.attach(self.choice_order_combo, 1, 2, 1, 1)
 
-        params_box2.append(order_frame)
+        params_box1.append(order_frame)
 
         # Charger les paramètres actuels
         self._load_generation_params()
