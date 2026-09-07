@@ -138,10 +138,6 @@ def _settings_tri_groups() -> dict[str, tuple[str, str, str]]:
         "choice_order": ("choice_order_never", "choice_order_always", "choice_order_sometimes"),
     }
 
-def _choice(settings: ProjectSettings, group: str) -> rg.TriChoice:
-    base, alt, rand = _settings_tri_groups()[group]
-    
-    return _tri(settings, base, alt, rand)  # Plus besoin de try/except !
 
 # ---------------------------------------------------------------------------
 # Construction du layout (portrait/paysage)
@@ -265,7 +261,7 @@ def _build_identification(variant: Variant, layout: Layout,
     Reprend la construction de la ``identification box`` (index.html ~6345-6390).
     """
     alt = rg.pseudo_random(variant_id, 0, BIT_IDENT_DIR,
-                           _choice(settings, "identification_dir"))
+                           _tri(settings, "identification_dir_left", "identification_dir_top", "identification_dir_both"))
     variant.id_x = layout.margin_left + 10
     variant.id_y = layout.margin_top + layout.header_height + 5
     id_texts = [
@@ -356,15 +352,15 @@ def _place_choices(variant, variant_id,
 
     # Choix de direction / ajout fantôme / pré-coche / ordre.
     question_dir = rg.pseudo_random(variant_id, variant_id, BIT_QUESTION_DIR,
-                                     _choice(settings, "question_dir"))
+                                     _tri(settings, "question_dir_left", "question_dir_top", "question_dir_both"))
     choice_dir = rg.pseudo_random(variant_id, variant_id, BIT_CHOICE_DIR,
-                                   _choice(settings, "choice_dir"))
+                                   _tri(settings, "choice_dir_left", "choice_dir_top", "choice_dir_both"))
     choice_new = rg.pseudo_random(variant_id, question_iter, BIT_CHOICE_NEW,
-                                  _choice(settings, "choice_new"))
+                                  _tri(settings, "choice_new_never", "choice_new_always", "choice_new_sometimes"))
     choice_checked = rg.pseudo_random(variant_id, question_iter, BIT_CHOICE_CHECKED,
-                                      _choice(settings, "choice_checked"))
+                                      _tri(settings, "choice_checked_never", "choice_checked_always", "choice_checked_sometimes"))
     choice_random = rg.pseudo_random(variant_id, question_iter, BIT_CHOICE_ORDER,
-                                     _choice(settings, "choice_order"))
+                                     _tri(settings, "choice_order_never", "choice_order_always", "choice_order_sometimes"))
 
     choice_list = [_choice_to_dict(ch) for ch in question.get("choices", [])]
     if choice_new:
@@ -487,7 +483,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
     variant = Variant(layout="p", id=variant_id)
 
     # Orientation portrait/paysage.
-    if rg.pseudo_random(variant_id, 0, 0, _choice(settings, "paper_orientation")):
+    if rg.pseudo_random(variant_id, 0, 0, _tri(settings, "paper_portrait", "paper_landscape", "paper_both")):
         variant.layout = "l"
 
     # Récupère ou crée le layout.
@@ -507,11 +503,11 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
 
     # Paramètres de disposition des exercices.
     exercise_dir = rg.pseudo_random(variant_id, 0, BIT_EXERCISE_DIR,
-                                     _choice(settings, "exercise_dir"))
+                                     _tri(settings, "exercise_dir_left", "exercise_dir_top", "exercise_dir_both"))
     exercise_new = rg.pseudo_random(variant_id, 0, BIT_EXERCISE_NEW,
-                                     _choice(settings, "exercise_new"))
+                                     _tri(settings, "exercise_new_never", "exercise_new_always", "exercise_new_sometimes"))
     exercise_random = rg.pseudo_random(variant_id, 0, BIT_EXERCISE_ORDER,
-                                       _choice(settings, "exercise_order"))
+                                       _tri(settings, "exercise_order_never", "exercise_order_always", "exercise_order_sometimes"))
 
     # On travaille sur des dicts (comme le JS) pour pouvoir mélanger avec les
     # exercices/questions/choix « fantômes » insérés par insert_*.
@@ -577,13 +573,13 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         exercise_name_width = _text_width(exercise.get("name", ""))
 
         question_dir = rg.pseudo_random(variant_id, variant_id, BIT_QUESTION_DIR,
-                                         _choice(settings, "question_dir"))
+                                         _tri(settings, "question_dir_left", "question_dir_top", "question_dir_both"))
         question_new = rg.pseudo_random(variant_id, exercise_iter, BIT_QUESTION_NEW,
-                                         _choice(settings, "question_new"))
+                                         _tri(settings, "question_new_never", "question_new_always", "question_new_sometimes"))
         question_random = rg.pseudo_random(variant_id, exercise_iter,
                                             BIT_QUESTION_ORDER,
-                                            _choice(settings, "question_order"))
-        print(f"[DEBUG] question_dir={question_dir}, question_new={question_new}, question_random={question_random}, _choice_order={_choice(settings, 'question_order')}")
+                                            _tri(settings, "question_order_never", "question_order_always", "question_order_sometimes"))
+        print(f"[DEBUG] question_dir={question_dir}, question_new={question_new}, question_random={question_random}, _choice_order={_tri(settings, "question_order_never", "question_order_always", "question_order_sometimes")}")
         question_list = [_question_to_dict(q) for q in exercise.get("questions", [])]
         if question_new and exercise.get("index", -1) >= 0:
             rg.insert_questions(
