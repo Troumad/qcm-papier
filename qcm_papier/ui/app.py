@@ -397,23 +397,93 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.exercise_new_combo.set_active(0)
         new_grid.attach(self.exercise_new_combo, 1, 0, 1, 1)
 
+        # Paramètres détaillés pour exercices fantômes
+        new_grid.attach(Gtk.Label(label="Ajout"), 0, 1, 1, 1)
+        self.exercise_new_exercises_spin = Gtk.SpinButton()
+        self.exercise_new_exercises_spin.set_range(1, 9)
+        self.exercise_new_exercises_spin.set_increments(1, 1)
+        self.exercise_new_exercises_spin.set_value(1)
+        new_grid.attach(self.exercise_new_exercises_spin, 1, 1, 1, 1)
+        new_grid.attach(Gtk.Label(label="de"), 2, 1, 1, 1)
+        new_grid.attach(Gtk.Label(label="exercice(s) intitulé(s)"), 3, 1, 1, 1)
+        self.exercise_new_exercises_name_entry = Gtk.Entry()
+        self.exercise_new_exercises_name_entry.set_text("Ne pas remplir")
+        new_grid.attach(self.exercise_new_exercises_name_entry, 4, 1, 1, 1)
+
+        new_grid.attach(Gtk.Label(label="contenant"), 0, 2, 1, 1)
+        self.exercise_new_questions_spin = Gtk.SpinButton()
+        self.exercise_new_questions_spin.set_range(1, 9)
+        self.exercise_new_questions_spin.set_increments(1, 1)
+        self.exercise_new_questions_spin.set_value(1)
+        new_grid.attach(self.exercise_new_questions_spin, 1, 2, 1, 1)
+        new_grid.attach(Gtk.Label(label="question(s) intitulée(s)"), 2, 2, 2, 1)
+        self.exercise_new_questions_name_entry = Gtk.Entry()
+        self.exercise_new_questions_name_entry.set_text("Inutilisé")
+        new_grid.attach(self.exercise_new_questions_name_entry, 4, 2, 1, 1)
+
+        new_grid.attach(Gtk.Label(label="contenant"), 0, 3, 1, 1)
+        self.exercise_new_choices_spin = Gtk.SpinButton()
+        self.exercise_new_choices_spin.set_range(1, 9)
+        self.exercise_new_choices_spin.set_increments(1, 1)
+        self.exercise_new_choices_spin.set_value(1)
+        new_grid.attach(self.exercise_new_choices_spin, 1, 3, 1, 1)
+        new_grid.attach(Gtk.Label(label="choix intitulé(s)"), 2, 3, 2, 1)
+        self.exercise_new_choices_name_entry = Gtk.Entry()
+        self.exercise_new_choices_name_entry.set_text("X")
+        new_grid.attach(self.exercise_new_choices_name_entry, 4, 3, 1, 1)
+
         # Questions fantômes
-        new_grid.attach(Gtk.Label(label="Questions fantômes:"), 0, 1, 1, 1)
+        new_grid.attach(Gtk.Label(label="Questions fantômes:"), 0, 4, 1, 1)
         self.question_new_combo = Gtk.ComboBoxText()
         self.question_new_combo.append_text("Jamais")
         self.question_new_combo.append_text("Toujours")
         self.question_new_combo.append_text("De temps en temps")
         self.question_new_combo.set_active(0)
-        new_grid.attach(self.question_new_combo, 1, 1, 1, 1)
+        new_grid.attach(self.question_new_combo, 1, 4, 1, 1)
+
+        # Paramètres détaillés pour questions fantômes
+        new_grid.attach(Gtk.Label(label="Ajout"), 0, 5, 1, 1)
+        self.question_new_questions_spin = Gtk.SpinButton()
+        self.question_new_questions_spin.set_range(1, 9)
+        self.question_new_questions_spin.set_increments(1, 1)
+        self.question_new_questions_spin.set_value(1)
+        new_grid.attach(self.question_new_questions_spin, 1, 5, 1, 1)
+        new_grid.attach(Gtk.Label(label="question(s) intitulée(s)"), 2, 5, 2, 1)
+        self.question_new_questions_name_entry = Gtk.Entry()
+        self.question_new_questions_name_entry.set_text("Question")
+        new_grid.attach(self.question_new_questions_name_entry, 4, 5, 1, 1)
+
+        new_grid.attach(Gtk.Label(label="contenant"), 0, 6, 1, 1)
+        self.question_new_choices_spin = Gtk.SpinButton()
+        self.question_new_choices_spin.set_range(1, 9)
+        self.question_new_choices_spin.set_increments(1, 1)
+        self.question_new_choices_spin.set_value(4)
+        new_grid.attach(self.question_new_choices_spin, 1, 6, 1, 1)
+        new_grid.attach(Gtk.Label(label="choix intitulé(s)"), 2, 6, 2, 1)
+        self.question_new_choices_name_entry = Gtk.Entry()
+        self.question_new_choices_name_entry.set_text("X")
+        new_grid.attach(self.question_new_choices_name_entry, 4, 6, 1, 1)
 
         # Choix fantômes
-        new_grid.attach(Gtk.Label(label="Choix fantômes:"), 0, 2, 1, 1)
+        new_grid.attach(Gtk.Label(label="Choix fantômes:"), 0, 7, 1, 1)
         self.choice_new_combo = Gtk.ComboBoxText()
         self.choice_new_combo.append_text("Jamais")
         self.choice_new_combo.append_text("Toujours")
         self.choice_new_combo.append_text("De temps en temps")
         self.choice_new_combo.set_active(0)
-        new_grid.attach(self.choice_new_combo, 1, 2, 1, 1)
+        new_grid.attach(self.choice_new_combo, 1, 7, 1, 1)
+
+        # Paramètres détaillés pour choix fantômes
+        new_grid.attach(Gtk.Label(label="Ajout"), 0, 8, 1, 1)
+        self.choice_new_choices_spin = Gtk.SpinButton()
+        self.choice_new_choices_spin.set_range(1, 9)
+        self.choice_new_choices_spin.set_increments(1, 1)
+        self.choice_new_choices_spin.set_value(1)
+        new_grid.attach(self.choice_new_choices_spin, 1, 8, 1, 1)
+        new_grid.attach(Gtk.Label(label="choix intitulé(s)"), 2, 8, 2, 1)
+        self.choice_new_choices_name_entry = Gtk.Entry()
+        self.choice_new_choices_name_entry.set_text("X")
+        new_grid.attach(self.choice_new_choices_name_entry, 4, 8, 1, 1)
 
         params_box2.append(new_frame)
 
@@ -545,6 +615,22 @@ class QcmWindow(Gtk.ApplicationWindow):
             else:
                 combo.set_active(0)  # Par défaut
 
+        # Charger les paramètres détaillés pour les ajouts fantômes
+        self.exercise_new_exercises_spin.set_value(settings.exercise_new_exercises)
+        self.exercise_new_exercises_name_entry.set_text(settings.exercise_new_exercises_name)
+        self.exercise_new_questions_spin.set_value(settings.exercise_new_questions)
+        self.exercise_new_questions_name_entry.set_text(settings.exercise_new_questions_name)
+        self.exercise_new_choices_spin.set_value(settings.exercise_new_choices)
+        self.exercise_new_choices_name_entry.set_text(settings.exercise_new_choices_name)
+        
+        self.question_new_questions_spin.set_value(settings.question_new_questions)
+        self.question_new_questions_name_entry.set_text(settings.question_new_questions_name)
+        self.question_new_choices_spin.set_value(settings.question_new_choices)
+        self.question_new_choices_name_entry.set_text(settings.question_new_choices_name)
+        
+        self.choice_new_choices_spin.set_value(settings.choice_new_choices)
+        self.choice_new_choices_name_entry.set_text(settings.choice_new_choices_name)
+
         # ===== AUTRES OPTIONS =====
         if not hasattr(settings, "choice_joker_always"):
             raise AttributeError("Attribut manquant dans ProjectSettings : 'choice_joker_always'.")
@@ -634,6 +720,22 @@ class QcmWindow(Gtk.ApplicationWindow):
                 setattr(settings, always_attr, True)
             else:  # 0: Jamais
                 setattr(settings, never_attr, True)
+
+        # Sauvegarder les paramètres détaillés pour les ajouts fantômes
+        settings.exercise_new_exercises = self.exercise_new_exercises_spin.get_value_as_int()
+        settings.exercise_new_exercises_name = self.exercise_new_exercises_name_entry.get_text()
+        settings.exercise_new_questions = self.exercise_new_questions_spin.get_value_as_int()
+        settings.exercise_new_questions_name = self.exercise_new_questions_name_entry.get_text()
+        settings.exercise_new_choices = self.exercise_new_choices_spin.get_value_as_int()
+        settings.exercise_new_choices_name = self.exercise_new_choices_name_entry.get_text()
+        
+        settings.question_new_questions = self.question_new_questions_spin.get_value_as_int()
+        settings.question_new_questions_name = self.question_new_questions_name_entry.get_text()
+        settings.question_new_choices = self.question_new_choices_spin.get_value_as_int()
+        settings.question_new_choices_name = self.question_new_choices_name_entry.get_text()
+        
+        settings.choice_new_choices = self.choice_new_choices_spin.get_value_as_int()
+        settings.choice_new_choices_name = self.choice_new_choices_name_entry.get_text()
 
         # ===== AUTRES OPTIONS =====
         settings.choice_joker_always = self.joker_check.get_active()
