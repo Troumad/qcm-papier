@@ -573,7 +573,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         exercise = exercise_list[exercise_index]
         exercise_list.pop(exercise_index)
         
-        print(f"[GÉNÉRATION] Insertion exercice: {exercise.get('name', 'SANS NOM')} (index: {exercise.get('index', -1)})")
+        print(f"[GÉNÉRATION] Insertion exercice: {exercise.get('name', 'SANS NOM')} (index: {exercise.get('index', -1)}) - exercise_random={exercise_random}, exercise_iter={exercise_iter}")
 
         questions_texts: list[dict] = []
         questions_rects: list[dict] = []
