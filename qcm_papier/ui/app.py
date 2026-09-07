@@ -260,6 +260,81 @@ class QcmWindow(Gtk.ApplicationWindow):
         grid5.attach(self.entry_duration, 5, 0, 1, 1)
         box.append(grid5)
 
+        # Ligne 6: Format de papier
+        grid6 = Gtk.Grid(column_spacing=8, row_spacing=4)
+        grid6.attach(Gtk.Label(label="Format de papier :"), 0, 0, 1, 1)
+        self.paper_format_combo = Gtk.ComboBoxText()
+        self.paper_format_combo.append_text("A3")
+        self.paper_format_combo.append_text("A4")
+        self.paper_format_combo.append_text("A5")
+        self.paper_format_combo.set_active(1)  # A4 par défaut
+        self.paper_format_combo.connect("changed", self._on_paper_format_changed)
+        grid6.attach(self.paper_format_combo, 1, 0, 1, 1)
+
+        grid6.attach(Gtk.Label(label="Orientation :"), 2, 0, 1, 1)
+        self.paper_orientation_combo = Gtk.ComboBoxText()
+        self.paper_orientation_combo.append_text("Portrait")
+        self.paper_orientation_combo.append_text("Paysage")
+        self.paper_orientation_combo.append_text("Les deux (Aléatoire)")
+        self.paper_orientation_combo.set_active(2)  # Les deux par défaut
+        self.paper_orientation_combo.connect("changed", self._on_paper_orientation_changed)
+        grid6.attach(self.paper_orientation_combo, 3, 0, 1, 1)
+        box.append(grid6)
+
+        # Ligne 7: Marges
+        grid7 = Gtk.Grid(column_spacing=8, row_spacing=4)
+        
+        # Marge haute
+        grid7.attach(Gtk.Label(label="Marge haute :"), 2, 0, 1, 1)
+        self.margin_top_spin = Gtk.SpinButton()
+        self.margin_top_spin.set_range(5, 25)
+        self.margin_top_spin.set_increments(1, 1)
+        self.margin_top_spin.set_value(10)
+        self.margin_top_spin.connect("value-changed", 
+            lambda s: setattr(self.project.settings, "margin_top", str(int(s.get_value()))))
+        grid7.attach(self.margin_top_spin, 3, 0, 1, 1)
+        grid7.attach(Gtk.Label(label="mm"), 4, 0, 1, 1)
+        
+        box.append(grid7)
+
+        # Ligne 8: Marges gauche/droite
+        grid8 = Gtk.Grid(column_spacing=8, row_spacing=4)
+        grid8.attach(Gtk.Label(label="Marge en mm :"), 0, 0, 1, 1)
+        
+        grid8.attach(Gtk.Label(label="Marge gauche"), 1, 0, 1, 1)
+        self.margin_left_spin = Gtk.SpinButton()
+        self.margin_left_spin.set_range(5, 25)
+        self.margin_left_spin.set_increments(1, 1)
+        self.margin_left_spin.set_value(10)
+        self.margin_left_spin.connect("value-changed", 
+            lambda s: setattr(self.project.settings, "margin_left", str(int(s.get_value()))))
+        grid8.attach(self.margin_left_spin, 2, 0, 1, 1)
+        
+        grid8.attach(Gtk.Label(label="Marge droite"), 3, 0, 1, 1)
+        self.margin_right_spin = Gtk.SpinButton()
+        self.margin_right_spin.set_range(5, 25)
+        self.margin_right_spin.set_increments(1, 1)
+        self.margin_right_spin.set_value(10)
+        self.margin_right_spin.connect("value-changed", 
+            lambda s: setattr(self.project.settings, "margin_right", str(int(s.get_value()))))
+        grid8.attach(self.margin_right_spin, 4, 0, 1, 1)
+        
+        box.append(grid8)
+
+        # Ligne 9: Marge basse
+        grid9 = Gtk.Grid(column_spacing=8, row_spacing=4)
+        grid9.attach(Gtk.Label(label="Marge basse :"), 2, 0, 1, 1)
+        self.margin_bottom_spin = Gtk.SpinButton()
+        self.margin_bottom_spin.set_range(5, 25)
+        self.margin_bottom_spin.set_increments(1, 1)
+        self.margin_bottom_spin.set_value(10)
+        self.margin_bottom_spin.connect("value-changed", 
+            lambda s: setattr(self.project.settings, "margin_bottom", str(int(s.get_value()))))
+        grid9.attach(self.margin_bottom_spin, 3, 0, 1, 1)
+        grid9.attach(Gtk.Label(label="mm"), 4, 0, 1, 1)
+        
+        box.append(grid9)
+
         self.notebook.append_page(box, Gtk.Label(label="Informations"))
 
     # ------------------------------------------------------------------
@@ -278,6 +353,32 @@ class QcmWindow(Gtk.ApplicationWindow):
 
     def _on_structure_changed(self) -> None:
         self.project.settings.modified = True
+
+    def _on_paper_format_changed(self, combo) -> None:
+        """Gère le changement de format de papier."""
+        format_text = combo.get_active_text()
+        self.project.settings.paper_a3 = False
+        self.project.settings.paper_a4 = False
+        self.project.settings.paper_a5 = False
+        if format_text == "A3":
+            self.project.settings.paper_a3 = True
+        elif format_text == "A4":
+            self.project.settings.paper_a4 = True
+        elif format_text == "A5":
+            self.project.settings.paper_a5 = True
+
+    def _on_paper_orientation_changed(self, combo) -> None:
+        """Gère le changement d'orientation du papier."""
+        orientation_text = combo.get_active_text()
+        self.project.settings.paper_portrait = False
+        self.project.settings.paper_landscape = False
+        self.project.settings.paper_both = False
+        if orientation_text == "Portrait":
+            self.project.settings.paper_portrait = True
+        elif orientation_text == "Paysage":
+            self.project.settings.paper_landscape = True
+        elif orientation_text == "Les deux (Aléatoire)":
+            self.project.settings.paper_both = True
 
     # ------------------------------------------------------------------
     # Onglet Génération
@@ -634,6 +735,29 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.choice_new_choices_spin.set_value(settings.choice_new_choices)
         self.choice_new_choices_name_entry.set_text(settings.choice_new_choices_name)
 
+        # ===== FORMAT DE PAPIER =====
+        # Format
+        if settings.paper_a3:
+            self.paper_format_combo.set_active(0)
+        elif settings.paper_a4:
+            self.paper_format_combo.set_active(1)
+        elif settings.paper_a5:
+            self.paper_format_combo.set_active(2)
+        
+        # Orientation
+        if settings.paper_both:
+            self.paper_orientation_combo.set_active(2)
+        elif settings.paper_landscape:
+            self.paper_orientation_combo.set_active(1)
+        elif settings.paper_portrait:
+            self.paper_orientation_combo.set_active(0)
+
+        # ===== MARGE =====
+        self.margin_top_spin.set_value(int(settings.margin_top or 10))
+        self.margin_left_spin.set_value(int(settings.margin_left or 10))
+        self.margin_right_spin.set_value(int(settings.margin_right or 10))
+        self.margin_bottom_spin.set_value(int(settings.margin_bottom or 10))
+
         # ===== AUTRES OPTIONS =====
         if not hasattr(settings, "choice_joker_always"):
             raise AttributeError("Attribut manquant dans ProjectSettings : 'choice_joker_always'.")
@@ -739,6 +863,25 @@ class QcmWindow(Gtk.ApplicationWindow):
         
         settings.choice_new_choices = self.choice_new_choices_spin.get_value_as_int()
         settings.choice_new_choices_name = self.choice_new_choices_name_entry.get_text()
+
+        # ===== FORMAT DE PAPIER =====
+        # Format
+        format_active = self.paper_format_combo.get_active()
+        settings.paper_a3 = (format_active == 0)
+        settings.paper_a4 = (format_active == 1)
+        settings.paper_a5 = (format_active == 2)
+        
+        # Orientation
+        orientation_active = self.paper_orientation_combo.get_active()
+        settings.paper_portrait = (orientation_active == 0)
+        settings.paper_landscape = (orientation_active == 1)
+        settings.paper_both = (orientation_active == 2)
+
+        # ===== MARGE =====
+        settings.margin_top = str(int(self.margin_top_spin.get_value()))
+        settings.margin_left = str(int(self.margin_left_spin.get_value()))
+        settings.margin_right = str(int(self.margin_right_spin.get_value()))
+        settings.margin_bottom = str(int(self.margin_bottom_spin.get_value()))
 
         # ===== AUTRES OPTIONS =====
         settings.choice_joker_always = self.joker_check.get_active()
