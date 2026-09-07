@@ -207,7 +207,7 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None,
             continue
 
         # 1. Détermination unique du format de la page
-        page_size = landscape(A4) if variant.layout == "p" else A4
+        page_size = landscape(A4) if variant.layout == "l" else A4
 
         # 2. Initialisation ou création d'une nouvelle page avec la bonne taille
         if c is None:
@@ -216,7 +216,7 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None,
             c.setPageSize(page_size)  # On change la taille AVANT de dessiner la nouvelle page
 
         # ✅ NOUVELLE LIGNE : Rotation anti-trigonométrique (90°)
-        c.setPageRotation(90)
+        # c.setPageRotation(90)
         
         # 3. Dessin sur la page courante
         _draw_header_footer(c, layout)
