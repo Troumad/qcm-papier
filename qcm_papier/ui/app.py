@@ -964,6 +964,39 @@ class QcmWindow(Gtk.ApplicationWindow):
             return
         try:
             self.project = project_mod.load_project(path)
+            
+            # Debug: afficher les valeurs lues depuis le JSON
+            import json
+            with open(path, 'r', encoding='utf-8') as f:
+                json_data = json.load(f)
+            print("\n=== DEBUG: VALEURS FANTÔMES DANS LE JSON ===")
+            print(f"pos_exercise_new_exercises: {json_data.get('pos_exercise_new_exercises', '❌ NON TROUVÉ')}")
+            print(f"pos_exercise_new_exercises_name: {json_data.get('pos_exercise_new_exercises_name', '❌ NON TROUVÉ')}")
+            print(f"pos_exercise_new_questions: {json_data.get('pos_exercise_new_questions', '❌ NON TROUVÉ')}")
+            print(f"pos_exercise_new_questions_name: {json_data.get('pos_exercise_new_questions_name', '❌ NON TROUVÉ')}")
+            print(f"pos_exercise_new_choices: {json_data.get('pos_exercise_new_choices', '❌ NON TROUVÉ')}")
+            print(f"pos_exercise_new_choices_name: {json_data.get('pos_exercise_new_choices_name', '❌ NON TROUVÉ')}")
+            print(f"pos_question_new_questions: {json_data.get('pos_question_new_questions', '❌ NON TROUVÉ')}")
+            print(f"pos_question_new_questions_name: {json_data.get('pos_question_new_questions_name', '❌ NON TROUVÉ')}")
+            print(f"pos_question_new_choices: {json_data.get('pos_question_new_choices', '❌ NON TROUVÉ')}")
+            print(f"pos_question_new_choices_name: {json_data.get('pos_question_new_choices_name', '❌ NON TROUVÉ')}")
+            print(f"pos_choice_new_choices: {json_data.get('pos_choice_new_choices', '❌ NON TROUVÉ')}")
+            print(f"pos_choice_new_choices_name: {json_data.get('pos_choice_new_choices_name', '❌ NON TROUVÉ')}")
+            
+            print("\n=== DEBUG: VALEURS DANS ProjectSettings ===")
+            print(f"exercise_new_exercises: {self.project.settings.exercise_new_exercises}")
+            print(f"exercise_new_exercises_name: {self.project.settings.exercise_new_exercises_name}")
+            print(f"exercise_new_questions: {self.project.settings.exercise_new_questions}")
+            print(f"exercise_new_questions_name: {self.project.settings.exercise_new_questions_name}")
+            print(f"exercise_new_choices: {self.project.settings.exercise_new_choices}")
+            print(f"exercise_new_choices_name: {self.project.settings.exercise_new_choices_name}")
+            print(f"question_new_questions: {self.project.settings.question_new_questions}")
+            print(f"question_new_questions_name: {self.project.settings.question_new_questions_name}")
+            print(f"question_new_choices: {self.project.settings.question_new_choices}")
+            print(f"question_new_choices_name: {self.project.settings.question_new_choices_name}")
+            print(f"choice_new_choices: {self.project.settings.choice_new_choices}")
+            print(f"choice_new_choices_name: {self.project.settings.choice_new_choices_name}")
+            
             self.editor.project = self.project
             self.editor._fill_tree()
             self.editor._update_interval_label()
