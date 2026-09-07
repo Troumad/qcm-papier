@@ -285,55 +285,49 @@ class QcmWindow(Gtk.ApplicationWindow):
         grid7 = Gtk.Grid(column_spacing=8, row_spacing=4)
         
         # Marge haute
-        grid7.attach(Gtk.Label(label="Marge haute :"), 2, 0, 1, 1)
+        grid7.attach(Gtk.Label(label="Marge haute :"), 3, 0, 1, 1)
         self.margin_top_spin = Gtk.SpinButton()
         self.margin_top_spin.set_range(5, 25)
         self.margin_top_spin.set_increments(1, 1)
         self.margin_top_spin.set_value(10)
         self.margin_top_spin.connect("value-changed", 
             lambda s: setattr(self.project.settings, "margin_top", str(int(s.get_value()))))
-        grid7.attach(self.margin_top_spin, 3, 0, 1, 1)
-        grid7.attach(Gtk.Label(label="mm"), 4, 0, 1, 1)
+        grid7.attach(self.margin_top_spin, 4, 0, 1, 1)
         
-        box.append(grid7)
 
         # Ligne 8: Marges gauche/droite
-        grid8 = Gtk.Grid(column_spacing=8, row_spacing=4)
-        grid8.attach(Gtk.Label(label="Marge en mm :"), 0, 0, 1, 1)
+        grid7.attach(Gtk.Label(label="Marges en mm :    "), 0, 1, 1, 1)
         
-        grid8.attach(Gtk.Label(label="Marge gauche"), 1, 0, 1, 1)
+        grid7.attach(Gtk.Label(label="Marge gauche"), 1, 1, 1, 1)
         self.margin_left_spin = Gtk.SpinButton()
         self.margin_left_spin.set_range(5, 25)
         self.margin_left_spin.set_increments(1, 1)
         self.margin_left_spin.set_value(10)
         self.margin_left_spin.connect("value-changed", 
             lambda s: setattr(self.project.settings, "margin_left", str(int(s.get_value()))))
-        grid8.attach(self.margin_left_spin, 2, 0, 1, 1)
+        grid7.attach(self.margin_left_spin, 2, 1, 1, 1)
         
-        grid8.attach(Gtk.Label(label="Marge droite"), 3, 0, 1, 1)
+        grid7.attach(Gtk.Label(label="Marge droite"), 5, 1, 1, 1)
         self.margin_right_spin = Gtk.SpinButton()
         self.margin_right_spin.set_range(5, 25)
         self.margin_right_spin.set_increments(1, 1)
         self.margin_right_spin.set_value(10)
         self.margin_right_spin.connect("value-changed", 
             lambda s: setattr(self.project.settings, "margin_right", str(int(s.get_value()))))
-        grid8.attach(self.margin_right_spin, 4, 0, 1, 1)
+        grid7.attach(self.margin_right_spin, 6, 1, 1, 1)
         
-        box.append(grid8)
 
         # Ligne 9: Marge basse
-        grid9 = Gtk.Grid(column_spacing=8, row_spacing=4)
-        grid9.attach(Gtk.Label(label="Marge basse :"), 2, 0, 1, 1)
+        grid7.attach(Gtk.Label(label="Marge basse :"), 3, 3, 1, 1)
         self.margin_bottom_spin = Gtk.SpinButton()
         self.margin_bottom_spin.set_range(5, 25)
         self.margin_bottom_spin.set_increments(1, 1)
         self.margin_bottom_spin.set_value(10)
         self.margin_bottom_spin.connect("value-changed", 
             lambda s: setattr(self.project.settings, "margin_bottom", str(int(s.get_value()))))
-        grid9.attach(self.margin_bottom_spin, 3, 0, 1, 1)
-        grid9.attach(Gtk.Label(label="mm"), 4, 0, 1, 1)
+        grid7.attach(self.margin_bottom_spin, 4, 3, 1, 1)
         
-        box.append(grid9)
+        box.append(grid7)
 
         self.notebook.append_page(box, Gtk.Label(label="Informations"))
 
