@@ -750,10 +750,13 @@ def generate_all(project: Project,
     error_count = 0
     failed: list[int] = []
     success: list[int] = []  # Liste des IDs qui ont réellement réussi
+    page = 0
     page_index = 0
 
     while page_index < len(variant_ids):
         variant_id = variant_ids[page_index]
+        page += 1
+        print(f"page : {page} et variant={variant_id}")
         try:
             variant = generate_variant(project, variant_id)
             project.variants[str(variant_id)] = variant
