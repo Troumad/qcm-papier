@@ -861,41 +861,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         if path is None:
             return
         try:
-            # 1) Afficher les valeurs par défaut AVANT la lecture
-            print("\n=== 1) VALEURS PAR DÉFAUT (avant lecture) ===")
-            print(f"exercise_new_never: {self.project.settings.exercise_new_never}")
-            print(f"exercise_new_always: {self.project.settings.exercise_new_always}")
-            print(f"exercise_new_sometimes: {self.project.settings.exercise_new_sometimes}")
-            print(f"question_new_never: {self.project.settings.question_new_never}")
-            print(f"question_new_always: {self.project.settings.question_new_always}")
-            print(f"question_new_sometimes: {self.project.settings.question_new_sometimes}")
-            
             self.project = project_mod.load_project(path)
-            
-            # 2) Afficher les valeurs lues depuis le JSON
-            import json
-            with open(path, 'r', encoding='utf-8') as f:
-                json_data = json.load(f)
-            print("\n=== 2) VALEURS DANS LE FICHIER JSON ===")
-            print(f"pos_exercise_new_always: {json_data.get('pos_exercise_new_always', '❌ NON TROUVÉ')}")
-            print(f"pos_exercise_new_never: {json_data.get('pos_exercise_new_never', '❌ NON TROUVÉ')}")
-            print(f"pos_exercise_new_sometimes: {json_data.get('pos_exercise_new_sometimes', '❌ NON TROUVÉ')}")
-            print(f"pos_question_new_always: {json_data.get('pos_question_new_always', '❌ NON TROUVÉ')}")
-            print(f"pos_question_new_never: {json_data.get('pos_question_new_never', '❌ NON TROUVÉ')}")
-            print(f"pos_question_new_sometimes: {json_data.get('pos_question_new_sometimes', '❌ NON TROUVÉ')}")
-            print(f"pos_choice_new_always: {json_data.get('pos_choice_new_always', '❌ NON TROUVÉ')}")
-            print(f"pos_choice_new_never: {json_data.get('pos_choice_new_never', '❌ NON TROUVÉ')}")
-            print(f"pos_choice_new_sometimes: {json_data.get('pos_choice_new_sometimes', '❌ NON TROUVÉ')}")
-
-            # 3) Afficher les valeurs APRES la lecture
-            print("\n=== 3) VALEURS APRÈS LECTURE ===")
-            print(f"exercise_new_never: {self.project.settings.exercise_new_never}")
-            print(f"exercise_new_always: {self.project.settings.exercise_new_always}")
-            print(f"exercise_new_sometimes: {self.project.settings.exercise_new_sometimes}")
-            print(f"question_new_never: {self.project.settings.question_new_never}")
-            print(f"question_new_always: {self.project.settings.question_new_always}")
-            print(f"question_new_sometimes: {self.project.settings.question_new_sometimes}")
-            
             self.editor.project = self.project
             self.editor._fill_tree()
             self.editor._update_interval_label()
@@ -930,9 +896,8 @@ class QcmWindow(Gtk.ApplicationWindow):
             # Charger les paramètres de génération
             self._load_generation_params()
 
-            entry.set_title(f"Générateur/Correcteur de QCM papier - {os.path.basename(path)}")
-            entry.present()
-            entry.generate_status.set_text(f"Projet chargé : {path}")            
+            self.set_title(f"Générateur/Correcteur de QCM papier - {os.path.basename(path)}")
+            self.generate_status.set_text(f"Projet chargé : {path}")            
 
         except Exception as e:
             self.generate_status.set_text(f"Erreur : {e}")
