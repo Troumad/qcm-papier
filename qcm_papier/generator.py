@@ -105,17 +105,16 @@ def _tri(settings: ProjectSettings, base: str, alt: str, rand: str) -> int:
         rand_val = not getattr(settings, rand, False)   # Inverser
 
     # Logique :
-    # - Si base_val=True → 0 (NEVER)
-    # - Si alt_val=True → 1 (ALWAYS)
     # - Si rand_val=True → 2 (SOMETIMES)
-    if rand_val:
+    # - Si alt_val=True ET base_val=True → 2 (SOMETIMES, conflit = aléatoire)
+    # - Si alt_val=True → 1 (ALWAYS)
+    # - Sinon → 0 (NEVER)
+    if rand_val or (alt_val and base_val):
         return 2
     elif alt_val:
         return 1
-    elif base_val:
+    else:  # si base_val ou aucun
         return 0
-    else:
-        return 0  # Par défaut
     
 def _settings_tri_groups() -> dict[str, tuple[str, str, str]]:
     """Mappe chaque groupe aux 3 champs booléens.
