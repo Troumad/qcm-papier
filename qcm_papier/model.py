@@ -24,6 +24,7 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass, field
 from typing import Any
+from . import config
 
 
 # ---------------------------------------------------------------------------
@@ -55,9 +56,9 @@ class Choice:
         Gère les clés avec ou sans préfixe 'pos_'."""
         final_dict = {}
         for key, value in d.items():
-            # Supprimer le préfixe 'pos_' si présent
-            clean_key = key[4:] if key.startswith("pos_") else key
-            final_dict[clean_key] = value
+            # Convertir les clés JSON avec préfixe pos_ en clés internes
+            internal_key = config.to_internal_key(key)
+            final_dict[internal_key] = value
         return cls(**final_dict)
 
 # ---------------------------------------------------------------------------
@@ -451,40 +452,40 @@ class ProjectSettings:
     choice_joker_always: bool = True
     choice_joker_never: bool = False
     exercise_new_never: bool = False
-    exercise_new_always: bool = True
-    exercise_new_sometimes: bool = False
+    exercise_new_always: bool = False
+    exercise_new_sometimes: bool = True
     exercise_new_exercises: int = 1
     exercise_new_questions: int = 1
     exercise_new_choices: int = 4
     exercise_new_exercises_name: str = "Exercice"
     exercise_new_questions_name: str = "Question"
     exercise_new_choices_name: str = "X"
-    question_new_never: bool = True
+    question_new_never: bool = False
     question_new_always: bool = False
-    question_new_sometimes: bool = False
+    question_new_sometimes: bool = True
     question_new_questions: int = 1
     question_new_choices: int = 4
     question_new_questions_name: str = "Question"
     question_new_choices_name: str = "X"
-    choice_new_never: bool = True
+    choice_new_never: bool = False
     choice_new_always: bool = False
-    choice_new_sometimes: bool = False
+    choice_new_sometimes: bool = True
     choice_new_choices_name: str = "X"
     choice_new_choices: int = 1
     choice_checked_never: bool = False
-    choice_checked_always: bool = True
-    choice_checked_sometimes: bool = False
+    choice_checked_always: bool = False
+    choice_checked_sometimes: bool = True
 
     # Ordre aléatoire.
-    exercise_order_never: bool = True
+    exercise_order_never: bool = False
     exercise_order_always: bool = False
-    exercise_order_sometimes: bool = False
-    question_order_never: bool = True
+    exercise_order_sometimes: bool = True
+    question_order_never: bool = False
     question_order_always: bool = False
-    question_order_sometimes: bool = False
-    choice_order_never: bool = True
+    question_order_sometimes: bool = True
+    choice_order_never: bool = False
     choice_order_always: bool = False
-    choice_order_sometimes: bool = False
+    choice_order_sometimes: bool = True
 
     # Génération des variantes.
     generate_students: int = 1
@@ -520,7 +521,16 @@ class ProjectSettings:
         return PAPER_FORMATS[self.paper_format]
 
     def to_dict(self) -> dict[str, Any]:
-        return copy.deepcopy(self.__dict__)
+        """Convertit les paramètres en dictionnaire pour sauvegarde JSON.
+
+        Utilise le mapping pour ajouter les préfixes pos_ aux clés concernées.
+        """
+        result = {}
+        for key, value in self.__dict__.items():
+            # Convertir les clés internes en clés JSON (avec préfixe pos_ si nécessaire)
+            json_key = config.to_json_key(key)
+            result[json_key] = copy.deepcopy(value)
+        return result        
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "ProjectSettings":
