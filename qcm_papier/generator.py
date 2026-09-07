@@ -99,10 +99,10 @@ def _tri(settings: ProjectSettings, base: str, alt: str, rand: str) -> int:
         rand_val = getattr(settings, rand, False)
     else:
         # Pour les AUTRES (new/checked) :
-        # Inverser car le JSON stocke l'opposé (ex: pos_*_never=true → *_never=False)
-        base_val = not getattr(settings, base, True)  # Inverser et défaut à True
-        alt_val = not getattr(settings, alt, False)   # Inverser
-        rand_val = not getattr(settings, rand, False)   # Inverser
+        # Les valeurs sont déjà correctement chargées depuis le JSON (pas d'inversion nécessaire)
+        base_val = getattr(settings, base, True)
+        alt_val = getattr(settings, alt, False)
+        rand_val = getattr(settings, rand, False)
 
     # Logique :
     # - Si rand_val=True → 2 (SOMETIMES)
