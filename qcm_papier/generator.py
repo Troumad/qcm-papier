@@ -83,16 +83,22 @@ BIT_CHOICE_ORDER = 11
 # ---------------------------------------------------------------------------
 def _tri(settings: ProjectSettings, base: str, alt: str, rand: str) -> int:
     """Retourne 0 (NEVER), 1 (ALWAYS) ou 2 (SOMETIMES)."""
-    # Détecter si c'est un groupe de DIRECTION (*_dir) ou non
+    # Détecter si c'est un groupe de DIRECTION (*_dir) ou d'ORDRE (*_order)
     is_dir_group = base.endswith("_left") or base.endswith("_top") or base.endswith("_both")
+    is_order_group = "order" in base
 
     if is_dir_group:
         # Pour les DIRECTIONS : left=True → 0, top=True → 1, both=True → 2
         base_val = getattr(settings, base, False)
         alt_val = getattr(settings, alt, False)
         rand_val = getattr(settings, rand, False)
+    elif is_order_group:
+        # Pour les ORDRES : pas d'inversion, les valeurs JSON sont directes
+        base_val = getattr(settings, base, True)
+        alt_val = getattr(settings, alt, False)
+        rand_val = getattr(settings, rand, False)
     else:
-        # Pour les AUTRES (new/checked/order) :
+        # Pour les AUTRES (new/checked) :
         # Inverser car le JSON stocke l'opposé (ex: pos_*_never=true → *_never=False)
         base_val = not getattr(settings, base, True)  # Inverser et défaut à True
         alt_val = not getattr(settings, alt, False)   # Inverser
