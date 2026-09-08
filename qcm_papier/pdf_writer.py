@@ -142,6 +142,11 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant,
             c.drawCentredString(text["x"] * mm, to_pdf_y(text["y"]) - 1 * mm,
                                 text.get("t", ""))
             c.setFont("Helvetica", 12)
+        elif text.get("i"):
+            # Texte en italique (introduction/header)
+            c.setFont("Helvetica-Oblique", 12)
+            c.drawString(text["x"] * mm, to_pdf_y(text["y"]), text.get("t", ""))
+            c.setFont("Helvetica", 12)
         else:
             c.drawString(text["x"] * mm, to_pdf_y(text["y"]), text.get("t", ""))
 

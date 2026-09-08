@@ -568,7 +568,11 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
 
         # Nom de l'exercice.
         questions_texts.append({"x": 2, "y": 5, "t": exercise.get("name", "")})
-        exercise_name_width = _text_width(exercise.get("name", ""))
+        # Introduction (header) en italique après le nom
+        header = exercise.get("header", "")
+        if header:
+            questions_texts.append({"x": 2 + _text_width(exercise.get("name", "")) + 2, "y": 5, "t": header, "i": True})
+        exercise_name_width = _text_width(exercise.get("name", "")) + (2 + _text_width(header)) if header else _text_width(exercise.get("name", ""))
 
         question_dir = rg.pseudo_random(variant_id, variant_id, BIT_QUESTION_DIR,
                                          _tri(settings, "question_dir_left", "question_dir_top", "question_dir_both"))
