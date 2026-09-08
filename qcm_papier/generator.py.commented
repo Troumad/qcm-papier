@@ -1,0 +1,20 @@
+"""Génération des variantes d'un QCM.
+
+Reproduit la fonction ``FileGenerate`` du code JavaScript original
+(index.html lignes ~6188-6838) : pour chaque id de variante, on construit le
+layout (portrait/paysage), on place les repères d'alignement, le code-barres,
+la boîte d'identification étudiant, puis on dispose les exercices, questions et
+choix selon les sens de lecture et les ajouts fantômes paramétrés.
+
+Le résultat est stocké dans un ``VariantStore`` (dict indexé par id de variante
++ layouts 'p'/'l'), identique en structure à la variable globale ``variants``
+du code original.
+"""
+
+from __future__ import annotations
+
+import random
+
+import math
+from typing import Any
+
