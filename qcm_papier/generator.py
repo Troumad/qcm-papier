@@ -481,6 +481,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
     """Génère une variante pour l'id donné."""
     settings = project.settings
     variant = Variant(layout="p", id=variant_id)
+    print(f"entrée generate_variant avec {variant_id}")
 
     # Orientation portrait/paysage.
     if rg.pseudo_random(variant_id, 0, 0, _tri(settings, "paper_portrait", "paper_landscape", "paper_both")):
@@ -739,12 +740,14 @@ def generate_all(project: Project,
 
     while page_index < len(variant_ids):
         variant_id = variant_ids[page_index]
+        print(f"essai avec {variant_id}")
         page += 1
         try:
             variant = generate_variant(project, variant_id)
             project.variants[str(variant_id)] = variant
             success.append(variant_id)
             page_index += 1
+            print(f"réussite : {variant_id}")
         except GenerateError:
             error_count += 1
             failed.append(variant_id)
