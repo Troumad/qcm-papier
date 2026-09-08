@@ -416,27 +416,21 @@ def _place_choices(variant, variant_id,
         choix_fantome = choice.get("index", -1) < 0
         niveau_fantome = sum([exercice_fantome, question_fantome, choix_fantome])
         
-        # Déterminer si c'est un choix original ou fantôme
-        est_choix_original = choice.get("index", -1) >= 0
-        
         # Placer le cercle (pré-coché ou non)
-        if niveau_fantome == 0:
-            # Choix normal (pas de fantôme)
-            if choice_checked:
+        # SEULES les cases FANTÔMES (index < 0) sont pré-cochées aléatoirement
+        if choice.get("index", -1) >= 0:
+            # Choix NORMAL : jamais pré-coché aléatoirement
+            # (choice_checked est utilisé pour les choix normaux dans les questions normales)
+            if niveau_fantome == 0 and choice_checked:
                 circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
             else:
                 circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
         else:
-            # Choix fantôme : probabilité basée sur le niveau
-            if est_choix_original:
-                # Premier choix fantôme : 1/(2*niveau) de chance
-                if random.randint(1, 2 * niveau_fantome) == 1:
-                    circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
-                else:
-                    circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
-            else:
-                # Second choix fantôme : 2/(2*niveau) = 1/niveau de chance
-                if random.randint(1, 2 * niveau_fantome) < 2:
+            # Choix FANTÔME : probabilité basée sur le niveau
+            if niveau_fantome > 0:
+                # Premier choix fantôme (index original >= 0 mais dans contexte fantôme) : 1/(2*niveau)
+                # Second choix fantôme (index < 0) : 2/(2*niveau) = 1/niveau
+                if random.randint(1, 2 * niveau_fantome) < (2 if choix_fantome else 1):
                     circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
                 else:
                     circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
