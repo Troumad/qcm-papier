@@ -357,8 +357,16 @@ class StructureEditor(Gtk.Box):
         name = Gtk.Entry(text=exercise.name)
         name.connect("changed", lambda e: self._set_and_notify(exercise, "name", e.get_text(), update_tree=False))
         name.connect("activate", lambda e: (self._schedule_update(), self.tree.grab_focus()))
+        
+        validate_btn = Gtk.Button(label="✓", tooltip_text="Valider (Entrée)")
+        validate_btn.connect("clicked", lambda _: (self._schedule_update(), self.tree.grab_focus()))
+        
         self.props_box.append(Gtk.Label(label="<b>Exercice</b>", use_markup=True))
-        self.props_box.append(self._row("Nom :", name))
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        row.append(Gtk.Label(label="Nom :"))
+        row.append(name)
+        row.append(validate_btn)
+        self.props_box.append(row)
 
         btn_add_q = Gtk.Button(label="Ajouter une question")
         btn_add_q.connect("clicked", lambda _b: self.add_question(exercise))
@@ -394,8 +402,16 @@ class StructureEditor(Gtk.Box):
         name.connect("changed",
                     lambda e: self._set_and_notify(question, "name", e.get_text(), update_tree=False))
         name.connect("activate", lambda e: (self._schedule_update(), self.tree.grab_focus()))
+        
+        validate_btn = Gtk.Button(label="✓", tooltip_text="Valider (Entrée)")
+        validate_btn.connect("clicked", lambda _: (self._schedule_update(), self.tree.grab_focus()))
+        
         self.props_box.append(Gtk.Label(label="<b>Question</b>", use_markup=True))
-        self.props_box.append(self._row("Nom :", name))
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        row.append(Gtk.Label(label="Nom :"))
+        row.append(name)
+        row.append(validate_btn)
+        self.props_box.append(row)
 
         # 🔧 Gain, Malus et boutons sur la même ligne
         line_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
