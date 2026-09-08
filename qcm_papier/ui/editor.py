@@ -355,8 +355,8 @@ class StructureEditor(Gtk.Box):
     def _edit_exercise(self, exercise):
         """Affiche les propriétés d'un exercice."""
         name = Gtk.Entry(text=exercise.name)
-        name.connect("changed", lambda e: self._set_and_notify(exercise, "name", e.get_text()))
-        name.connect("activate", lambda e: self.tree.grab_focus())
+        name.connect("changed", lambda e: self._set_and_notify(exercise, "name", e.get_text(), update_tree=False))
+        name.connect("activate", lambda e: (self._schedule_update(), self.tree.grab_focus()))
         self.props_box.append(Gtk.Label(label="<b>Exercice</b>", use_markup=True))
         self.props_box.append(self._row("Nom :", name))
 
@@ -392,8 +392,8 @@ class StructureEditor(Gtk.Box):
         """Affiche les propriétés d'une question."""
         name = Gtk.Entry(text=question.name)
         name.connect("changed",
-                    lambda e: self._set_and_notify(question, "name", e.get_text()))
-        name.connect("activate", lambda e: self.tree.grab_focus())
+                    lambda e: self._set_and_notify(question, "name", e.get_text(), update_tree=False))
+        name.connect("activate", lambda e: (self._schedule_update(), self.tree.grab_focus()))
         self.props_box.append(Gtk.Label(label="<b>Question</b>", use_markup=True))
         self.props_box.append(self._row("Nom :", name))
 
@@ -474,7 +474,7 @@ class StructureEditor(Gtk.Box):
 
         self._schedule_update()
 
-    def _set_and_notify(self, obj, attr, value):
+    def _set_and_notify(self, obj, attr, value, update_tree: bool = True):
         """Modifie un attribut et notifie les changements."""
         old_value = getattr(obj, attr, None)
         setattr(obj, attr, value)
@@ -482,4 +482,5 @@ class StructureEditor(Gtk.Box):
         if attr == "single" and value and isinstance(obj, Question):
             self._normalize_single_choices(obj)
 
-        self._schedule_update()
+        if update_tree:
+            self._schedule_update()
