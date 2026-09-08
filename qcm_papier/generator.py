@@ -410,19 +410,23 @@ def _place_choices(variant, variant_id,
         if choice.get("index", -1) >= 0:
             circles.append({"x": x, "y": y, "r": 2.3})
         else:
-            # Choix fantôme : cercle pré-coché ou non selon choice_checked.
-            # Pour les exercices fantômes (index < 0), on divise la probabilité par 2
+            # Choix fantôme : cercle pré-coché ou non
             checked_index = variant_id + question_iter + choice_iter
             is_ghost_exercise = exercise.get("index", -1) < 0
             
-            # Probabilité de précocher : choice_checked (1.0) ou choice_checked/2 (0.5) pour exercice fantôme
-            check_prob = choice_checked * (0.5 if is_ghost_exercise else 1.0)
-            
-            if check_prob > 0 and (checked_index % 2 != 0 if False else True):
-                # Reprend ``choices_circles.push({x:x,y:y,r:-2.3})`` quand précoché.
-                circles.append({"x": x, "y": y, "r": -2.3})
+            # Pour les exercices fantômes, probabilité divisée par 2 (50% au lieu de 100%)
+            if is_ghost_exercise:
+                # 50% de chance de précocher pour les exercices fantômes
+                if checked_index % 2 == 0:
+                    circles.append({"x": x, "y": y, "r": -2.3})
+                else:
+                    circles.append({"x": x, "y": y, "r": 2.3})
             else:
-                circles.append({"x": x, "y": y, "r": 2.3})
+                # 100% de chance si choice_checked=True pour les exercices normaux
+                if choice_checked:
+                    circles.append({"x": x, "y": y, "r": -2.3})
+                else:
+                    circles.append({"x": x, "y": y, "r": 2.3})
         if (exercise.get("index", -1) >= 0 and question.get("index", -1) >= 0
                 and choice.get("index", -1) >= 0):
             marks.append({"x": x, "y": y, "r": 2.3,
@@ -443,12 +447,10 @@ def _place_choices(variant, variant_id,
         for i, c in enumerate(circles):
             cc = dict(c)
             cc["dash"] = True
-            # Pour la ligne joker, appliquer probabilités 0.65/0.35
-            # 0.65 pour la première ligne (originale), 0.35 pour la seconde (joker)
-            # On utilise le bit 0 du variant_id pour décider
+            # Pour la ligne joker : probabilité 0.35 de précocher (vs 0.65 pour la ligne originale)
             if c.get("r") == -2.3:  # Si le choix original était précoché
-                # Sur la ligne joker, on précoche avec probabilité 0.35
-                if (variant_id + i) % 3 < 1:  # ~0.33, proche de 0.35
+                # Sur la ligne joker, précoche avec probabilité ~0.35
+                if (variant_id + i) % 3 < 1:  # 1/3 ≈ 0.33
                     cc["r"] = -2.3  # précoché
                 else:
                     cc["r"] = 2.3  # non précoché
