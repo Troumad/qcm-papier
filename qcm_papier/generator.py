@@ -81,11 +81,11 @@ BIT_CHOICE_ORDER = 11
 # ---------------------------------------------------------------------------
 # Helpers de boutons à 3 états (depuis les ProjectSettings)
 # ---------------------------------------------------------------------------
-def _tri(settings: ProjectSettings, base: str, alt: str, rand: str) -> int:
-    """Retourne 0 (NEVER), 1 (ALWAYS) ou 2 (SOMETIMES).
+def _tri(settings: ProjectSettings, base: str, alt: str, rand: str) -> rg.TriChoice:
+    """Retourne TriChoice.BASE (NEVER), TriChoice.ALT (ALWAYS) ou TriChoice.RANDOM (SOMETIMES).
     base, alt et rand sont les noms des 3 champs booléens d'un même groupe.
     Exemple: base="question_order_never", alt="question_order_always", rand="question_order_sometimes".
-    Retourne 0, 1 ou 2 selon lequel des 3 est True dans settings.
+    Retourne TriChoice selon lequel des 3 est True dans settings.
     Priorité : SOMETIMES > ALWAYS > NEVER (pour gérer les conflits).
     """
     # Détecter le type de groupe
@@ -114,11 +114,11 @@ def _tri(settings: ProjectSettings, base: str, alt: str, rand: str) -> int:
     
     # Priorité : SOMETIMES ou (ALWAYS et NEVER) > ALWAYS > NEVER
     if rand_val or (alt_val and base_val):  # ← Gestion des conflits, ce serait un bug dans les données
-        return 2
+        return rg.TriChoice.RANDOM
     elif alt_val:
-        return 1
+        return rg.TriChoice.ALT
     else:  # si base_val ou aucun
-        return 0    
+        return rg.TriChoice.BASE    
     
 def _settings_tri_groups() -> dict[str, tuple[str, str, str]]:
     """Mappe chaque groupe aux 3 champs booléens.
@@ -561,8 +561,6 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         exercise = exercise_list[exercise_index]
         exercise_list.pop(exercise_index)
         
-        print(f"[GÉNÉRATION] Insertion exercice: {exercise.get('name', 'SANS NOM')} (index: {exercise.get('index', -1)}) - exercise_random={exercise_random}, exercise_iter={exercise_iter}")
-
         questions_texts: list[dict] = []
         questions_rects: list[dict] = []
         questions_circles: list[dict] = []
@@ -579,7 +577,6 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         question_random = rg.pseudo_random(variant_id, exercise_iter,
                                             BIT_QUESTION_ORDER,
                                             _tri(settings, "question_order_never", "question_order_always", "question_order_sometimes"))
-        print(f"[DEBUG] question_dir={question_dir}, question_new={question_new}, question_random={question_random}, _choice_order={_tri(settings, "question_order_never", "question_order_always", "question_order_sometimes")}")
         question_list = [_question_to_dict(q) for q in exercise.get("questions", [])]
         if question_new and exercise.get("index", -1) >= 0:
             rg.insert_questions(
@@ -612,8 +609,6 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             question = question_list[question_index]
             question_list.pop(question_index)
             
-            print(f"[GÉNÉRATION]   Insertion question: {question.get('name', 'SANS NOM')} (index: {question.get('index', -1)})")
-
             qt, qr, qc, qm, qw, qh = _place_choices(
                 variant, variant_id, exercise, question,
                 exercise.get("index", -1), question_iter,
@@ -745,7 +740,6 @@ def generate_all(project: Project,
     while page_index < len(variant_ids):
         variant_id = variant_ids[page_index]
         page += 1
-        print(f"page : {page} et variant={variant_id}")
         try:
             variant = generate_variant(project, variant_id)
             project.variants[str(variant_id)] = variant
