@@ -664,7 +664,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
                     placed = True
                 else:
                     has_error = True
-                    print("erreur 1")
+                    print(f"[ERREUR] Exercice '{exercise.get('name', 'SANS NOM')}' trop grand (largeur={exercise_width:.1f}mm > {max_width}mm OU hauteur={exercise_height:.1f}mm > {max_height}mm) - mode droite")
                     break
 
             # Mettre à jour y_max si nécessaire
@@ -688,7 +688,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
                     placed = True
                 else:
                     has_error = True
-                    print("erreur 2")
+                    print(f"[ERREUR] Exercice '{exercise.get('name', 'SANS NOM')}' trop grand (largeur={exercise_width:.1f}mm > {max_width}mm OU hauteur={exercise_height:.1f}mm > {max_height}mm) - mode bas")
                     break
 
             # Mettre à jour x_max si nécessaire
