@@ -417,27 +417,30 @@ def _place_choices(variant, variant_id,
         niveau_fantome = sum([exercice_fantome, question_fantome, choix_fantome])
         
         # Placer le cercle (pré-coché ou non)
-        # SEULES les cases FANTÔMES (index < 0) sont pré-cochées aléatoirement
+        # les vraies cases à cocher et la première ligne des exercices fantomes
         if choice.get("index", -1) >= 0:
             # Choix NORMAL : jamais pré-coché aléatoirement
             # (choice_checked est utilisé pour les choix normaux dans les questions normales)
+            # NE PAS précoche tout pour l'exercice !
             if niveau_fantome == 0 and choice_checked:
                 circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
             else:
                 circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
         else:
             # Choix FANTÔME : probabilité basée sur le niveau
+            # cas pas de joker, case à cocher
             if niveau_fantome > 0:
-                # Premier choix fantôme (index original >= 0 mais dans contexte fantôme) : 1/(2*niveau)
-                # Second choix fantôme (index < 0) : 2/(2*niveau) = 1/niveau
+                # Premier choix fantôme : 1/(2*niveau)
+                # Second choix fantôme : 2/(2*niveau) = 1/niveau
                 if random.randint(1, 2 * niveau_fantome) < (2 if choix_fantome else 1):
                     circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
                 else:
                     circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
         
+        # je ne sais pas quand on peut passer ici !
         if (exercise.get("index", -1) >= 0 and question.get("index", -1) >= 0
                 and choice.get("index", -1) >= 0):
-            marks.append({"x": x, "y": y, "r": 2.3,
+            marks.append({"x": x, "y": y, "r": 2.3*0.2,
                           "e": exercise.get("index", -1), "q": question.get("index", -1),
                           "c": choice.get("index", 0)})
         choice_iter += 1
@@ -467,30 +470,31 @@ def _place_choices(variant, variant_id,
             
             if choice_index >= 0:
                 # Cas 2: Première ligne, choix original (index >= 0)
-                # les items qui ne sont pas à cocher de la première ligne de chaque question
+                # les Item qui ne sont pas à cocher de la première ligne de chaque question
                 if a_des_choix_fantomes:
                     # 66% de chance si la question a des choix fantômes
                     if random.randint(1, 3) < 2:  # 2/3 ≈ 66%
-                        c["r"] = -2.3 * 2  # précoché
+                        c["r"] = -2.3 * -1  # précoché
                     else:
-                        c["r"] = 2.3 * 2  # non précoché
+                        c["r"] = 2.3 * 1  # non précoché
                 else:
                     # première ligne de l'exercice fantome
                     # 50% de chance si pas de choix fantômes
                     if random.randint(1, 2) == 1:  # 1/2 = 50%
-                        c["r"] = -2.3 * 1  # précoché
+                        c["r"] = -2.3  # précoché
                     else:
-                        c["r"] = 2.3 * 1  # non précoché
+                        c["r"] = 2.3  # non précoché
             else:
                 # Cas 2: Première ligne, choix fantôme (index < 0)
                 # les items fantomes de la première ligne de chaque question
                 # 33% de chance
                 if random.randint(1, 3) == 1:  # 1/3 ≈ 33%
-                    c["r"] = -2.3 * 0.5  # précoché
+                    c["r"] = -2.3  # précoché
                 else:
-                    c["r"] = 2.3 * 0.5  # non précoché
+                    c["r"] = 2.3  # non précoché
         
         # Pour la SECONDE LIGNE (joker) : duplication avec pointillés
+        # Il manque à cocher la seconde ligne des exercices fantômes
         for i, c in enumerate(circles):
             cc = dict(c)
             cc["dash"] = True  # Trait pointillé pour le joker
