@@ -355,6 +355,7 @@ class StructureEditor(Gtk.Box):
     def _edit_exercise(self, exercise):
         """Affiche les propriétés d'un exercice."""
         name = Gtk.Entry(text=exercise.name)
+        name.set_hexpand(True)
         name.connect("changed", lambda e: self._set_and_notify(exercise, "name", e.get_text(), update_tree=False))
         name.connect("activate", lambda e: (self._schedule_update(), self.tree.grab_focus()))
         
@@ -367,6 +368,14 @@ class StructureEditor(Gtk.Box):
         row.append(name)
         row.append(validate_btn)
         self.props_box.append(row)
+
+        
+        # Introduction (header) en italique
+        header = Gtk.Entry(text=exercise.header or "")
+        header.set_hexpand(True)
+        header.connect("changed", lambda e: self._set_and_notify(exercise, "header", e.get_text(), update_tree=False))
+        header.connect("activate", lambda e: (self._schedule_update(), self.tree.grab_focus()))
+        self.props_box.append(self._row("Introduction :", header))
 
         btn_add_q = Gtk.Button(label="Ajouter une question")
         btn_add_q.connect("clicked", lambda _b: self.add_question(exercise))
@@ -399,6 +408,7 @@ class StructureEditor(Gtk.Box):
     def _edit_question(self, question):
         """Affiche les propriétés d'une question."""
         name = Gtk.Entry(text=question.name)
+        name.set_hexpand(True)
         name.connect("changed",
                     lambda e: self._set_and_notify(question, "name", e.get_text(), update_tree=False))
         name.connect("activate", lambda e: (self._schedule_update(), self.tree.grab_focus()))
