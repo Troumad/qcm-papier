@@ -201,9 +201,11 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None,
     for i in range(copy_count):
         variant = project.variants.variant(variant_ids[i % len(variant_ids)])
         if variant is None:
+            c = None  # Réinitialiser le canvas si variante invalide
             continue
         layout = project.variants.layout(variant.layout)
         if layout is None:
+            c = None  # Réinitialiser le canvas si layout invalide
             continue
 
         # 1. Détermination unique du format de la page
