@@ -318,7 +318,6 @@ def _text_width(text: str, font_size: float = 12) -> float:
 def _place_choices(variant, variant_id,
                    exercise, question,
                    exercise_index: int, question_iter: int,
-                   question_name_width: float,
                    question_name_width_max: float,
                    settings: ProjectSettings) -> tuple[list, list, list, list, float, float]:
     """Place les choix d'une question.
@@ -333,7 +332,7 @@ def _place_choices(variant, variant_id,
     marks: list[dict] = []
 
     texts.append({"x": 2, "y": 5, "t": question.get("name", "")})
-    question_name_width = _text_width(question.get("name", ""))
+    question_name_width = _text_width(question.get("name", ""))  # Largeur du nom de cette question
 
     if question.get("manual", False):
         width = float(question.get("width", 0))
@@ -613,7 +612,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             qt, qr, qc, qm, qw, qh = _place_choices(
                 variant, variant_id, exercise, question,
                 exercise.get("index", -1), question_iter,
-                _text_width(question.get("name", "")), question_name_width_max, settings,
+                question_name_width_max, settings,
             )
 
             # Gestion du retour à la ligne/colonne selon la direction.
