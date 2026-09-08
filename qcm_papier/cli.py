@@ -37,6 +37,9 @@ def cmd_generate(args: argparse.Namespace) -> int:
     out = args.output
     if not out:
         out = (project.settings.evaluation_short or "sujet") + ".pdf"
+    # Forcer l'extension .pdf pour éviter d'écraser un fichier existant
+    if not out.endswith('.pdf'):
+        out += '.pdf'
     pdf_writer.generate_pdf(project, out, per_student=args.per_student)
     print(f"Sujet PDF généré : {out}")
     # Sauvegarde le projet mis à jour (variantes + ids).
