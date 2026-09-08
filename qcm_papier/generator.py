@@ -443,6 +443,10 @@ def _place_choices(variant, variant_id,
         choice_iter += 1
 
     # Ajout « seconde chance » (joker) : duplication des choix en pointillés.
+    # Il faut distinguer 3 cas :
+    # 1. Pas de ligne seconde chance (settings.choice_joker_always = False) -> rien
+    # 2. Première ligne (originale) : probabilités selon présence de fantômes
+    # 3. Seconde ligne (joker) : probabilités fixes
     if settings.choice_joker_always:
         delta_x = 0.0
         delta_y = 0.0
@@ -452,34 +456,57 @@ def _place_choices(variant, variant_id,
             delta_y = 6
         dup_texts = [dict(t) for t in texts[1:]]  # sans le nom de question
         dup_circles = []
-        # Vérifier si la question a des choix fantômes (second choix)
+        
+        # Vérifier si la question a des choix fantômes (index < 0)
         a_des_choix_fantomes = any(c.get("index", -1) < 0 for c in circles)
         
+        # Pour la PREMIÈRE LIGNE (circles existants) :
+        # On modifie directement les circles originaux selon les règles
         for i, c in enumerate(circles):
-            cc = dict(c)
-            cc["dash"] = True
-            # Pour la ligne joker : probabilité basée sur le type de choix
             choice_index = c.get("index", -1)
+            
             if choice_index >= 0:
-                # Premier choix (original)
+                # Cas 2: Première ligne, choix original (index >= 0)
                 if a_des_choix_fantomes:
                     # 66% de chance si la question a des choix fantômes
                     if random.randint(1, 3) < 2:  # 2/3 ≈ 66%
-                        cc["r"] = -2.3  # précoché
+                        c["r"] = -2.3  # précoché
                     else:
-                        cc["r"] = 2.3  # non précoché
+                        c["r"] = 2.3  # non précoché
                 else:
                     # 50% de chance si pas de choix fantômes
                     if random.randint(1, 2) == 1:  # 1/2 = 50%
-                        cc["r"] = -2.3  # précoché
+                        c["r"] = -2.3  # précoché
                     else:
-                        cc["r"] = 2.3  # non précoché
+                        c["r"] = 2.3  # non précoché
             else:
-                # Second choix (fantôme) : 33% de chance
+                # Cas 2: Première ligne, choix fantôme (index < 0)
+                # 33% de chance
                 if random.randint(1, 3) == 1:  # 1/3 ≈ 33%
+                    c["r"] = -2.3  # précoché
+                else:
+                    c["r"] = 2.3  # non précoché
+        
+        # Pour la SECONDE LIGNE (joker) : duplication avec pointillés
+        for i, c in enumerate(circles):
+            cc = dict(c)
+            cc["dash"] = True  # Trait pointillé pour le joker
+            
+            # Cas 3: Seconde ligne (joker) - probabilités INDEPENDANTES
+            choice_index = c.get("index", -1)
+            if choice_index >= 0:
+                # Choix original sur la ligne joker : 50%
+                if random.randint(1, 2) == 1:
                     cc["r"] = -2.3  # précoché
                 else:
                     cc["r"] = 2.3  # non précoché
+            else:
+                # Choix fantôme sur la ligne joker : 33%
+                if random.randint(1, 3) == 1:
+                    cc["r"] = -2.3  # précoché
+                else:
+                    cc["r"] = 2.3  # non précoché
+            
             dup_circles.append(cc)
         dup_marks = []
         for m in marks:
