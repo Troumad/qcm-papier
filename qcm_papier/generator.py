@@ -664,7 +664,8 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
                     placed = True
                 else:
                     has_error = True
-                    #break
+                    print("erreur 1")
+                    break
 
             # Mettre à jour y_max si nécessaire
             if place_y + exercise_height > y_max:
@@ -687,7 +688,8 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
                     placed = True
                 else:
                     has_error = True
-                    #break
+                    print("erreur 2")
+                    break
 
             # Mettre à jour x_max si nécessaire
             if place_x + exercise_width > x_max:
@@ -697,7 +699,6 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             exercise_x = place_x
             exercise_y = place_y + exercise_height
 
-        placed=True
         # --- Fusion des éléments à la position déterminée ---
         if placed:
             _merge_arrays(variant.texts, questions_texts, place_x, place_y)
@@ -707,7 +708,6 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
 
         exercise_iter += 1
 
-    has_error=False
     if has_error:
         raise GenerateError(
             f"La variante {variant_id} ne tient pas dans le format "
