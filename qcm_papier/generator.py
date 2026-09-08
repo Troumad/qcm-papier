@@ -412,17 +412,21 @@ def _place_choices(variant, variant_id,
         else:
             # Choix fantôme : cercle pré-coché ou non
             checked_index = variant_id + question_iter + choice_iter
-            is_ghost_exercise = exercise.get("index", -1) < 0
             
-            # Pour les exercices fantômes, probabilité divisée par 2 (50% au lieu de 100%)
-            if is_ghost_exercise:
-                # 50% de chance de précocher pour les exercices fantômes
+            # Détecter si c'est un fantôme à n'importe quel niveau
+            is_ghost = (exercise.get("index", -1) < 0 or 
+                       question.get("index", -1) < 0 or 
+                       choice.get("index", -1) < 0)
+            
+            # Pour les fantômes, probabilité divisée par 2 (50% au lieu de 100%)
+            if is_ghost:
+                # 50% de chance de précocher pour TOUS les fantômes
                 if checked_index % 2 == 0:
                     circles.append({"x": x, "y": y, "r": -2.3})
                 else:
                     circles.append({"x": x, "y": y, "r": 2.3})
             else:
-                # 100% de chance si choice_checked=True pour les exercices normaux
+                # 100% de chance si choice_checked=True pour les choix normaux
                 if choice_checked:
                     circles.append({"x": x, "y": y, "r": -2.3})
                 else:
@@ -447,13 +451,13 @@ def _place_choices(variant, variant_id,
         for i, c in enumerate(circles):
             cc = dict(c)
             cc["dash"] = True
-            # Pour la ligne joker : probabilité 0.35 de précocher (vs 0.65 pour la ligne originale)
-            if c.get("r") == -2.3:  # Si le choix original était précoché
-                # Sur la ligne joker, précoche avec probabilité ~0.35
-                if (variant_id + i) % 3 < 1:  # 1/3 ≈ 0.33
-                    cc["r"] = -2.3  # précoché
-                else:
-                    cc["r"] = 2.3  # non précoché
+            # Pour la ligne joker : probabilité 0.35 de précocher
+            # (indépendamment de l'état du choix original)
+            # 0.65 pour la ligne originale, 0.35 pour la ligne joker
+            if (variant_id + i) % 3 < 1:  # ~0.33 ≈ 0.35
+                cc["r"] = -2.3  # précoché
+            else:
+                cc["r"] = 2.3  # non précoché
             dup_circles.append(cc)
         dup_marks = []
         for m in marks:
