@@ -471,23 +471,12 @@ def _place_choices(variant, variant_id,
             if choice_index >= 0:
                 # Cas 2: Première ligne, choix original (index >= 0)
                 # les Item qui ne sont pas à cocher de la première ligne de chaque question
-                if a_des_choix_fantomes:
-                    # 66% de chance si la question a des choix fantômes
-                    if random.randint(1, 3) < 2:  # 2/3 ≈ 66%
-                        c["r"] = -2.3 * -1  # précoché
-                    else:
-                        c["r"] = 2.3 * 1  # non précoché
-                else:
-                    # première ligne de l'exercice fantome
-                    # 50% de chance si pas de choix fantômes
-                    if random.randint(1, 2) == 1:  # 1/2 = 50%
-                        c["r"] = -2.3  # précoché
-                    else:
-                        c["r"] = 2.3  # non précoché
+                # -> TOUJOURS cercle vide (pas de pré-cochage aléatoire)
+                c["r"] = 2.3
             else:
                 # Cas 2: Première ligne, choix fantôme (index < 0)
                 # les items fantomes de la première ligne de chaque question
-                # 33% de chance
+                # 33% de chance de pré-cocher
                 if random.randint(1, 3) == 1:  # 1/3 ≈ 33%
                     c["r"] = -2.3  # précoché
                 else:
