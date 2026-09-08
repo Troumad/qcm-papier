@@ -595,7 +595,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
                 question_name_width_max = qw
 
         question_x = 0.0
-        question_y = 6.0 if (exercise.get("header", "") == "") else 12.0
+        question_y = 0.0 if (exercise.get("header", "") == "") else 6
         question_y_first = question_y
         exercise_width = exercise_name_width + 4
         exercise_height = 6.0
