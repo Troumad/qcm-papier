@@ -393,18 +393,19 @@ class StructureEditor(Gtk.Box):
                           lambda b: self._set_and_notify(exercise, "validation", b.get_active()))
         self.props_box.append(validation)
 
+        # Gain et Seuil sur la même ligne
+        gain_threshold_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         gain = Gtk.SpinButton.new_with_range(0, 1000, 0.5)
         gain.set_value(exercise.gain)
-        gain.connect("value-changed",
-                    lambda b: self._set_and_notify(exercise, "gain", b.get_value()))
-        self.props_box.append(self._row("Gain si validé :", gain))
-
+        gain.connect("value-changed", lambda b: self._set_and_notify(exercise, "gain", b.get_value()))
+        gain_threshold_row.append(Gtk.Label(label="Gain si validité :"))
+        gain_threshold_row.append(gain)
         threshold = Gtk.SpinButton.new_with_range(0, 1000, 0.5)
         threshold.set_value(exercise.threshold)
-        threshold.connect("value-changed",
-                         lambda b: self._set_and_notify(exercise, "threshold", b.get_value()))
-        self.props_box.append(self._row("Seuil :", threshold))
-
+        threshold.connect("value-changed", lambda b: self._set_and_notify(exercise, "threshold", b.get_value()))
+        gain_threshold_row.append(Gtk.Label(label="Seuil :"))
+        gain_threshold_row.append(threshold)
+        self.props_box.append(gain_threshold_row)
         min0 = Gtk.CheckButton(label="Note minimale 0 (pas de points négatifs)")
         min0.set_active(exercise.min0)
         min0.connect("toggled",
