@@ -936,7 +936,11 @@ class QcmWindow(Gtk.ApplicationWindow):
         name = self.project.settings.evaluation_short or "sujet"
         path = _file_dialog(self, "Enregistrer le PDF",
                             Gtk.FileChooserAction.SAVE,
-                            initial_name=f"{name}.pdf")
+                            initial_name=f"{name}.pdf",
+                            filters=[("Fichiers PDF", ["*.pdf"])])
+        # Forcer l'extension .pdf si absente
+        if path and not path.endswith('.pdf'):
+            path += '.pdf'
         if path is None:
             return
         try:
