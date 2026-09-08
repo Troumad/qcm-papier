@@ -411,8 +411,14 @@ def _place_choices(variant, variant_id,
             circles.append({"x": x, "y": y, "r": 2.3})
         else:
             # Choix fantôme : cercle pré-coché ou non selon choice_checked.
+            # Pour les exercices fantômes (index < 0), on divise la probabilité par 2
             checked_index = variant_id + question_iter + choice_iter
-            if choice_checked and (checked_index % 2 != 0 if False else True):
+            is_ghost_exercise = exercise.get("index", -1) < 0
+            
+            # Probabilité de précocher : choice_checked (1.0) ou choice_checked/2 (0.5) pour exercice fantôme
+            check_prob = choice_checked * (0.5 if is_ghost_exercise else 1.0)
+            
+            if check_prob > 0 and (checked_index % 2 != 0 if False else True):
                 # Reprend ``choices_circles.push({x:x,y:y,r:-2.3})`` quand précoché.
                 circles.append({"x": x, "y": y, "r": -2.3})
             else:
@@ -434,9 +440,18 @@ def _place_choices(variant, variant_id,
             delta_y = 6
         dup_texts = [dict(t) for t in texts[1:]]  # sans le nom de question
         dup_circles = []
-        for c in circles:
+        for i, c in enumerate(circles):
             cc = dict(c)
             cc["dash"] = True
+            # Pour la ligne joker, appliquer probabilités 0.65/0.35
+            # 0.65 pour la première ligne (originale), 0.35 pour la seconde (joker)
+            # On utilise le bit 0 du variant_id pour décider
+            if c.get("r") == -2.3:  # Si le choix original était précoché
+                # Sur la ligne joker, on précoche avec probabilité 0.35
+                if (variant_id + i) % 3 < 1:  # ~0.33, proche de 0.35
+                    cc["r"] = -2.3  # précoché
+                else:
+                    cc["r"] = 2.3  # non précoché
             dup_circles.append(cc)
         dup_marks = []
         for m in marks:
