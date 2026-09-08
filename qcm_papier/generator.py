@@ -341,7 +341,7 @@ def _place_choices(variant, variant_id,
         if exercise.get("index", -1) >= 0 and question.get("index", -1) >= 0:
             marks.append({"x": 2, "y": 6, "w": width, "h": height,
                           "e": exercise.get("index", -1), "q": question.get("index", -1)})
-        q_width = max(question_name_width_max, width) + 4
+        q_width = max(question_name_width, width) + 4
         q_height = height + 8
         return texts, rects, circles, marks, q_width, q_height
 
