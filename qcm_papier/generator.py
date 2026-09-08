@@ -387,7 +387,7 @@ def _place_choices(variant, variant_id,
         choice_y = 5
     else:
         # de gauche à droite.
-        choice_x = question_name_width_max + 4
+        choice_x = question_name_width + 4
 
     choice_iter = 0
     while choice_list:
@@ -453,7 +453,7 @@ def _place_choices(variant, variant_id,
         question_height = choice_y + 2  # approximation (5 + 5*nb + 7)
         question_width = question_name_width + 4
     else:
-        question_width = choice_x + question_name_width_max + 4
+        question_width = choice_x + 4
         question_height = 13 if settings.choice_joker_always else 7
 
     # On recalcule proprement la hauteur/largeur cumulées (comme le JS).
