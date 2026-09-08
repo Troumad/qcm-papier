@@ -725,6 +725,11 @@ def generate_all(project: Project,
     """Génère toutes les variantes demandées par les paramètres."""
     import random
 
+    # Vider les anciennes variantes (sauf layouts 'p' et 'l') avant nouvelle génération
+    for k in list(project.variants.keys()):
+        if k not in ("p", "l"):
+            del project.variants[k]
+
     if not project.settings.generate_variants:
         count = project.settings.generate_count
         ids = [random.randint(0, 4095) for _ in range(count)]
