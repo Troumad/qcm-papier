@@ -356,7 +356,7 @@ class StructureEditor(Gtk.Box):
         """Affiche les propriétés d'un exercice."""
         name = Gtk.Entry(text=exercise.name)
         name.connect("changed", lambda e: self._set_and_notify(exercise, "name", e.get_text()))
-        name.connect("focus-out-event", lambda e, _: self.tree.grab_focus())
+        name.connect("focus-out", lambda e: self.tree.grab_focus())
         self.props_box.append(Gtk.Label(label="<b>Exercice</b>", use_markup=True))
         self.props_box.append(self._row("Nom :", name))
 
@@ -393,7 +393,7 @@ class StructureEditor(Gtk.Box):
         name = Gtk.Entry(text=question.name)
         name.connect("changed",
                     lambda e: self._set_and_notify(question, "name", e.get_text()))
-        name.connect("focus-out-event", lambda e, _: self.tree.grab_focus())
+        name.connect("focus-out", lambda e: self.tree.grab_focus())
         self.props_box.append(Gtk.Label(label="<b>Question</b>", use_markup=True))
         self.props_box.append(self._row("Nom :", name))
 
