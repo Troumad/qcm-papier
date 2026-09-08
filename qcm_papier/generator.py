@@ -13,6 +13,8 @@ du code original.
 
 from __future__ import annotations
 
+import random
+
 import math
 from typing import Any
 
@@ -330,7 +332,7 @@ def _place_choices(variant, variant_id,
     rects: list[dict] = []
     circles: list[dict] = []
     marks: list[dict] = []
-
+    
     texts.append({"x": 2, "y": 5, "t": question.get("name", "")})
     question_name_width = _text_width(question.get("name", ""))  # Largeur du nom de cette question
 
@@ -407,30 +409,38 @@ def _place_choices(variant, variant_id,
 
         texts.append({"x": x, "y": y, "t": choice.get("name", ""),
                       "center": True})
-        if choice.get("index", -1) >= 0:
-            circles.append({"x": x, "y": y, "r": 2.3})
-        else:
-            # Choix fantôme : cercle pré-coché ou non
-            checked_index = variant_id + question_iter + choice_iter
-            
-            # Détecter si c'est un fantôme à n'importe quel niveau
-            is_ghost = (exercise.get("index", -1) < 0 or 
-                       question.get("index", -1) < 0 or 
-                       choice.get("index", -1) < 0)
-            
-            # Pour les fantômes, probabilité divisée par 2 (50% au lieu de 100%)
-            if is_ghost:
-                # 50% de chance de précocher pour TOUS les fantômes
-                if checked_index % 2 == 0:
-                    circles.append({"x": x, "y": y, "r": -2.3})
-                else:
-                    circles.append({"x": x, "y": y, "r": 2.3})
+        
+        # Déterminer le niveau de fantôme
+        exercice_fantome = exercise.get("index", -1) < 0
+        question_fantome = question.get("index", -1) < 0
+        choix_fantome = choice.get("index", -1) < 0
+        niveau_fantome = sum([exercice_fantome, question_fantome, choix_fantome])
+        
+        # Déterminer si c'est un choix original ou fantôme
+        est_choix_original = choice.get("index", -1) >= 0
+        
+        # Placer le cercle (pré-coché ou non)
+        if niveau_fantome == 0:
+            # Choix normal (pas de fantôme)
+            if choice_checked:
+                circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
             else:
-                # 100% de chance si choice_checked=True pour les choix normaux
-                if choice_checked:
-                    circles.append({"x": x, "y": y, "r": -2.3})
+                circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
+        else:
+            # Choix fantôme : probabilité basée sur le niveau
+            if est_choix_original:
+                # Premier choix fantôme : 1/(2*niveau) de chance
+                if random.randint(1, 2 * niveau_fantome) == 1:
+                    circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
                 else:
-                    circles.append({"x": x, "y": y, "r": 2.3})
+                    circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
+            else:
+                # Second choix fantôme : 2/(2*niveau) = 1/niveau de chance
+                if random.randint(1, 2 * niveau_fantome) < 2:
+                    circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
+                else:
+                    circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
+        
         if (exercise.get("index", -1) >= 0 and question.get("index", -1) >= 0
                 and choice.get("index", -1) >= 0):
             marks.append({"x": x, "y": y, "r": 2.3,
@@ -448,16 +458,34 @@ def _place_choices(variant, variant_id,
             delta_y = 6
         dup_texts = [dict(t) for t in texts[1:]]  # sans le nom de question
         dup_circles = []
+        # Vérifier si la question a des choix fantômes (second choix)
+        a_des_choix_fantomes = any(c.get("index", -1) < 0 for c in circles)
+        
         for i, c in enumerate(circles):
             cc = dict(c)
             cc["dash"] = True
-            # Pour la ligne joker : probabilité 0.35 de précocher
-            # (indépendamment de l'état du choix original)
-            # 0.65 pour la ligne originale, 0.35 pour la ligne joker
-            if (variant_id + i) % 3 < 1:  # ~0.33 ≈ 0.35
-                cc["r"] = -2.3  # précoché
+            # Pour la ligne joker : probabilité basée sur le type de choix
+            choice_index = c.get("index", -1)
+            if choice_index >= 0:
+                # Premier choix (original)
+                if a_des_choix_fantomes:
+                    # 66% de chance si la question a des choix fantômes
+                    if random.randint(1, 3) < 2:  # 2/3 ≈ 66%
+                        cc["r"] = -2.3  # précoché
+                    else:
+                        cc["r"] = 2.3  # non précoché
+                else:
+                    # 50% de chance si pas de choix fantômes
+                    if random.randint(1, 2) == 1:  # 1/2 = 50%
+                        cc["r"] = -2.3  # précoché
+                    else:
+                        cc["r"] = 2.3  # non précoché
             else:
-                cc["r"] = 2.3  # non précoché
+                # Second choix (fantôme) : 33% de chance
+                if random.randint(1, 3) == 1:  # 1/3 ≈ 33%
+                    cc["r"] = -2.3  # précoché
+                else:
+                    cc["r"] = 2.3  # non précoché
             dup_circles.append(cc)
         dup_marks = []
         for m in marks:
