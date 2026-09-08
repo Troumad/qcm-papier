@@ -199,7 +199,8 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None,
     c = None
 
     for i in range(copy_count):
-        variant = project.variants.variant(variant_ids[i % len(variant_ids)])
+        variant_id = variant_ids[i % len(variant_ids)]
+        variant = project.variants.variant(variant_id)
         if variant is None:
             c = None  # Réinitialiser le canvas si variante invalide
             continue
@@ -220,11 +221,15 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None,
         # ✅ NOUVELLE LIGNE : Rotation anti-trigonométrique (90°)
         # c.setPageRotation(90)
         
-        # 3. Dessin sur la page courante
+        # 3. Nommer la page avec numéro de page et ID de variante
+        page_number = i + 1
+        c.setTitle(f"Page {page_number} - Variante {variant_id}")
+        
+        # 4. Dessin sur la page courante
         _draw_header_footer(c, layout)
         _draw_variant(c, variant, layout, layout.page_height)
         
-        # 4. On valide la page (sauf si c'est la toute dernière, géré par le save)
+        # 5. On valide la page (sauf si c'est la toute dernière, géré par le save)
         if i < copy_count - 1:
             c.showPage()
 
