@@ -483,7 +483,7 @@ def _place_choices(variant, variant_id,
                     c["r"] = 2.3  # non précoché
         
         # Pour la SECONDE LIGNE (joker) : duplication avec pointillés
-        # Il manque à cocher la seconde ligne des exercices fantômes
+        # Sur la seconde ligne, ne précocher QUE les cases fantômes
         for i, c in enumerate(circles):
             cc = dict(c)
             cc["dash"] = True  # Trait pointillé pour le joker
@@ -491,13 +491,10 @@ def _place_choices(variant, variant_id,
             # Cas 3: Seconde ligne (joker) - probabilités INDEPENDANTES
             choice_index = c.get("index", -1)
             if choice_index >= 0:
-                # Choix original sur la ligne joker : 50%
-                if random.randint(1, 2) == 1:
-                    cc["r"] = -2.3  # précoché
-                else:
-                    cc["r"] = 2.3  # non précoché
+                # Choix original sur la ligne joker : JAMAIS pré-coché
+                cc["r"] = 2.3  # toujours cercle vide
             else:
-                # Choix fantôme sur la ligne joker : 33%
+                # SEULEMENT les choix fantômes sur la ligne joker peuvent être pré-cochés : 33%
                 if random.randint(1, 3) == 1:
                     cc["r"] = -2.3  # précoché
                 else:
