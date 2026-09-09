@@ -488,22 +488,38 @@ def _place_choices(variant, variant_id,
                     c["r"] = 2.3  # non précoché
         
         # Pour la SECONDE LIGNE (joker) : duplication avec pointillés
-        # Sur la seconde ligne, ne précocher QUE les cases fantômes
+        # Dans un exercice fantôme, TOUS les choix de la seconde ligne peuvent être pré-cochés
+        # Vérifier si on est dans un contexte fantôme
+        exercice_fantome = exercise.get("index", -1) < 0
+        
         for i, c in enumerate(circles):
             cc = dict(c)
             cc["dash"] = True  # Trait pointillé pour le joker
             
             # Cas 3: Seconde ligne (joker) - probabilités INDEPENDANTES
             choice_index = c.get("index", -1)
-            if choice_index >= 0:
-                # Choix original sur la ligne joker : JAMAIS pré-coché
-                cc["r"] = 2.3  # toujours cercle vide
-            else:
-                # SEULEMENT les choix fantômes sur la ligne joker peuvent être pré-cochés : 33%
-                if random.randint(1, 3) == 1:
-                    cc["r"] = -2.3  # précoché
+            if exercice_fantome:
+                # Dans un exercice fantôme : TOUS les choix peuvent être pré-cochés
+                if choice_index >= 0:
+                    # Choix original dans exercice fantôme : 1/2
+                    if random.randint(1, 2) == 1:
+                        cc["r"] = -2.3  # précoché
+                    else:
+                        cc["r"] = 2.3  # non précoché
                 else:
-                    cc["r"] = 2.3  # non précoché
+                    # Choix fantôme dans exercice fantôme : 2/2 = 100%
+                    cc["r"] = -2.3  # TOUJOURS précoché
+            else:
+                # Contexte normal : seulement les fantômes peuvent être pré-cochés
+                if choice_index >= 0:
+                    # Choix original sur la ligne joker : JAMAIS pré-coché
+                    cc["r"] = 2.3  # toujours cercle vide
+                else:
+                    # SEULEMENT les choix fantômes sur la ligne joker peuvent être pré-cochés : 33%
+                    if random.randint(1, 3) == 1:
+                        cc["r"] = -2.3  # précoché
+                    else:
+                        cc["r"] = 2.3  # non précoché
             
             dup_circles.append(cc)
         dup_marks = []
