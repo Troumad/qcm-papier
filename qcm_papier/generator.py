@@ -418,24 +418,29 @@ def _place_choices(variant, variant_id,
         
         # Placer le cercle (pré-coché ou non)
         # les vraies cases à cocher et la première ligne des exercices fantomes
-        if choice.get("index", -1) >= 0:
-            # Choix NORMAL : jamais pré-coché aléatoirement
-            # (choice_checked est utilisé pour les choix normaux dans les questions normales)
-            # NE PAS précoche tout pour l'exercice !
-            if niveau_fantome == 0 and choice_checked:
-                circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
-            else:
-                circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
-        else:
-            # Choix FANTÔME : probabilité basée sur le niveau
-            # cas pas de joker, case à cocher
-            if niveau_fantome > 0:
-                # Premier choix fantôme : 1/(2*niveau)
-                # Second choix fantôme : 2/(2*niveau) = 1/niveau
-                if random.randint(1, 2 * niveau_fantome) < (2 if choix_fantome else 1):
+        if niveau_fantome > 0:
+            # Dans un contexte fantôme (exercice ou question fantôme)
+            # TOUS les choix peuvent être pré-cochés
+            # Premier choix (index >= 0) : 1/(2*niveau)
+            # Second choix (index < 0) : 2/(2*niveau) = 1/niveau
+            if choice.get("index", -1) >= 0:
+                # Premier choix dans contexte fantôme
+                if random.randint(1, 2 * niveau_fantome) == 1:
                     circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
                 else:
                     circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
+            else:
+                # Second choix (fantôme) dans contexte fantôme
+                if random.randint(1, 2 * niveau_fantome) < 2:
+                    circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
+                else:
+                    circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
+        else:
+            # Contexte normal (pas de fantôme)
+            if choice_checked:
+                circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
+            else:
+                circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
         
         # je ne sais pas quand on peut passer ici !
         if (exercise.get("index", -1) >= 0 and question.get("index", -1) >= 0
