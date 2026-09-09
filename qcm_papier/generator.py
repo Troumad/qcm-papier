@@ -475,22 +475,35 @@ def _place_choices(variant, variant_id,
         
         # Pour la PREMIÈRE LIGNE (circles existants) :
         # On modifie directement les circles originaux selon les règles
+        # Vérifier le contexte fantôme
+        exercice_fantome = exercise.get("index", -1) < 0
+        question_fantome = question.get("index", -1) < 0
+        
         for i, c in enumerate(circles):
             choice_index = c.get("index", -1)
             
-            if choice_index >= 0:
-                # Cas 2: Première ligne, choix original (index >= 0)
-                # les Item qui ne sont pas à cocher de la première ligne de chaque question
-                # -> TOUJOURS cercle vide (pas de pré-cochage aléatoire)
-                c["r"] = 2.3
-            else:
-                # Cas 2: Première ligne, choix fantôme (index < 0)
-                # les items fantomes de la première ligne de chaque question
-                # 33% de chance de pré-cocher
-                if random.randint(1, 3) == 1:  # 1/3 ≈ 33%
-                    c["r"] = -2.3  # précoché
+            if exercice_fantome or question_fantome:
+                # Dans un contexte fantôme : TOUS les choix peuvent être pré-cochés
+                if choice_index >= 0:
+                    # Choix normal dans contexte fantôme : 50%
+                    if random.randint(1, 2) == 1:
+                        c["r"] = -2.3  # précoché
+                    else:
+                        c["r"] = 2.3  # non précoché
                 else:
-                    c["r"] = 2.3  # non précoché
+                    # Choix fantôme dans contexte fantôme : TOUJOURS pré-coché
+                    c["r"] = -2.3  # TOUJOURS précoché
+            else:
+                # Contexte normal : seulement les fantômes peuvent être pré-cochés
+                if choice_index >= 0:
+                    # Choix original : TOUJOURS cercle vide
+                    c["r"] = 2.3
+                else:
+                    # Choix fantôme : 33% de chance
+                    if random.randint(1, 3) == 1:  # 1/3 ≈ 33%
+                        c["r"] = -2.3  # précoché
+                    else:
+                        c["r"] = 2.3  # non précoché
         
         # Pour la SECONDE LIGNE (joker) : duplication avec pointillés
         # Dans un exercice/question fantôme, TOUS les choix de la seconde ligne peuvent être pré-cochés
