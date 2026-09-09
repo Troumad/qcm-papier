@@ -493,9 +493,10 @@ def _place_choices(variant, variant_id,
                     c["r"] = 2.3  # non précoché
         
         # Pour la SECONDE LIGNE (joker) : duplication avec pointillés
-        # Dans un exercice fantôme, TOUS les choix de la seconde ligne peuvent être pré-cochés
+        # Dans un exercice/question fantôme, TOUS les choix de la seconde ligne peuvent être pré-cochés
         # Vérifier si on est dans un contexte fantôme
         exercice_fantome = exercise.get("index", -1) < 0
+        question_fantome = question.get("index", -1) < 0
         
         for i, c in enumerate(circles):
             cc = dict(c)
@@ -503,16 +504,16 @@ def _place_choices(variant, variant_id,
             
             # Cas 3: Seconde ligne (joker) - probabilités INDEPENDANTES
             choice_index = c.get("index", -1)
-            if exercice_fantome:
-                # Dans un exercice fantôme : TOUS les choix peuvent être pré-cochés
+            if exercice_fantome or question_fantome:
+                # Dans un contexte fantôme (exercice ou question) : TOUS les choix peuvent être pré-cochés
                 if choice_index >= 0:
-                    # Choix original dans exercice fantôme : 1/2
+                    # Choix original dans contexte fantôme : 50%
                     if random.randint(1, 2) == 1:
                         cc["r"] = -2.3  # précoché
                     else:
                         cc["r"] = 2.3  # non précoché
                 else:
-                    # Choix fantôme dans exercice fantôme : 2/2 = 100%
+                    # Choix fantôme dans contexte fantôme : TOUJOURS pré-coché
                     cc["r"] = -2.3  # TOUJOURS précoché
             else:
                 # Contexte normal : seulement les fantômes peuvent être pré-cochés
