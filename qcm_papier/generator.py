@@ -558,9 +558,9 @@ def _place_choices(variant, variant_id,
     if choice_dir:
         # de haut en bas : la hauteur a augmenté à chaque choix.
         question_height = choice_y + 2  # approximation (5 + 5*nb + 7)
-        question_width = question_name_width + 4
+        question_width = question_name_width
     else:
-        question_width = choice_x + 4
+        question_width = choice_x
         question_height = 13 if settings.choice_joker_always else 7
 
     # On recalcule proprement la hauteur/largeur cumulées (comme le JS).
