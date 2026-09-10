@@ -1047,7 +1047,7 @@ def render_marked_page(page: ScannedPage, max_width: int = 0):
     for mark in page.marks:
         color = _MARK_COLORS[_mark_color(mark)]
         outline = color + (255,)
-        fill = color + (26,)
+        fill = None
         r = mark.get("r")
         if r is not None:
             cx, cy = matrix_inv.apply(mark["x"], mark["y"])
