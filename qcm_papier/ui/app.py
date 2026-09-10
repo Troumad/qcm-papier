@@ -1038,36 +1038,17 @@ class QcmWindow(Gtk.ApplicationWindow):
         box.append(clair_box)
 
         self.copies: list[str] = []
-        self.copies_store = Gtk.ListStore(str)
-        tree = Gtk.TreeView(model=self.copies_store)
-        tree.append_column(Gtk.TreeViewColumn("Copies", Gtk.CellRendererText(), text=0))
+        self.copies_list = Gtk.ListBox()
+        self.copies_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.copy_rows: dict[str, dict] = {}
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
         scroll.set_hexpand(True)
-        scroll.set_child(tree)
+        scroll.set_child(self.copies_list)
         box.append(scroll)
 
         self.marking_status = Gtk.Label(label="")
         box.append(self.marking_status)
-
-        self.lbl_prog_file = Gtk.Label(label="")
-        self.lbl_prog_file.set_hexpand(True)
-        box.append(self.lbl_prog_file)
-
-        self.progress_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
-                                     spacing=0)
-        self.progress_bar.set_hexpand(True)
-        self.lbl_prog_ok = Gtk.Label(label="0")
-        self.lbl_prog_err = Gtk.Label(label="0")
-        self.lbl_prog_rest = Gtk.Label(label="0")
-        for lbl, css in [(self.lbl_prog_ok, "prog_ok"),
-                          (self.lbl_prog_err, "prog_err"),
-                          (self.lbl_prog_rest, "prog_rest")]:
-            ctx = lbl.get_style_context()
-            ctx.add_class(css)
-            self.progress_bar.append(lbl)
-        self.progress_bar.set_size_request(400, 28)
-        box.append(self.progress_bar)
 
         # Résultats
         self.results_store = Gtk.ListStore(str, str, str, str, str)
@@ -1106,15 +1087,44 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         self.notebook.append_page(box, Gtk.Label(label="Correction"))
 
+    def _add_copy_row(self, path: str) -> None:
+        fname = os.path.basename(path)
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        row.set_margin_start(4)
+        row.set_margin_end(4)
+        row.set_margin_top(2)
+        row.set_margin_bottom(2)
+        lbl = Gtk.Label(label=fname)
+        lbl.set_xalign(0)
+        lbl.set_hexpand(True)
+        row.append(lbl)
+        bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        bar.set_size_request(120, 20)
+        lbl_ok = Gtk.Label(label="")
+        lbl_err = Gtk.Label(label="")
+        lbl_rest = Gtk.Label(label="")
+        for l, css in [(lbl_ok, "prog_ok"), (lbl_err, "prog_err"),
+                        (lbl_rest, "prog_rest")]:
+            l.get_style_context().add_class(css)
+            bar.append(l)
+        row.append(bar)
+        self.copies_list.append(row)
+        self.copy_rows[path] = {
+            "row": row, "bar": bar,
+            "lbl_ok": lbl_ok, "lbl_err": lbl_err, "lbl_rest": lbl_rest,
+            "n_ok": 0, "n_err": 0, "n_pages": 0,
+        }
+
     def _on_load_copies(self, _btn) -> None:
         paths = _file_dialog_multiple(self, "Choisir les copies",
                             filters=[("PDF et images", ["*.pdf", "*.png",
                                                          "*.jpg", "*.jpeg"])])
         if not paths:
             return
-        self.copies.extend(paths)
         for p in paths:
-            self.copies_store.append([os.path.basename(p)])
+            if p not in self.copies:
+                self.copies.append(p)
+                self._add_copy_row(p)
         self.marking_status.set_text(f"{len(self.copies)} copie(s) chargée(s).")
 
     def _on_load_students(self, _btn) -> None:
@@ -1145,25 +1155,29 @@ class QcmWindow(Gtk.ApplicationWindow):
         n_ok = 0
         n_err = 0
         total = len(self.copies)
-        self._update_progress(0, 0, total)
-        for i, copy_path in enumerate(self.copies):
+        for copy_path in self.copies:
             fname = os.path.basename(copy_path)
-            self._update_progress(n_ok, n_err, total - i,
-                                  filename=f"Correction : {fname}")
+            info = self.copy_rows.get(copy_path)
             try:
                 pages = scanner.load_pages_from_file(copy_path, dpi=150)
             except Exception as e:
                 n_err += 1
                 self.results_store.append([fname, "",
                                             "", "", f"Erreur : {e}"])
-                self._update_progress(n_ok, n_err, total - i - 1,
-                                      filename=f"Correction : {fname}")
+                if info:
+                    info["n_err"] = 1
+                    info["n_pages"] = 1
+                    self._update_copy_row(copy_path)
                 continue
+            if info:
+                info["n_pages"] = len(pages)
             for page in pages:
                 ok = scanner.auto_check(page, self.project,
                                          clair=int(self.clair_spin.get_value()))
                 if ok:
                     n_ok += 1
+                    if info:
+                        info["n_ok"] += 1
                     eid = page.student_eid or page.student_id or ""
                     note = page.value if page.value is not None else 0.0
                     if eid:
@@ -1179,6 +1193,8 @@ class QcmWindow(Gtk.ApplicationWindow):
                     self.marked_pages.append((label, page))
                 else:
                     n_err += 1
+                    if info:
+                        info["n_err"] += 1
                     reason = "Échec alignement"
                     if page.variant_id is None:
                         reason = "Code-barres non trouvé"
@@ -1188,32 +1204,34 @@ class QcmWindow(Gtk.ApplicationWindow):
                                                 "", "", reason])
                     label = f"{fname} ⚠ {reason}"
                     self.marked_pages.append((label, page))
-                self._update_progress(n_ok, n_err, total - i - 1,
-                                      filename=f"Correction : {fname}")
+                if info:
+                    self._update_copy_row(copy_path)
         self._last_notes = notes
         self.marking_status.set_text(
             f"{n_ok} corrigée(s), {n_err} en erreur sur {total}.")
         self._refresh_page_selector()
 
-    def _update_progress(self, n_ok: int, n_err: int, n_rest: int,
-                          filename: str = "") -> None:
+    def _update_copy_row(self, copy_path: str) -> None:
+        info = self.copy_rows.get(copy_path)
+        if info is None:
+            return
+        n_ok = info["n_ok"]
+        n_err = info["n_err"]
+        n_total = info["n_pages"]
+        n_rest = max(0, n_total - n_ok - n_err)
         total = n_ok + n_err + n_rest
-        self.lbl_prog_ok.set_text(str(n_ok))
-        self.lbl_prog_err.set_text(str(n_err))
-        self.lbl_prog_rest.set_text(str(n_rest))
-        bar_w = self.progress_bar.get_width()
-        if bar_w < 50:
-            bar_w = 400
+        info["lbl_ok"].set_text(str(n_ok) if n_ok else "")
+        info["lbl_err"].set_text(str(n_err) if n_err else "")
+        info["lbl_rest"].set_text(str(n_rest) if n_rest else "")
+        bar_w = 120
         if total > 0:
-            self.lbl_prog_ok.set_size_request(max(bar_w * n_ok // total, 20 if n_ok else 0), -1)
-            self.lbl_prog_err.set_size_request(max(bar_w * n_err // total, 20 if n_err else 0), -1)
-            self.lbl_prog_rest.set_size_request(max(bar_w * n_rest // total, 20 if n_rest else 0), -1)
+            info["lbl_ok"].set_size_request(max(bar_w * n_ok // total, 14 if n_ok else 0), -1)
+            info["lbl_err"].set_size_request(max(bar_w * n_err // total, 14 if n_err else 0), -1)
+            info["lbl_rest"].set_size_request(max(bar_w * n_rest // total, 14 if n_rest else 0), -1)
         else:
-            self.lbl_prog_ok.set_size_request(0, -1)
-            self.lbl_prog_err.set_size_request(0, -1)
-            self.lbl_prog_rest.set_size_request(bar_w, -1)
-        if filename:
-            self.lbl_prog_file.set_text(filename)
+            info["lbl_ok"].set_size_request(0, -1)
+            info["lbl_err"].set_size_request(0, -1)
+            info["lbl_rest"].set_size_request(bar_w, -1)
 
     def _refresh_page_selector(self) -> None:
         labels = [lbl for lbl, _p in self.marked_pages] or [""]
@@ -1291,7 +1309,9 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.editor.project = self.project
         self.editor._fill_tree()
         self.copies = []
-        self.copies_store.clear()
+        while self.copies_list.get_first_child() is not None:
+            self.copies_list.remove(self.copies_list.get_first_child())
+        self.copy_rows.clear()
         self.results_store.clear()
         self.generate_status.set_text("Nouveau projet.")
         self.set_title("Générateur/Correcteur de QCM papier - Nouveau")
@@ -1558,7 +1578,7 @@ class QcmApplication(Gtk.Application):
         if self.copies:
             for p in self.copies:
                 win.copies.append(p)
-                win.copies_store.append([os.path.basename(p)])
+                win._add_copy_row(p)
             win.marking_status.set_text(f"{len(win.copies)} copie(s) chargée(s).")
             win._on_correct(None)
 
