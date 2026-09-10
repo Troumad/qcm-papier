@@ -169,6 +169,8 @@ class ScannedPage:
     student_name: str | None = None
     student_firstname: str | None = None
     marks: list[dict] = field(default_factory=list)
+    matrix: Matrix | None = None
+    matrix_inv: Matrix | None = None
     value: float | None = None
     total: float | None = None
     complete: bool = False
@@ -946,6 +948,8 @@ def auto_check(page: ScannedPage, project: Project,
     matrix = compute_viewport(page, vs,
                               page.img.width, page.img.height)["matrix"]
     matrix_inv = matrix.inverse()
+    page.matrix = matrix
+    page.matrix_inv = matrix_inv
     if not read_barcode(page, vs, matrix):
         return False
     read_student_id(page, vs, matrix_inv)
@@ -958,6 +962,91 @@ def auto_check(page: ScannedPage, project: Project,
     page.total = score.total
     page.complete = score.complete
     return True
+
+
+# ---------------------------------------------------------------------------
+# Rendu d'une page corrigée (overlay vert/rouge/jaune sur les cases)
+# ---------------------------------------------------------------------------
+
+_MARK_COLORS = {
+    "yellow": (255, 255, 0),
+    "green": (0, 255, 0),
+    "red": (255, 0, 0),
+    "blue": (0, 0, 255),
+}
+
+
+def _mark_color(mark: dict) -> str:
+    """Couleur d'une mark selon la logique de updateUserInterface (index.html
+    ~4634-4655) : jaune par défaut, vert si correcte cochée, rouge si
+    pénalisante cochée, bleu si neutre cochée ou mark manuelle nulle."""
+    if mark.get("value") is not None:
+        v = mark["value"]
+        if v > 0:
+            return "green"
+        if v < 0:
+            return "red"
+        return "blue"
+    if mark.get("checked"):
+        if mark.get("neutral"):
+            return "blue"
+        if mark.get("correct"):
+            return "green"
+        if mark.get("penalty"):
+            return "red"
+    return "yellow"
+
+
+def render_marked_page(page: ScannedPage, max_width: int = 0):
+    """Renvoie une image Pillow de la page avec l'overlay des cases.
+
+    Reprend le rendu SVG de ``updateUserInterface`` (index.html ~4518-4655) :
+    chaque mark (case à cocher ou zone manuelle) est dessinée par-dessus
+    l'image scannée, colorée selon la logique vert/rouge/jaune/bleu.
+    Les coordonnées des marks sont en mm (système page) et converties en
+    pixels canvas via ``matrix_inv``.
+
+    ``max_width`` (si > 0) limite la largeur de l'image renvoyée (pour
+    l'affichage dans le GUI) en conservant les proportions.
+    """
+    from PIL import ImageDraw, Image as PILImage
+
+    base = page.img.img if page.img is not None else None
+    if base is None:
+        return None
+    img = base.convert("RGBA")
+    draw = ImageDraw.Draw(img, "RGBA")
+
+    matrix_inv = page.matrix_inv
+    if matrix_inv is None:
+        return img
+
+    for mark in page.marks:
+        color = _MARK_COLORS[_mark_color(mark)]
+        outline = color + (255,)
+        fill = color + (26,)
+        r = mark.get("r")
+        if r is not None:
+            cx, cy = matrix_inv.apply(mark["x"], mark["y"])
+            canvas_r = abs(round(matrix_inv.a * r + matrix_inv.b * r))
+            canvas_r = max(canvas_r, 1)
+            bbox = [cx - canvas_r, cy - canvas_r, cx + canvas_r, cy + canvas_r]
+            draw.ellipse(bbox, outline=outline, fill=fill, width=2)
+        else:
+            w = mark.get("w")
+            h = mark.get("h")
+            if w is not None and h is not None:
+                cx, cy = matrix_inv.apply(mark["x"], mark["y"])
+                cw = abs(round(matrix_inv.a * w + matrix_inv.b * w))
+                ch = abs(round(matrix_inv.c * h + matrix_inv.d * h))
+                bbox = [cx, cy, cx + cw, cy + ch]
+                draw.rectangle(bbox, outline=outline, fill=fill, width=2)
+
+    if max_width and max_width > 0 and img.width > max_width:
+        ratio = max_width / img.width
+        img = img.resize((max_width, int(img.height * ratio)),
+                         PILImage.LANCZOS)
+    return img
 
 
 # ---------------------------------------------------------------------------

@@ -21,7 +21,7 @@ import os
 
 import gi
 gi.require_version('Gtk', '4.0')
-from gi.repository import Gtk, Gdk
+from gi.repository import Gtk, Gdk, GLib
 
 from .. import generator, pdf_writer, project as project_mod, scanner, scodoc
 from ..model import Project
@@ -55,6 +55,41 @@ def _file_dialog(parent, title: str, action, filters=None, initial_name=None):
     dialog.show()
     loop.run()
     return path[0]
+
+
+def _file_dialog_multiple(parent, title: str, filters=None):
+    """Sélecteur de fichiers natif en mode sélection multiple (GTK 4)."""
+    dialog = Gtk.FileChooserNative.new(title, parent, Gtk.FileChooserAction.OPEN,
+                                       None, None)
+    dialog.set_select_multiple(True)
+    if filters:
+        for name, patterns in filters:
+            filt = Gtk.FileFilter()
+            filt.set_name(name)
+            for p in patterns:
+                filt.add_pattern(p)
+            dialog.add_filter(filt)
+
+    paths = []
+    from gi.repository import GLib
+    loop = GLib.MainLoop()
+
+    def on_response(native, response):
+        if response == Gtk.ResponseType.ACCEPT:
+            files = dialog.get_files()
+            for i in range(files.get_n_items()):
+                file_obj = files.get_item(i)
+                p = file_obj.get_path() if file_obj else None
+                if p:
+                    paths.append(p)
+        dialog.destroy()
+        loop.quit()
+
+    dialog.connect("response", on_response)
+    dialog.show()
+    loop.run()
+    return paths
+
 
 class QcmWindow(Gtk.ApplicationWindow):
     """Fenêtre principale de l'application."""
@@ -999,20 +1034,39 @@ class QcmWindow(Gtk.ApplicationWindow):
         scroll2.set_child(results_tree)
         box.append(scroll2)
 
+        # Affichage des pages corrigées
+        view_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.page_selector = Gtk.DropDown.new_from_strings([""])
+        self.page_selector.connect("notify::selected", self._on_page_selected)
+        view_box.append(self.page_selector)
+        btn_prev = Gtk.Button(label="Précédent")
+        btn_prev.connect("clicked", lambda _b: self._show_marked_page(-1))
+        btn_next = Gtk.Button(label="Suivant")
+        btn_next.connect("clicked", lambda _b: self._show_marked_page(+1))
+        view_box.append(btn_prev)
+        view_box.append(btn_next)
+        box.append(view_box)
+
+        self.marked_pages: list = []
+        self.marked_image = Gtk.Picture()
+        scroll3 = Gtk.ScrolledWindow()
+        scroll3.set_vexpand(True)
+        scroll3.set_hexpand(True)
+        scroll3.set_child(self.marked_image)
+        box.append(scroll3)
+
         self.notebook.append_page(box, Gtk.Label(label="Correction"))
 
     def _on_load_copies(self, _btn) -> None:
-        path = _file_dialog(self, "Choisir les copies",
-                            Gtk.FileChooserAction.OPEN,
+        paths = _file_dialog_multiple(self, "Choisir les copies",
                             filters=[("PDF et images", ["*.pdf", "*.png",
                                                          "*.jpg", "*.jpeg"])])
-        if path is None:
+        if not paths:
             return
-        self.copies = [path]
-        self.copies_store.clear()
-        self.copies_store.append([os.path.basename(path)])
-        self.marking_status.set_text("1 copie chargée. (Pour plusieurs fichiers, "
-                                      "utilisez la CLI : qcm-papier correct -c ...)")
+        self.copies.extend(paths)
+        for p in paths:
+            self.copies_store.append([os.path.basename(p)])
+        self.marking_status.set_text(f"{len(self.copies)} copie(s) chargée(s).")
 
     def _on_load_students(self, _btn) -> None:
         path = _file_dialog(self, "Table étudiants Scodoc",
@@ -1037,6 +1091,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             self.marking_status.set_text("Aucune copie chargée.")
             return
         self.results_store.clear()
+        self.marked_pages = []
         notes: dict[str, float] = {}
         n_ok = 0
         for copy_path in self.copies:
@@ -1061,11 +1116,53 @@ class QcmWindow(Gtk.ApplicationWindow):
                         f"{note:.2f}",
                         "complète" if page.complete else "incomplète",
                     ])
+                    label = f"{os.path.basename(copy_path)} v{page.variant_id} {page.student_id or ''}"
+                    self.marked_pages.append((label, page))
                 else:
                     self.results_store.append([os.path.basename(copy_path), "",
                                                 "", "", "Échec alignement"])
         self._last_notes = notes
         self.marking_status.set_text(f"{n_ok} copie(s) corrigée(s).")
+        self._refresh_page_selector()
+
+    def _refresh_page_selector(self) -> None:
+        labels = [lbl for lbl, _p in self.marked_pages] or [""]
+        sm = Gtk.StringList.new(labels)
+        self.page_selector.set_model(sm)
+        if self.marked_pages:
+            self._display_marked_page(0)
+
+    def _on_page_selected(self, _dropdown, _pspec) -> None:
+        idx = self.page_selector.get_selected()
+        if idx >= 0 and idx < len(self.marked_pages):
+            self._display_marked_page(idx)
+
+    def _show_marked_page(self, delta: int) -> None:
+        if not self.marked_pages:
+            return
+        idx = self.page_selector.get_selected()
+        idx = max(0, min(len(self.marked_pages) - 1, idx + delta))
+        self.page_selector.set_selected(idx)
+        self._display_marked_page(idx)
+
+    def _display_marked_page(self, idx: int) -> None:
+        if idx < 0 or idx >= len(self.marked_pages):
+            return
+        _label, page = self.marked_pages[idx]
+        img = scanner.render_marked_page(page)
+        if img is None:
+            return
+        import io
+        from PIL import Image as PILImage
+        max_w = max(200, self.get_width() - 40)
+        if img.width > max_w:
+            ratio = max_w / img.width
+            img = img.resize((max_w, int(img.height * ratio)), PILImage.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="png")
+        bytes_data = buf.getvalue()
+        texture = Gdk.Texture.new_from_bytes(GLib.Bytes.new(bytes_data))
+        self.marked_image.set_paintable(texture)
 
     def _on_export_scodoc(self, _btn) -> None:
         if not self._last_notes:
@@ -1095,6 +1192,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.project = Project()
         self.editor.project = self.project
         self.editor._fill_tree()
+        self.copies = []
         self.copies_store.clear()
         self.results_store.clear()
         self.generate_status.set_text("Nouveau projet.")
