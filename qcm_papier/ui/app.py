@@ -91,6 +91,13 @@ def _file_dialog_multiple(parent, title: str, filters=None):
     return paths
 
 
+def _img_to_texture(img) -> object:
+    import io
+    buf = io.BytesIO()
+    img.save(buf, format="png")
+    return Gdk.Texture.new_from_bytes(GLib.Bytes.new(buf.getvalue()))
+
+
 class QcmWindow(Gtk.ApplicationWindow):
     """Fenêtre principale de l'application."""
 
@@ -1160,13 +1167,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         if img.width > max_w:
             ratio = max_w / img.width
             img = img.resize((max_w, int(img.height * ratio)), PILImage.LANCZOS)
-        self.marked_image.set_paintable(self._img_to_texture(img))
-
-    def _img_to_texture(self, img) -> object:
-        import io
-        buf = io.BytesIO()
-        img.save(buf, format="png")
-        return Gdk.Texture.new_from_bytes(GLib.Bytes.new(buf.getvalue()))
+        self.marked_image.set_paintable(_img_to_texture(img))
 
     def _on_enlarge_page(self, _btn) -> None:
         idx = self.page_selector.get_selected()
@@ -1330,7 +1331,7 @@ class MarkedPageWindow(Gtk.Window):
         self.scroll = Gtk.ScrolledWindow()
         self.scroll.set_hexpand(True)
         self.scroll.set_vexpand(True)
-        self.image = Gtk.Image()
+        self.image = Gtk.Picture()
         self.scroll.set_child(self.image)
         left.append(self.scroll)
 
@@ -1431,11 +1432,7 @@ class MarkedPageWindow(Gtk.Window):
         h = max(1, int(self._img.height * self._zoom))
         resized = self._img.resize((w, h), PILImage.LANCZOS)
         self.image.set_size_request(w, h)
-        import io
-        buf = io.BytesIO()
-        resized.save(buf, format="png")
-        texture = Gdk.Texture.new_from_bytes(GLib.Bytes.new(buf.getvalue()))
-        self.image.set_from_paintable(texture)
+        self.image.set_paintable(_img_to_texture(resized))
 
     def add_side_widget(self, widget):
         self.side.append(widget)
