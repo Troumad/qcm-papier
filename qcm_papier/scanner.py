@@ -137,6 +137,20 @@ class PixelImage:
         grey = 0.299 * r + 0.587 * g + 0.114 * b
         return grey, a
 
+    def get_mark_grey(self, x: int, y: int) -> tuple[float, float]:
+        """Retourne (grey, alpha) d'un pixel avec la formule de readMark du JS.
+
+        ``grey = 2*min(r,g,b)/3 + (0.299*r + 0.587*g + 0.114*b)/3`` :
+        donne plus de poids au canal le plus faible (noir/gris foncé), pour
+        mieux distinguer les cases cochées des contours imprimés.
+        """
+        if 0 <= x < self.width and 0 <= y < self.height:
+            r, g, b, a = self.pixels[x, y]
+        else:
+            r, g, b, a = 255, 255, 255, 255
+        grey = 2 * min(r, g, b) / 3 + (0.299 * r + 0.587 * g + 0.114 * b) / 3
+        return grey, a
+
     def get_region(self, x: int, y: int, w: int, h: int) -> list[tuple[int, int, int, int]]:
         """Retourne les pixels RGBA d'une région (liste linéaire)."""
         region = []
@@ -784,7 +798,7 @@ def read_mark(pimg: PixelImage, matrix_inv: Matrix,
     bright = 0
     for yy in range(canvas_top, canvas_top + canvas_h):
         for xx in range(canvas_left, canvas_left + canvas_w):
-            grey, alpha = pimg.get_grey(xx, yy)
+            grey, alpha = pimg.get_mark_grey(xx, yy)
             if alpha == 255:
                 # Seuils du code original : sombre si grey < 2*clair/3,
                 # moyen si grey < clair, sinon clair.
