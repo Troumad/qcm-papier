@@ -953,6 +953,12 @@ def auto_check(page: ScannedPage, project: Project,
     if not read_barcode(page, vs, matrix):
         return False
     read_student_id(page, vs, matrix_inv)
+    if page.student_id is not None:
+        student = project.students.get(page.student_id)
+        if student is not None:
+            page.student_eid = student.eid
+            page.student_name = student.name
+            page.student_firstname = student.firstname
     show_marks(page, project)
     auto_marks(page, matrix_inv)
     score = score_page(project, page.marks, variant_id=page.variant_id,
