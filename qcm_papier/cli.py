@@ -68,6 +68,16 @@ def cmd_pdf(args: argparse.Namespace) -> int:
         out += '.pdf'
     pdf_writer.generate_pdf(project, out, per_student=args.per_student)
     print(f"Sujet PDF généré : {out}")
+    # Option --edit : ouvrir l'interface graphique sur le projet pour éditer.
+    if getattr(args, "edit", False):
+        try:
+            from .ui.app import run as gui_run
+        except ImportError as e:
+            print(f"Interface graphique indisponible ({e}) : --edit ignoré.",
+                  file=sys.stderr)
+            return 0
+        print(f"Ouverture de l'interface graphique : {args.project}")
+        return gui_run(project_path=args.project)
     return 0
 
 
@@ -203,6 +213,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_pdf.add_argument("--output", "-o", help="Fichier PDF de sortie")
     p_pdf.add_argument("--per-student", action="store_true",
                        help="Générer une copie par étudiant (au lieu d'une par variante)")
+    p_pdf.add_argument("--edit", action="store_true",
+                       help="Ouvrir l'interface graphique sur le projet après génération du PDF")
     p_pdf.set_defaults(func=cmd_pdf)
 
     # generate : tout en un (rétro-compatible)
