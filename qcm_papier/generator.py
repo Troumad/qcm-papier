@@ -356,11 +356,11 @@ def _place_choices(variant, variant_id,
                                      _tri(settings, "question_dir_left", "question_dir_top", "question_dir_both"))
     choice_dir = rg.pseudo_random(variant_id, variant_id, BIT_CHOICE_DIR,
                                    _tri(settings, "choice_dir_left", "choice_dir_top", "choice_dir_both"))
-    choice_new = rg.pseudo_random(variant_id, question_iter, BIT_CHOICE_NEW,
+    choice_new = rg.pseudo_random(variant_id, exercise_index*100+question_iter, BIT_CHOICE_NEW,
                                   _tri(settings, "choice_new_never", "choice_new_always", "choice_new_sometimes"))
-    choice_checked = rg.pseudo_random(variant_id, question_iter, BIT_CHOICE_CHECKED,
+    choice_checked = rg.pseudo_random(variant_id, exercise_index*100+question_iter, BIT_CHOICE_CHECKED,
                                       _tri(settings, "choice_checked_never", "choice_checked_always", "choice_checked_sometimes"))
-    choice_random = rg.pseudo_random(variant_id, question_iter, BIT_CHOICE_ORDER,
+    choice_random = rg.pseudo_random(variant_id, exercise_index*100+question_iter, BIT_CHOICE_ORDER,
                                      _tri(settings, "choice_order_never", "choice_order_always", "choice_order_sometimes"))
 
     choice_list = [_choice_to_dict(ch) for ch in question.get("choices", [])]
@@ -422,7 +422,7 @@ def _place_choices(variant, variant_id,
             # Dans un EXERCICE FANTOME : TOUS les choix peuvent être pré-cochés
             if choice.get("index", -1) >= 0:
                 # Choix normal dans exercice fantôme : 50%
-                if random.randint(1, 2) == 1: # ligne fantôme
+                if random.randint(1, 3) == 1: # ligne fantôme
                     circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
                 else:
                     circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
@@ -443,12 +443,13 @@ def _place_choices(variant, variant_id,
         else:
             # Contexte normal (pas de fantôme)
             if choice_checked :
-                if random.randint(1, 2) == 1: # précoché sans jocker
+                info={"index": choice.get("index", -1)}["index"]
+                if  info<0 and random.randint(1, 2) == 1 : # précoché sans jocker
                     circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
                 else:
-                    circles.append({"x": x, "y": y, "r": 2.3*.5, "index": choice.get("index", -1)})
+                    circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
             else:
-                circles.append({"x": x, "y": y, "r": 2.3*.5, "index": choice.get("index", -1)})
+                circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
         
         # je ne sais pas quand on peut passer ici !
         if (exercise.get("index", -1) >= 0 and question.get("index", -1) >= 0
