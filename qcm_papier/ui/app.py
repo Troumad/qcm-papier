@@ -1272,7 +1272,8 @@ class QcmWindow(Gtk.ApplicationWindow):
         if idx < 0 or idx >= len(self.marked_pages):
             return
         win = MarkedPageWindow(self.marked_pages, idx, self,
-                               on_navigate=self._enlarge_navigate)
+                               on_navigate=self._enlarge_navigate,
+                               project=self.project)
         win.present()
 
     def _enlarge_navigate(self, idx: int) -> None:
@@ -1387,13 +1388,15 @@ class QcmWindow(Gtk.ApplicationWindow):
 class MarkedPageWindow(Gtk.Window):
     """Fenêtre pop-up affichant une page corrigée en grand avec zoom et menu latéral."""
 
-    def __init__(self, marked_pages, idx, parent=None, on_navigate=None):
+    def __init__(self, marked_pages, idx, parent=None, on_navigate=None,
+                 project=None):
         super().__init__(title="Page corrigée", transient_for=parent,
                          default_width=1100, default_height=800,
                          modal=False, destroy_with_parent=True)
         self.pages = marked_pages
         self.idx = idx
         self.on_navigate = on_navigate
+        self._project = project
         self._zoom = 1.0
         self._img = None
 
@@ -1472,6 +1475,20 @@ class MarkedPageWindow(Gtk.Window):
 
         self.side.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
+        # Édition manuelle du numéro étudiant
+        self.side.append(Gtk.Label(label="N° étudiant :"))
+        self.entry_student = Gtk.Entry()
+        self.entry_student.set_max_length(8)
+        self.entry_student.set_placeholder_text("p0000000")
+        btn_apply_sid = Gtk.Button(label="Appliquer")
+        btn_apply_sid.connect("clicked", self._on_apply_student_id)
+        sid_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        sid_box.append(self.entry_student)
+        sid_box.append(btn_apply_sid)
+        self.side.append(sid_box)
+
+        self.side.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
         # Navigation entre copies
         nav_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.btn_prev = Gtk.Button(label="‹ Précédent")
@@ -1526,9 +1543,26 @@ class MarkedPageWindow(Gtk.Window):
             self.lbl_status.set_markup(f"Statut : <span color='{color}'>{status}</span>")
         self.btn_prev.set_sensitive(self.idx > 0)
         self.btn_next.set_sensitive(self.idx < n - 1)
+        self.entry_student.set_text(page.student_id or "")
         self.zoom_scale.set_value(self._zoom)
         self.zoom_label.set_text(f"{int(self._zoom * 100)} %")
         self._update_image()
+
+    def _on_apply_student_id(self, _btn) -> None:
+        if self.idx < 0 or self.idx >= len(self.pages):
+            return
+        _label, page = self.pages[self.idx]
+        sid = self.entry_student.get_text().strip()
+        if not sid:
+            return
+        page.student_id = sid
+        if hasattr(self, "_project") and self._project is not None:
+            student = self._project.students.get(sid)
+            if student is not None:
+                page.student_eid = student.eid
+                page.student_name = student.name
+                page.student_firstname = student.firstname
+        self._load_page()
 
     def _on_ctrl_scroll(self, ctrl, dx, dy):
         state = ctrl.get_current_event_state()

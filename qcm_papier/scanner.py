@@ -826,7 +826,8 @@ def read_mark(pimg: PixelImage, matrix_inv: Matrix,
 # ---------------------------------------------------------------------------
 
 def read_student_id(page: ScannedPage, variants: dict,
-                    matrix_inv: Matrix, clair_start: int = 10) -> bool:
+                    matrix_inv: Matrix, clair_start: int = 10,
+                    clair_max: int = 241) -> bool:
     """Lit le numéro étudiant (7 chiffres) à partir des cases d'identification.
 
     Reprend ``Page.readStudentId`` (index.html ~3294-3365).
@@ -843,7 +844,7 @@ def read_student_id(page: ScannedPage, variants: dict,
         for digit in range(7):
             id_val *= 10
             found = False
-            for clair in range(20, 241, 10):
+            for clair in range(20, clair_max, 10):
                 for value in range(10):
                     if read_mark(pimg, matrix_inv,
                                   variant.id_columns[value + 1],
@@ -864,7 +865,7 @@ def read_student_id(page: ScannedPage, variants: dict,
         for digit in range(7):
             id_val *= 10
             found = False
-            for clair in range(clair_start, 241, 10):
+            for clair in range(clair_start, clair_max, 10):
                 for value in range(10):
                     if read_mark(pimg, matrix_inv,
                                   variant.id_columns[digit],
@@ -968,7 +969,7 @@ def auto_check(page: ScannedPage, project: Project,
     page.matrix_inv = matrix_inv
     if not read_barcode(page, vs, matrix):
         return False
-    read_student_id(page, vs, matrix_inv)
+    read_student_id(page, vs, matrix_inv, clair_max=clair + 1)
     if page.student_id is not None:
         student = project.students.get(page.student_id)
         if student is not None:
