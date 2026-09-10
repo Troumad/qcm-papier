@@ -147,6 +147,7 @@ def cmd_correct(args: argparse.Namespace) -> int:
 
     print(f"Correction de {len(copies)} fichier(s)...")
     notes: dict[str, float] = {}
+    corrected_pages: list = []
     for copy_path in copies:
         try:
             pages = scanner.load_pages_from_file(copy_path, dpi=args.dpi)
@@ -163,9 +164,27 @@ def cmd_correct(args: argparse.Namespace) -> int:
                 notes[page.student_eid] = page.value
             elif page.student_id is not None and page.value is not None:
                 notes[page.student_id] = page.value
+            corrected_pages.append((copy_path, page))
             print(f"  {copy_path} : variante {page.variant_id}, "
                   f"étudiant {page.student_id}, note {page.value}/{page.total}"
                   f" {'(complète)' if page.complete else '(incomplète)'}")
+
+    # Rendu visuel des pages corrigées (overlay vert/rouge).
+    if getattr(args, "render", None):
+        render_dir = args.render if isinstance(args.render, str) else "corrigees"
+        os.makedirs(render_dir, exist_ok=True)
+        n = 0
+        for copy_path, page in corrected_pages:
+            img = scanner.render_marked_page(page)
+            if img is None:
+                continue
+            base = os.path.splitext(os.path.basename(copy_path))[0]
+            suffix = f"_v{page.variant_id}_{page.student_id or 'anonyme'}"
+            out = os.path.join(render_dir, f"{base}{suffix}.png")
+            img.save(out)
+            n += 1
+            print(f"  Page corrigée rendue : {out}")
+        print(f"{n} page(s) rendue(s) dans {render_dir}")
 
     # Export Scodoc (optionnel).
     if args.scodoc_input:
@@ -268,6 +287,9 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Résolution de rendu des PDF (défaut 150)")
     p_cor.add_argument("--note-max", type=float, default=20.0,
                        help="Note maximale de l'échelle Scodoc (défaut 20)")
+    p_cor.add_argument("--render", nargs="?", const="corrigees", default=None,
+                       help="Rendre les pages corrigées en PNG (overlay vert/rouge) ; "
+                            "valeur optionnelle = répertoire de sortie (défaut 'corrigees')")
     p_cor.set_defaults(func=cmd_correct)
 
     # check
