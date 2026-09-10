@@ -1122,3 +1122,91 @@ def load_pages_from_file(path: str, dpi: int = 150) -> list[ScannedPage]:
         img = Image.open(path)
         pages.append(ScannedPage(img=PixelImage(img)))
     return pages
+
+
+# ---------------------------------------------------------------------------
+# Sauvegarde / rechargement d'un état de correction
+# ---------------------------------------------------------------------------
+
+def _matrix_to_dict(m: Matrix) -> dict:
+    return {"a": m.a, "b": m.b, "c": m.c, "d": m.d, "e": m.e, "f": m.f}
+
+
+def _matrix_from_dict(d: dict) -> Matrix:
+    return Matrix(a=d.get("a", 1.0), b=d.get("b", 0.0),
+                  c=d.get("c", 0.0), d=d.get("d", 1.0),
+                  e=d.get("e", 0.0), f=d.get("f", 0.0))
+
+
+def _page_to_state(page: ScannedPage) -> dict:
+    state = {
+        "variant_id": page.variant_id,
+        "student_id": page.student_id,
+        "student_eid": page.student_eid,
+        "student_name": page.student_name,
+        "student_firstname": page.student_firstname,
+        "barcode": page.barcode,
+        "value": page.value,
+        "total": page.total,
+        "complete": page.complete,
+        "matrix": _matrix_to_dict(page.matrix) if page.matrix else None,
+        "matrix_inv": _matrix_to_dict(page.matrix_inv) if page.matrix_inv else None,
+        "marks": [],
+    }
+    for mark in page.marks:
+        m = {k: v for k, v in mark.items()
+             if k in ("x", "y", "r", "e", "q", "c", "w", "h",
+                      "checked", "correct", "neutral", "penalty",
+                      "value", "total", "gain")}
+        state["marks"].append(m)
+    return state
+
+
+def _page_from_state(page: ScannedPage, state: dict) -> None:
+    page.variant_id = state.get("variant_id")
+    page.student_id = state.get("student_id")
+    page.student_eid = state.get("student_eid")
+    page.student_name = state.get("student_name")
+    page.student_firstname = state.get("student_firstname")
+    page.barcode = state.get("barcode", "")
+    page.value = state.get("value")
+    page.total = state.get("total")
+    page.complete = state.get("complete", False)
+    if state.get("matrix"):
+        page.matrix = _matrix_from_dict(state["matrix"])
+    if state.get("matrix_inv"):
+        page.matrix_inv = _matrix_from_dict(state["matrix_inv"])
+    page.marks = list(state.get("marks", []))
+
+
+def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
+                          path: str) -> None:
+    """Sauvegarde l'état de correction des pages dans un fichier JSON."""
+    data = {"copies": []}
+    for copy_path, page in zip(copy_paths, pages):
+        if page.variant_id is not None or page.student_id is not None or page.marks:
+            data["copies"].append({
+                "file": copy_path,
+                "page": _page_to_state(page),
+            })
+    with open(path, "w", encoding="utf-8") as f:
+        import json
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def load_correction_state(copy_path: str, page: ScannedPage,
+                           state_path: str) -> bool:
+    """Recharge l'état de correction d'une copie depuis un fichier JSON.
+
+    Retourne True si l'état a été trouvé et appliqué.
+    """
+    import json
+    if not os.path.exists(state_path):
+        return False
+    with open(state_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    for entry in data.get("copies", []):
+        if os.path.abspath(entry["file"]) == os.path.abspath(copy_path):
+            _page_from_state(page, entry["page"])
+            return True
+    return False
