@@ -164,15 +164,9 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant,
         else:
             c.setDash()
         if r > 0:
-            c.circle(x, y, abs(r) * mm, stroke=1, fill=0)
+            c.circle(x, y, r * mm, stroke=1, fill=0)
         else:
-            coups += 2
-            if (nb % coups) % 2 == 0:
-                c.setFillColorRGB(0, 0, 0)
-                c.circle(x, y, abs(r) * mm, stroke=1, fill=1)
-                c.setFillColorRGB(0, 0, 0)
-            else:
-                c.circle(x, y, abs(r) * mm, stroke=1, fill=0)
+            c.circle(x, y, -r * mm, stroke=1, fill=1)
     c.setDash()
 
     # Rectangles (cadres de questions/exercices, zones manuelles).
