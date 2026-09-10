@@ -132,6 +132,18 @@ class QcmWindow(Gtk.ApplicationWindow):
                 color: #666;
                 font-style: italic;
             }
+            .prog_ok {
+                background-color: #4CAF50;
+                color: white;
+            }
+            .prog_err {
+                background-color: #F44336;
+                color: white;
+            }
+            .prog_rest {
+                background-color: #9E9E9E;
+                color: white;
+            }
         """)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(),
@@ -1038,6 +1050,22 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.marking_status = Gtk.Label(label="")
         box.append(self.marking_status)
 
+        self.progress_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
+                                     spacing=0)
+        self.progress_bar.set_hexpand(True)
+        self.lbl_prog_ok = Gtk.Label(label="0")
+        self.lbl_prog_err = Gtk.Label(label="0")
+        self.lbl_prog_rest = Gtk.Label(label="0")
+        for lbl, css in [(self.lbl_prog_ok, "prog_ok"),
+                          (self.lbl_prog_err, "prog_err"),
+                          (self.lbl_prog_rest, "prog_rest")]:
+            ctx = lbl.get_style_context()
+            ctx.add_class(css)
+            lbl.set_hexpand(True)
+            self.progress_bar.append(lbl)
+        self.progress_bar.set_size_request(-1, 28)
+        box.append(self.progress_bar)
+
         # Résultats
         self.results_store = Gtk.ListStore(str, str, str, str, str)
         results_tree = Gtk.TreeView(model=self.results_store)
@@ -1112,12 +1140,16 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.marked_pages = []
         notes: dict[str, float] = {}
         n_ok = 0
-        for copy_path in self.copies:
+        n_err = 0
+        total = len(self.copies)
+        for i, copy_path in enumerate(self.copies):
             try:
                 pages = scanner.load_pages_from_file(copy_path, dpi=150)
             except Exception as e:
+                n_err += 1
                 self.results_store.append([os.path.basename(copy_path), "",
                                             "", "", f"Erreur : {e}"])
+                self._update_progress(n_ok, n_err, total - i - 1)
                 continue
             for page in pages:
                 ok = scanner.auto_check(page, self.project,
@@ -1138,11 +1170,26 @@ class QcmWindow(Gtk.ApplicationWindow):
                     label = f"{os.path.basename(copy_path)} v{page.variant_id} {page.student_id or ''}"
                     self.marked_pages.append((label, page))
                 else:
+                    n_err += 1
+                    reason = "Échec alignement"
+                    if page.variant_id is None:
+                        reason = "Code-barres non trouvé"
+                    elif page.student_id is None:
+                        reason = "N° étudiant non trouvé"
                     self.results_store.append([os.path.basename(copy_path), "",
-                                                "", "", "Échec alignement"])
+                                                "", "", reason])
+                    label = f"{os.path.basename(copy_path)} ⚠ {reason}"
+                    self.marked_pages.append((label, page))
+            self._update_progress(n_ok, n_err, total - i - 1)
         self._last_notes = notes
-        self.marking_status.set_text(f"{n_ok} copie(s) corrigée(s).")
+        self.marking_status.set_text(
+            f"{n_ok} corrigée(s), {n_err} en erreur sur {total}.")
         self._refresh_page_selector()
+
+    def _update_progress(self, n_ok: int, n_err: int, n_rest: int) -> None:
+        self.lbl_prog_ok.set_text(str(n_ok))
+        self.lbl_prog_err.set_text(str(n_err))
+        self.lbl_prog_rest.set_text(str(n_rest))
 
     def _refresh_page_selector(self) -> None:
         labels = [lbl for lbl, _p in self.marked_pages] or [""]
@@ -1409,18 +1456,30 @@ class MarkedPageWindow(Gtk.Window):
         self._img = scanner.render_marked_page(page)
         n = len(self.pages)
         self.lbl_index.set_markup(f"<b>Copie {self.idx + 1} / {n}</b>")
-        self.lbl_variant.set_text(f"Variante : {page.variant_id}")
-        sid = page.student_id or "—"
-        name = ""
-        if page.student_name or page.student_firstname:
-            name = f"\n{page.student_name or ''} {page.student_firstname or ''}".strip()
-        self.lbl_student.set_markup(f"Étudiant : {sid}{name}")
-        note = page.value if page.value is not None else 0.0
-        total = page.total if page.total is not None else 20.0
-        color = "#0F0" if page.complete else "#F00"
-        self.lbl_note.set_markup(f"<b><span size='large'>Note : {note:.2f} / {total:.0f}</span></b>")
-        status = "complète" if page.complete else "incomplète"
-        self.lbl_status.set_markup(f"Statut : <span color='{color}'>{status}</span>")
+        failed = page.matrix_inv is None or page.variant_id is None or page.student_id is None
+        if failed:
+            reason = "Échec alignement"
+            if page.variant_id is not None and page.student_id is None:
+                reason = "N° étudiant non trouvé"
+            elif page.variant_id is None:
+                reason = "Code-barres non trouvé"
+            self.lbl_variant.set_text(f"Variante : {page.variant_id or '—'}")
+            self.lbl_student.set_markup(f"<span color='#F00'><b>⚠ {reason}</b></span>")
+            self.lbl_note.set_markup("<b><span size='large'>Note : —</span></b>")
+            self.lbl_status.set_markup(f"<span color='#F00'>Non corrigée</span>")
+        else:
+            self.lbl_variant.set_text(f"Variante : {page.variant_id}")
+            sid = page.student_id or "—"
+            name = ""
+            if page.student_name or page.student_firstname:
+                name = f"\n{page.student_name or ''} {page.student_firstname or ''}".strip()
+            self.lbl_student.set_markup(f"Étudiant : {sid}{name}")
+            note = page.value if page.value is not None else 0.0
+            total = page.total if page.total is not None else 20.0
+            color = "#0F0" if page.complete else "#F00"
+            self.lbl_note.set_markup(f"<b><span size='large'>Note : {note:.2f} / {total:.0f}</span></b>")
+            status = "complète" if page.complete else "incomplète"
+            self.lbl_status.set_markup(f"Statut : <span color='{color}'>{status}</span>")
         self.btn_prev.set_sensitive(self.idx > 0)
         self.btn_next.set_sensitive(self.idx < n - 1)
         self.zoom_scale.set_value(self._zoom)
