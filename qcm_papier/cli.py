@@ -24,8 +24,12 @@ def _load_project(path: str):
     return project_mod.load_project(path)
 
 
-def _maybe_open_gui(project_path: str, do_edit: bool) -> int:
+def _maybe_open_gui(project_path: str, do_edit: bool,
+                    copies: list[str] | None = None) -> int:
     """Ouvre l'interface graphique sur le projet si do_edit, sinon ne fait rien.
+
+    Si ``copies`` est fourni, les copies sont chargées et corrigées
+    automatiquement à l'ouverture (onglet Correction).
 
     Retourne le code de retour de la GUI (0 si non ouverte).
     """
@@ -38,7 +42,7 @@ def _maybe_open_gui(project_path: str, do_edit: bool) -> int:
               file=sys.stderr)
         return 0
     print(f"Ouverture de l'interface graphique : {project_path}")
-    return gui_run(project_path=project_path)
+    return gui_run(project_path=project_path, copies=copies)
 
 
 
@@ -207,7 +211,8 @@ def cmd_correct(args: argparse.Namespace) -> int:
         print(f"\nRécapitulatif ({len(notes)} notes) :")
         for eid, note in notes.items():
             print(f"  {eid}: {note}")
-    return 0
+    return _maybe_open_gui(args.project, getattr(args, "edit", False),
+                          copies=copies)
 
 
 cmd_check = cmd_open  # alias rétro-compatible (l'ancienne commande 'check')
@@ -289,6 +294,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_cor.add_argument("--render", nargs="?", const="", default=None,
                        help="Rendre les pages corrigées en PNG (overlay vert/rouge) ; "
                             "valeur optionnelle = répertoire de sortie (défaut : répertoire des copies)")
+    p_cor.add_argument("--edit", action="store_true",
+                       help="Ouvrir l'interface graphique après correction (onglet Correction avec les pages corrigées)")
     p_cor.set_defaults(func=cmd_correct)
 
     # check

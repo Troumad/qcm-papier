@@ -1439,16 +1439,25 @@ class MarkedPageWindow(Gtk.Window):
 
 
 class QcmApplication(Gtk.Application):
-    def __init__(self, project_path: str | None = None):
+    def __init__(self, project_path: str | None = None,
+                 copies: list[str] | None = None):
         super().__init__(application_id="org.qcm_papier")
         self.project_path = project_path
+        self.copies = copies
 
     def do_activate(self):
         win = QcmWindow(application=self)
         win.present()
         if self.project_path:
             win._load_project_from_path(self.project_path)
+        if self.copies:
+            for p in self.copies:
+                win.copies.append(p)
+                win.copies_store.append([os.path.basename(p)])
+            win.marking_status.set_text(f"{len(win.copies)} copie(s) chargée(s).")
+            win._on_correct(None)
 
-def run(argv: list[str] | None = None, project_path: str | None = None) -> int:
-    app = QcmApplication(project_path=project_path)
+def run(argv: list[str] | None = None, project_path: str | None = None,
+        copies: list[str] | None = None) -> int:
+    app = QcmApplication(project_path=project_path, copies=copies)
     return app.run(argv if argv is not None else [])
