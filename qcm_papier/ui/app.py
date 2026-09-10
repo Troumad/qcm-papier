@@ -1335,6 +1335,11 @@ class MarkedPageWindow(Gtk.Window):
         self.scroll.set_child(self.image)
         left.append(self.scroll)
 
+        scroll_ctrl = Gtk.EventControllerScroll.new(
+            Gtk.EventControllerScrollFlags.BOTH_AXES)
+        scroll_ctrl.connect("scroll", self._on_ctrl_scroll)
+        self.scroll.add_controller(scroll_ctrl)
+
         # Menu latéral droit
         self.side = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.side.set_margin_start(8)
@@ -1409,10 +1414,18 @@ class MarkedPageWindow(Gtk.Window):
         self.lbl_status.set_markup(f"Statut : <span color='{color}'>{status}</span>")
         self.btn_prev.set_sensitive(self.idx > 0)
         self.btn_next.set_sensitive(self.idx < n - 1)
-        self._zoom = 1.0
-        self.zoom_scale.set_value(1.0)
-        self.zoom_label.set_text("100 %")
+        self.zoom_scale.set_value(self._zoom)
+        self.zoom_label.set_text(f"{int(self._zoom * 100)} %")
         self._update_image()
+
+    def _on_ctrl_scroll(self, ctrl, dx, dy):
+        state = ctrl.get_current_event_state()
+        if not (state & Gdk.ModifierType.CONTROL_MASK):
+            return
+        step = -dy * 0.25
+        if step == 0:
+            step = -dx * 0.25
+        self._set_zoom(self._zoom + step)
 
     def _set_zoom(self, value, from_scale=False):
         value = max(0.25, min(4.0, round(value * 4) / 4))
