@@ -486,22 +486,22 @@ def _place_choices(variant, variant_id,
                 # Dans un contexte fantôme : TOUS les choix peuvent être pré-cochés
                 if choice_index >= 0:
                     # Choix normal dans contexte fantôme : 50%
-                    if random.randint(1, 4) == 1:
-                        c["r"] = -2.3*.5  # précoché
+                    if random.randint(1, 3) == 1:
+                        c["r"] = -2.3  # précoché exercice fantome ligne 1
                     else:
                         c["r"] = 2.3  # non précoché
                 else:
                     # Choix fantôme dans contexte fantôme : TOUJOURS pré-coché
-                    c["r"] = -2.3  # TOUJOURS précoché
+                    c["r"] = -2.3*2  # TOUJOURS précoché
             else:
                 # Contexte normal : seulement les fantômes peuvent être pré-cochés
                 if choice_index >= 0:
-                    # Choix original : TOUJOURS cercle vide
-                    c["r"] = 2.3
+                    # Choix original de la première ligne : TOUJOURS cercle vide
+                    c["r"] = 2.3 
                 else:
                     # Choix fantôme : 33% de chance
-                    if random.randint(1, 3) <3:  # 1/3 ≈ 33%
-                        c["r"] = -2.3  # précoché
+                    if random.randint(1, 3) <3:  # 2/3 ≈ 66%
+                        c["r"] = -2.3  # première ligne xercice précoché
                     else:
                         c["r"] = 2.3  # non précoché
         
@@ -521,13 +521,13 @@ def _place_choices(variant, variant_id,
                 # Dans un contexte fantôme (exercice ou question) : TOUS les choix peuvent être pré-cochés
                 if choice_index >= 0:
                     # Choix original dans contexte fantôme : 50%
-                    if random.randint(1, 2) == 1:
-                        cc["r"] = -2.3  # précoché
+                    if random.randint(1, 6) == 1:
+                        cc["r"] = -2.3  # précoché 2nde ligne fantôme
                     else:
                         cc["r"] = 2.3  # non précoché
                 else:
                     # Choix fantôme dans contexte fantôme : TOUJOURS pré-coché
-                    cc["r"] = -2.3  # TOUJOURS précoché
+                    cc["r"] = -2.3*1.5  # TOUJOURS précoché
             else:
                 # Contexte normal : seulement les fantômes peuvent être pré-cochés
                 if choice_index >= 0:
@@ -535,8 +535,8 @@ def _place_choices(variant, variant_id,
                     cc["r"] = 2.3  # toujours cercle vide
                 else:
                     # SEULEMENT les choix fantômes sur la ligne joker peuvent être pré-cochés : 33%
-                    if random.randint(1, 3) == 1:
-                        cc["r"] = -2.3  # précoché
+                    if random.randint(1, 4) == 1:
+                        cc["r"] = -2.3  # précoché de la ligne jocker des questions
                     else:
                         cc["r"] = 2.3  # non précoché
             
