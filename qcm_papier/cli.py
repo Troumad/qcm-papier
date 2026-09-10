@@ -24,6 +24,24 @@ def _load_project(path: str):
     return project_mod.load_project(path)
 
 
+def _maybe_open_gui(project_path: str, do_edit: bool) -> int:
+    """Ouvre l'interface graphique sur le projet si do_edit, sinon ne fait rien.
+
+    Retourne le code de retour de la GUI (0 si non ouverte).
+    """
+    if not do_edit:
+        return 0
+    try:
+        from .ui.app import run as gui_run
+    except ImportError as e:
+        print(f"Interface graphique indisponible ({e}) : --edit ignoré.",
+              file=sys.stderr)
+        return 0
+    print(f"Ouverture de l'interface graphique : {project_path}")
+    return gui_run(project_path=project_path)
+
+
+
 def cmd_open(args: argparse.Namespace) -> int:
     """Ouvre et valide un projet JSON, affiche un résumé."""
     project = _load_project(args.project)
@@ -51,7 +69,7 @@ def cmd_variants(args: argparse.Namespace) -> int:
     save_path = args.save_project or args.project
     project_mod.save_project(project, save_path)
     print(f"Projet sauvegardé : {save_path}")
-    return 0
+    return _maybe_open_gui(args.project, getattr(args, "edit", False))
 
 
 def cmd_pdf(args: argparse.Namespace) -> int:
@@ -68,17 +86,7 @@ def cmd_pdf(args: argparse.Namespace) -> int:
         out += '.pdf'
     pdf_writer.generate_pdf(project, out, per_student=args.per_student)
     print(f"Sujet PDF généré : {out}")
-    # Option --edit : ouvrir l'interface graphique sur le projet pour éditer.
-    if getattr(args, "edit", False):
-        try:
-            from .ui.app import run as gui_run
-        except ImportError as e:
-            print(f"Interface graphique indisponible ({e}) : --edit ignoré.",
-                  file=sys.stderr)
-            return 0
-        print(f"Ouverture de l'interface graphique : {args.project}")
-        return gui_run(project_path=args.project)
-    return 0
+    return _maybe_open_gui(args.project, getattr(args, "edit", False))
 
 
 def cmd_generate(args: argparse.Namespace) -> int:
@@ -103,7 +111,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
     if args.save_project:
         project_mod.save_project(project, args.save_project)
         print(f"Projet sauvegardé : {args.save_project}")
-    return 0
+    return _maybe_open_gui(args.project, getattr(args, "edit", False))
 
 
 def cmd_correct(args: argparse.Namespace) -> int:
@@ -204,6 +212,8 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Réessayer avec un nouvel id si une variante échoue")
     p_var.add_argument("--no-retry", dest="retry", action="store_false",
                        help="Ne pas réessayer en cas d'échec")
+    p_var.add_argument("--edit", action="store_true",
+                       help="Ouvrir l'interface graphique sur le projet après génération des variantes")
     p_var.set_defaults(func=cmd_variants)
 
     # pdf : générer le PDF à partir des variantes existantes
@@ -229,6 +239,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_gen.add_argument("--per-student", action="store_true",
                        help="Générer une copie par étudiant (au lieu d'une par variante)")
     p_gen.add_argument("--save-project", help="Sauvegarder le projet mis à jour")
+    p_gen.add_argument("--edit", action="store_true",
+                       help="Ouvrir l'interface graphique sur le projet après génération du PDF")
     p_gen.set_defaults(func=cmd_generate)
 
     # correct
