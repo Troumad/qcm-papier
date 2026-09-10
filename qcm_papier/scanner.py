@@ -893,7 +893,7 @@ def read_student_id(page: ScannedPage, variants: dict,
 # Détection automatique des cases cochées
 # ---------------------------------------------------------------------------
 
-CLAIR = 140  # variable globale du JS (index.html ligne 4)
+CLAIR = 200  # variable globale du JS (index.html ligne 4)
 
 
 def auto_marks(page: ScannedPage, matrix_inv: Matrix) -> None:
