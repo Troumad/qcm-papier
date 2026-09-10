@@ -1050,6 +1050,10 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.marking_status = Gtk.Label(label="")
         box.append(self.marking_status)
 
+        self.lbl_prog_file = Gtk.Label(label="")
+        self.lbl_prog_file.set_hexpand(True)
+        box.append(self.lbl_prog_file)
+
         self.progress_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
                                      spacing=0)
         self.progress_bar.set_hexpand(True)
@@ -1061,9 +1065,8 @@ class QcmWindow(Gtk.ApplicationWindow):
                           (self.lbl_prog_rest, "prog_rest")]:
             ctx = lbl.get_style_context()
             ctx.add_class(css)
-            lbl.set_hexpand(True)
             self.progress_bar.append(lbl)
-        self.progress_bar.set_size_request(-1, 28)
+        self.progress_bar.set_size_request(400, 28)
         box.append(self.progress_bar)
 
         # Résultats
@@ -1142,14 +1145,19 @@ class QcmWindow(Gtk.ApplicationWindow):
         n_ok = 0
         n_err = 0
         total = len(self.copies)
+        self._update_progress(0, 0, total)
         for i, copy_path in enumerate(self.copies):
+            fname = os.path.basename(copy_path)
+            self._update_progress(n_ok, n_err, total - i,
+                                  filename=f"Correction : {fname}")
             try:
                 pages = scanner.load_pages_from_file(copy_path, dpi=150)
             except Exception as e:
                 n_err += 1
-                self.results_store.append([os.path.basename(copy_path), "",
+                self.results_store.append([fname, "",
                                             "", "", f"Erreur : {e}"])
-                self._update_progress(n_ok, n_err, total - i - 1)
+                self._update_progress(n_ok, n_err, total - i - 1,
+                                      filename=f"Correction : {fname}")
                 continue
             for page in pages:
                 ok = scanner.auto_check(page, self.project,
@@ -1161,13 +1169,13 @@ class QcmWindow(Gtk.ApplicationWindow):
                     if eid:
                         notes[eid] = note
                     self.results_store.append([
-                        os.path.basename(copy_path),
+                        fname,
                         str(page.variant_id or ""),
                         page.student_id or "",
                         f"{note:.2f}",
                         "complète" if page.complete else "incomplète",
                     ])
-                    label = f"{os.path.basename(copy_path)} v{page.variant_id} {page.student_id or ''}"
+                    label = f"{fname} v{page.variant_id} {page.student_id or ''}"
                     self.marked_pages.append((label, page))
                 else:
                     n_err += 1
@@ -1176,20 +1184,36 @@ class QcmWindow(Gtk.ApplicationWindow):
                         reason = "Code-barres non trouvé"
                     elif page.student_id is None:
                         reason = "N° étudiant non trouvé"
-                    self.results_store.append([os.path.basename(copy_path), "",
+                    self.results_store.append([fname, "",
                                                 "", "", reason])
-                    label = f"{os.path.basename(copy_path)} ⚠ {reason}"
+                    label = f"{fname} ⚠ {reason}"
                     self.marked_pages.append((label, page))
-            self._update_progress(n_ok, n_err, total - i - 1)
+                self._update_progress(n_ok, n_err, total - i - 1,
+                                      filename=f"Correction : {fname}")
         self._last_notes = notes
         self.marking_status.set_text(
             f"{n_ok} corrigée(s), {n_err} en erreur sur {total}.")
         self._refresh_page_selector()
 
-    def _update_progress(self, n_ok: int, n_err: int, n_rest: int) -> None:
+    def _update_progress(self, n_ok: int, n_err: int, n_rest: int,
+                          filename: str = "") -> None:
+        total = n_ok + n_err + n_rest
         self.lbl_prog_ok.set_text(str(n_ok))
         self.lbl_prog_err.set_text(str(n_err))
         self.lbl_prog_rest.set_text(str(n_rest))
+        bar_w = self.progress_bar.get_width()
+        if bar_w < 50:
+            bar_w = 400
+        if total > 0:
+            self.lbl_prog_ok.set_size_request(max(bar_w * n_ok // total, 20 if n_ok else 0), -1)
+            self.lbl_prog_err.set_size_request(max(bar_w * n_err // total, 20 if n_err else 0), -1)
+            self.lbl_prog_rest.set_size_request(max(bar_w * n_rest // total, 20 if n_rest else 0), -1)
+        else:
+            self.lbl_prog_ok.set_size_request(0, -1)
+            self.lbl_prog_err.set_size_request(0, -1)
+            self.lbl_prog_rest.set_size_request(bar_w, -1)
+        if filename:
+            self.lbl_prog_file.set_text(filename)
 
     def _refresh_page_selector(self) -> None:
         labels = [lbl for lbl, _p in self.marked_pages] or [""]
