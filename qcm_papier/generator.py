@@ -633,8 +633,10 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
     # --- NOUVELLE LOGIQUE DE PLACEMENT DES EXERCICES ---
     # Détermine si on va vers la droite ou vers le bas
     go_right = ((exercise_dir and variant.layout == "p") or (not exercise_dir and variant.layout == "l"))
-    # Limites de la page
-    max_width = layout.page_width - layout.margin_right
+    # Limites de la page (réserve une marge pour ne pas toucher les repères
+    # d'alignement placés à page_width - margin_right - 2, rayon 2).
+    shapes_right = max(layout.shapes_x) if layout.shapes_x else layout.page_width - layout.margin_right
+    max_width = shapes_right - 2
     max_height = layout.barcode_top
 
     # Initialisation des variables pour les deux modes
