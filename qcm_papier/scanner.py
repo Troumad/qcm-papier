@@ -893,10 +893,11 @@ def read_student_id(page: ScannedPage, variants: dict,
 # Détection automatique des cases cochées
 # ---------------------------------------------------------------------------
 
-CLAIR = 200  # variable globale du JS (index.html ligne 4)
+CLAIR = 140  # variable globale du JS (index.html ligne 4)
 
 
-def auto_marks(page: ScannedPage, matrix_inv: Matrix) -> None:
+def auto_marks(page: ScannedPage, matrix_inv: Matrix,
+               clair: float = CLAIR) -> None:
     """Détecte les cases cochées parmi les marks de la page.
 
     Reprend ``Page.autoMarks`` (index.html ~3365-3375).
@@ -908,7 +909,7 @@ def auto_marks(page: ScannedPage, matrix_inv: Matrix) -> None:
         if (mark.get("e") is not None and mark.get("q") is not None
                 and mark.get("c") is not None and mark.get("r") is not None):
             mark["checked"] = read_mark(pimg, matrix_inv, mark["x"],
-                                        mark["y"], mark["r"], CLAIR)
+                                        mark["y"], mark["r"], clair)
 
 
 def show_marks(page: ScannedPage, project: Project) -> None:
@@ -947,7 +948,8 @@ def show_marks(page: ScannedPage, project: Project) -> None:
 # ---------------------------------------------------------------------------
 
 def auto_check(page: ScannedPage, project: Project,
-               check_manual_active: bool = False) -> bool:
+               check_manual_active: bool = False,
+               clair: float = CLAIR) -> bool:
     """Corrige automatiquement une page : aligne, lit code-barres, n° étudiant,
     détecte les cases, calcule la note.
 
@@ -974,7 +976,7 @@ def auto_check(page: ScannedPage, project: Project,
             page.student_name = student.name
             page.student_firstname = student.firstname
     show_marks(page, project)
-    auto_marks(page, matrix_inv)
+    auto_marks(page, matrix_inv, clair=clair)
     score = score_page(project, page.marks, variant_id=page.variant_id,
                        student_id=page.student_id,
                        check_manual_active=check_manual_active)
