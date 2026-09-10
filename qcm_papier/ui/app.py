@@ -1172,12 +1172,14 @@ class QcmWindow(Gtk.ApplicationWindow):
         idx = self.page_selector.get_selected()
         if idx < 0 or idx >= len(self.marked_pages):
             return
-        _label, page = self.marked_pages[idx]
-        img = scanner.render_marked_page(page)
-        if img is None:
-            return
-        win = MarkedPageWindow(img, self)
+        win = MarkedPageWindow(self.marked_pages, idx, self,
+                               on_navigate=self._enlarge_navigate)
         win.present()
+
+    def _enlarge_navigate(self, idx: int) -> None:
+        if 0 <= idx < len(self.marked_pages):
+            self.page_selector.set_selected(idx)
+
 
     def _on_export_scodoc(self, _btn) -> None:
         if not self._last_notes:
@@ -1284,13 +1286,15 @@ class QcmWindow(Gtk.ApplicationWindow):
 class MarkedPageWindow(Gtk.Window):
     """Fenêtre pop-up affichant une page corrigée en grand avec zoom et menu latéral."""
 
-    def __init__(self, img, parent=None):
+    def __init__(self, marked_pages, idx, parent=None, on_navigate=None):
         super().__init__(title="Page corrigée", transient_for=parent,
                          default_width=1100, default_height=800,
                          modal=False, destroy_with_parent=True)
-        self._img = img
+        self.pages = marked_pages
+        self.idx = idx
+        self.on_navigate = on_navigate
         self._zoom = 1.0
-        from PIL import Image as PILImage
+        self._img = None
 
         main = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         self.set_child(main)
@@ -1330,23 +1334,83 @@ class MarkedPageWindow(Gtk.Window):
         self.scroll.set_child(self.image)
         left.append(self.scroll)
 
-        # Menu latéral droit (vide, prêt pour du contenu futur)
+        # Menu latéral droit
         self.side = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.side.set_margin_start(8)
         self.side.set_margin_end(8)
         self.side.set_margin_top(8)
         self.side.set_margin_bottom(8)
-        self.side.set_size_request(250, -1)
-        side_label = Gtk.Label(label="<b>Menu</b>")
-        side_label.set_use_markup(True)
-        self.side.append(side_label)
-        side_scroll = Gtk.ScrolledWindow()
-        side_scroll.set_vexpand(True)
-        self.side_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        side_scroll.set_child(self.side_content)
-        self.side.append(side_scroll)
+        self.side.set_size_request(260, -1)
         main.append(self.side)
 
+        # Contenu du menu latéral
+        self.lbl_index = Gtk.Label(label="")
+        self.lbl_index.set_use_markup(True)
+        self.side.append(self.lbl_index)
+
+        self.lbl_variant = Gtk.Label(label="")
+        self.side.append(self.lbl_variant)
+
+        self.lbl_student = Gtk.Label(label="")
+        self.lbl_student.set_use_markup(True)
+        self.lbl_student.set_wrap(True)
+        self.side.append(self.lbl_student)
+
+        self.lbl_note = Gtk.Label(label="")
+        self.lbl_note.set_use_markup(True)
+        self.side.append(self.lbl_note)
+
+        self.lbl_status = Gtk.Label(label="")
+        self.lbl_status.set_use_markup(True)
+        self.side.append(self.lbl_status)
+
+        self.side.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        # Navigation entre copies
+        nav_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.btn_prev = Gtk.Button(label="‹ Précédent")
+        self.btn_prev.connect("clicked", lambda _b: self._navigate(-1))
+        self.btn_next = Gtk.Button(label="Suivant ›")
+        self.btn_next.connect("clicked", lambda _b: self._navigate(+1))
+        nav_box.append(self.btn_prev)
+        nav_box.append(self.btn_next)
+        self.side.append(nav_box)
+
+        self._load_page()
+
+    def _navigate(self, delta: int) -> None:
+        n = len(self.pages)
+        if n == 0:
+            return
+        self.idx = max(0, min(n - 1, self.idx + delta))
+        if self.on_navigate is not None:
+            self.on_navigate(self.idx)
+        self._load_page()
+
+    def _load_page(self) -> None:
+        if self.idx < 0 or self.idx >= len(self.pages):
+            return
+        label, page = self.pages[self.idx]
+        self._img = scanner.render_marked_page(page)
+        n = len(self.pages)
+        self.lbl_index.set_markup(f"<b>Copie {self.idx + 1} / {n}</b>")
+        self.lbl_variant.set_text(f"Variante : {page.variant_id}")
+        sid = page.student_id or "—"
+        name = ""
+        if page.student_name or page.student_firstname:
+            name = f"\n{page.student_name or ''} {page.student_firstname or ''}".strip()
+        self.lbl_student.set_markup(f"Étudiant : {sid}{name}")
+        note = page.value if page.value is not None else 0.0
+        total = page.total if page.total is not None else 20.0
+        color = "#0F0" if page.complete else "#F00"
+        self.lbl_note.set_markup(f"<b><span size='large'>Note : {note:.2f} / {total:.0f}</span></b>")
+        status = "complète" if page.complete else "incomplète"
+        self.lbl_status.set_markup(f"Statut : <span color='{color}'>{status}</span>")
+        self.btn_prev.set_sensitive(self.idx > 0)
+        self.btn_next.set_sensitive(self.idx < n - 1)
+        self._zoom = 1.0
+        self.zoom_scale.set_value(1.0)
+        self.zoom_label.set_text("100 %")
         self._update_image()
 
     def _set_zoom(self, value, from_scale=False):
@@ -1360,6 +1424,8 @@ class MarkedPageWindow(Gtk.Window):
         self._update_image()
 
     def _update_image(self):
+        if self._img is None:
+            return
         from PIL import Image as PILImage
         w = max(1, int(self._img.width * self._zoom))
         h = max(1, int(self._img.height * self._zoom))
@@ -1371,7 +1437,7 @@ class MarkedPageWindow(Gtk.Window):
         self.image.set_from_paintable(texture)
 
     def add_side_widget(self, widget):
-        self.side_content.append(widget)
+        self.side.append(widget)
 
 
 class QcmApplication(Gtk.Application):
