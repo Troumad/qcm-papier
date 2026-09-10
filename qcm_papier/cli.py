@@ -170,9 +170,8 @@ def cmd_correct(args: argparse.Namespace) -> int:
                   f" {'(complète)' if page.complete else '(incomplète)'}")
 
     # Rendu visuel des pages corrigées (overlay vert/rouge).
-    if getattr(args, "render", None):
-        render_dir = args.render if isinstance(args.render, str) else "corrigees"
-        os.makedirs(render_dir, exist_ok=True)
+    if getattr(args, "render", None) is not None:
+        render_dir = args.render if args.render else os.path.dirname(os.path.abspath(copies[0]))
         n = 0
         for copy_path, page in corrected_pages:
             img = scanner.render_marked_page(page)
@@ -287,9 +286,9 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Résolution de rendu des PDF (défaut 150)")
     p_cor.add_argument("--note-max", type=float, default=20.0,
                        help="Note maximale de l'échelle Scodoc (défaut 20)")
-    p_cor.add_argument("--render", nargs="?", const="corrigees", default=None,
+    p_cor.add_argument("--render", nargs="?", const="", default=None,
                        help="Rendre les pages corrigées en PNG (overlay vert/rouge) ; "
-                            "valeur optionnelle = répertoire de sortie (défaut 'corrigees')")
+                            "valeur optionnelle = répertoire de sortie (défaut : répertoire des copies)")
     p_cor.set_defaults(func=cmd_correct)
 
     # check
