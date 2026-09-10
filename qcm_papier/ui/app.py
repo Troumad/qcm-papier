@@ -1023,10 +1023,13 @@ class QcmWindow(Gtk.ApplicationWindow):
         btn_students.connect("clicked", self._on_load_students)
         btn_export = Gtk.Button(label="Exporter les notes Scodoc…")
         btn_export.connect("clicked", self._on_export_scodoc)
+        btn_remove = Gtk.Button(label="Supprimer")
+        btn_remove.connect("clicked", self._on_remove_copies)
         files_box.append(btn_load)
         files_box.append(btn_correct)
         files_box.append(btn_students)
         files_box.append(btn_export)
+        files_box.append(btn_remove)
         box.append(files_box)
 
         clair_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -1039,7 +1042,7 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         self.copies: list[str] = []
         self.copies_list = Gtk.ListBox()
-        self.copies_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.copies_list.set_selection_mode(Gtk.SelectionMode.MULTIPLE)
         self.copy_rows: dict[str, dict] = {}
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
@@ -1094,6 +1097,9 @@ class QcmWindow(Gtk.ApplicationWindow):
         row.set_margin_end(4)
         row.set_margin_top(2)
         row.set_margin_bottom(2)
+        check = Gtk.CheckButton()
+        check.set_active(True)
+        row.append(check)
         lbl = Gtk.Label(label=fname)
         lbl.set_xalign(0)
         lbl.set_hexpand(True)
@@ -1108,11 +1114,13 @@ class QcmWindow(Gtk.ApplicationWindow):
             l.get_style_context().add_class(css)
             bar.append(l)
         row.append(bar)
-        self.copies_list.append(row)
+        list_row = Gtk.ListBoxRow()
+        list_row.set_child(row)
+        self.copies_list.append(list_row)
         self.copy_rows[path] = {
-            "row": row, "bar": bar,
+            "row": list_row, "bar": bar,
             "lbl_ok": lbl_ok, "lbl_err": lbl_err, "lbl_rest": lbl_rest,
-            "n_ok": 0, "n_err": 0, "n_pages": 0,
+            "n_ok": 0, "n_err": 0, "n_pages": 0, "check": check,
         }
 
     def _on_load_copies(self, _btn) -> None:
@@ -1126,6 +1134,24 @@ class QcmWindow(Gtk.ApplicationWindow):
                 self.copies.append(p)
                 self._add_copy_row(p)
         self.marking_status.set_text(f"{len(self.copies)} copie(s) chargée(s).")
+
+    def _on_remove_copies(self, _btn) -> None:
+        selected_rows = self.copies_list.get_selected_rows()
+        if not selected_rows:
+            return
+        paths_to_remove = []
+        for lbrow in selected_rows:
+            for path, info in self.copy_rows.items():
+                if info["row"] is lbrow:
+                    paths_to_remove.append(path)
+                    break
+        for path in paths_to_remove:
+            info = self.copy_rows.pop(path, None)
+            if info is not None:
+                self.copies_list.remove(info["row"])
+            if path in self.copies:
+                self.copies.remove(path)
+        self.marking_status.set_text(f"{len(self.copies)} copie(s) restante(s).")
 
     def _on_load_students(self, _btn) -> None:
         path = _file_dialog(self, "Table étudiants Scodoc",
@@ -1149,13 +1175,20 @@ class QcmWindow(Gtk.ApplicationWindow):
         if not self.copies:
             self.marking_status.set_text("Aucune copie chargée.")
             return
+        to_correct = [p for p in self.copies
+                      if self.copy_rows.get(p, {}).get("check") is not None
+                      and self.copy_rows[p]["check"].get_active()]
+        if not to_correct:
+            self.marking_status.set_text(
+                "Aucune copie à corriger (cochez les fichiers souhaités).")
+            return
         self.results_store.clear()
         self.marked_pages = []
         notes: dict[str, float] = {}
         n_ok = 0
         n_err = 0
-        total = len(self.copies)
-        for copy_path in self.copies:
+        total = len(to_correct)
+        for copy_path in to_correct:
             fname = os.path.basename(copy_path)
             info = self.copy_rows.get(copy_path)
             try:
@@ -1170,6 +1203,8 @@ class QcmWindow(Gtk.ApplicationWindow):
                     self._update_copy_row(copy_path)
                 continue
             if info:
+                info["n_ok"] = 0
+                info["n_err"] = 0
                 info["n_pages"] = len(pages)
             for page in pages:
                 ok = scanner.auto_check(page, self.project,
@@ -1206,6 +1241,8 @@ class QcmWindow(Gtk.ApplicationWindow):
                     self.marked_pages.append((label, page))
                 if info:
                     self._update_copy_row(copy_path)
+            if info:
+                info["check"].set_active(False)
         self._last_notes = notes
         self.marking_status.set_text(
             f"{n_ok} corrigée(s), {n_err} en erreur sur {total}.")
