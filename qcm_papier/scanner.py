@@ -1038,7 +1038,8 @@ def render_marked_page(page: ScannedPage, max_width: int = 0):
     if base is None:
         return None
     img = base.convert("RGBA")
-    draw = ImageDraw.Draw(img, "RGBA")
+    overlay = PILImage.new("RGBA", img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay, "RGBA")
 
     matrix_inv = page.matrix_inv
     if matrix_inv is None:
@@ -1047,7 +1048,7 @@ def render_marked_page(page: ScannedPage, max_width: int = 0):
     for mark in page.marks:
         color = _MARK_COLORS[_mark_color(mark)]
         outline = color + (255,)
-        fill = None
+        fill = color + (26,)
         r = mark.get("r")
         if r is not None:
             cx, cy = matrix_inv.apply(mark["x"], mark["y"])
@@ -1064,6 +1065,8 @@ def render_marked_page(page: ScannedPage, max_width: int = 0):
                 ch = abs(round(matrix_inv.c * h + matrix_inv.d * h))
                 bbox = [cx, cy, cx + cw, cy + ch]
                 draw.rectangle(bbox, outline=outline, fill=fill, width=2)
+
+    img = PILImage.alpha_composite(img, overlay)
 
     if max_width and max_width > 0 and img.width > max_width:
         ratio = max_width / img.width
