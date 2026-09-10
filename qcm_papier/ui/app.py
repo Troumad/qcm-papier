@@ -1430,6 +1430,7 @@ class MarkedPageWindow(Gtk.Window):
         w = max(1, int(self._img.width * self._zoom))
         h = max(1, int(self._img.height * self._zoom))
         resized = self._img.resize((w, h), PILImage.LANCZOS)
+        self.image.set_size_request(w, h)
         import io
         buf = io.BytesIO()
         resized.save(buf, format="png")
