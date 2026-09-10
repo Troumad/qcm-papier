@@ -75,6 +75,12 @@ def cmd_variants(args: argparse.Namespace) -> int:
 def cmd_pdf(args: argparse.Namespace) -> int:
     """Génère le sujet PDF à partir des variantes existantes d'un projet."""
     project = _load_project(args.project)
+    # --regenerate : régénère les variantes avant de faire le PDF.
+    if getattr(args, "regenerate", False):
+        ids, failed = generator.generate_all(project, retry=True)
+        if failed:
+            print(f"Variantes en échec : {failed}", file=sys.stderr)
+        print(f"Variantes régénérées : {ids}")
     if not any(k not in ("p", "l") for k in project.variants):
         raise SystemExit("Le projet ne contient pas de variantes générées. "
                          "Lancez d'abord 'qcm-papier variants'.")
@@ -92,8 +98,10 @@ def cmd_pdf(args: argparse.Namespace) -> int:
 def cmd_generate(args: argparse.Namespace) -> int:
     """Génère le sujet PDF à partir d'un projet (variantes + PDF en un appel)."""
     project = _load_project(args.project)
-    # Génère les variantes si nécessaire.
-    if not any(k not in ("p", "l") for k in project.variants):
+    # Génère les variantes si nécessaire ou si --regenerate est demandé.
+    need_gen = (not any(k not in ("p", "l") for k in project.variants)
+               or getattr(args, "regenerate", False))
+    if need_gen:
         ids, failed = generator.generate_all(project, retry=args.retry)
         if failed:
             print(f"Variantes en échec : {failed}", file=sys.stderr)
@@ -225,6 +233,8 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Générer une copie par étudiant (au lieu d'une par variante)")
     p_pdf.add_argument("--edit", action="store_true",
                        help="Ouvrir l'interface graphique sur le projet après génération du PDF")
+    p_pdf.add_argument("--regenerate", action="store_true",
+                       help="Régénérer les variantes avant de générer le PDF")
     p_pdf.set_defaults(func=cmd_pdf)
 
     # generate : tout en un (rétro-compatible)
@@ -241,6 +251,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_gen.add_argument("--save-project", help="Sauvegarder le projet mis à jour")
     p_gen.add_argument("--edit", action="store_true",
                        help="Ouvrir l'interface graphique sur le projet après génération du PDF")
+    p_gen.add_argument("--regenerate", action="store_true",
+                       help="Régénérer les variantes même si elles existent déjà")
     p_gen.set_defaults(func=cmd_generate)
 
     # correct
