@@ -16,14 +16,14 @@ def main(argv: list[str] | None = None) -> int:
         from .cli import main as cli_main
         return cli_main(argv)
 
-    # Sinon, on lance l'interface graphique.
+    # Sans argument : on tente l'interface graphique. Si GTK n'est pas
+    # disponible, on bascule sur la CLI qui génère le sujet du projet par
+    # défaut (math/2026/OML1_bis.json -> math/2026/OML1_bis.pdf).
     try:
         from .ui.app import run
-    except ImportError as e:
-        print(f"Interface graphique indisponible ({e}).", file=sys.stderr)
-        print("Utilisez la ligne de commande : qcm-papier <generate|correct|check>",
-              file=sys.stderr)
-        return 1
+    except ImportError:
+        from .cli import main as cli_main
+        return cli_main(argv)
     return run(argv)
 
 
