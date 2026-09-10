@@ -1232,6 +1232,10 @@ class QcmWindow(Gtk.ApplicationWindow):
             info["lbl_ok"].set_size_request(0, -1)
             info["lbl_err"].set_size_request(0, -1)
             info["lbl_rest"].set_size_request(bar_w, -1)
+        ctx = GLib.MainContext.default()
+        while ctx.pending():
+            ctx.iteration(False)
+        ctx.iteration(False)
 
     def _refresh_page_selector(self) -> None:
         labels = [lbl for lbl, _p in self.marked_pages] or [""]
