@@ -450,7 +450,7 @@ def _place_choices(variant, variant_id,
         # je ne sais pas quand on peut passer ici !
         if (exercise.get("index", -1) >= 0 and question.get("index", -1) >= 0
                 and choice.get("index", -1) >= 0):
-            marks.append({"x": x, "y": y, "r": 2.3*0.2,
+            marks.append({"x": x, "y": y, "r": 2.3*0.1,
                           "e": exercise.get("index", -1), "q": question.get("index", -1),
                           "c": choice.get("index", 0)})
         choice_iter += 1
@@ -486,8 +486,8 @@ def _place_choices(variant, variant_id,
                 # Dans un contexte fantôme : TOUS les choix peuvent être pré-cochés
                 if choice_index >= 0:
                     # Choix normal dans contexte fantôme : 50%
-                    if random.randint(1, 2) == 1:
-                        c["r"] = -2.3  # précoché
+                    if random.randint(1, 4) == 1:
+                        c["r"] = -2.3*.5  # précoché
                     else:
                         c["r"] = 2.3  # non précoché
                 else:
@@ -500,7 +500,7 @@ def _place_choices(variant, variant_id,
                     c["r"] = 2.3
                 else:
                     # Choix fantôme : 33% de chance
-                    if random.randint(1, 3) == 1:  # 1/3 ≈ 33%
+                    if random.randint(1, 3) <3:  # 1/3 ≈ 33%
                         c["r"] = -2.3  # précoché
                     else:
                         c["r"] = 2.3  # non précoché
