@@ -1106,6 +1106,10 @@ class QcmWindow(Gtk.ApplicationWindow):
                             filters=[("Projet JSON", ["*.json"])])
         if path is None:
             return
+        self._load_project_from_path(path)
+
+    def _load_project_from_path(self, path: str) -> None:
+        """Charge un projet depuis un fichier JSON et rafraîchit l'interface."""
         try:
             self.project = project_mod.load_project(path)
             self.editor.project = self.project
@@ -1164,13 +1168,16 @@ class QcmWindow(Gtk.ApplicationWindow):
             self.generate_status.set_text(f"Erreur : {e}")
 
 class QcmApplication(Gtk.Application):
-    def __init__(self):
+    def __init__(self, project_path: str | None = None):
         super().__init__(application_id="org.qcm_papier")
+        self.project_path = project_path
 
     def do_activate(self):
         win = QcmWindow(application=self)
         win.present()
+        if self.project_path:
+            win._load_project_from_path(self.project_path)
 
-def run(argv: list[str] | None = None) -> int:
-    app = QcmApplication()
+def run(argv: list[str] | None = None, project_path: str | None = None) -> int:
+    app = QcmApplication(project_path=project_path)
     return app.run(argv if argv is not None else [])
