@@ -24,8 +24,55 @@ def _load_project(path: str):
     return project_mod.load_project(path)
 
 
+def cmd_open(args: argparse.Namespace) -> int:
+    """Ouvre et valide un projet JSON, affiche un résumé."""
+    project = _load_project(args.project)
+    n_ex = len(project.structure)
+    n_q = sum(len(e.questions) for e in project.structure)
+    n_c = sum(len(q.choices) for e in project.structure for q in e.questions)
+    n_v = len([k for k in project.variants if k not in ("p", "l")])
+    print(f"Projet : {args.project}")
+    print(f"  Exercices : {n_ex}")
+    print(f"  Questions : {n_q}")
+    print(f"  Choix : {n_c}")
+    print(f"  Variantes générées : {n_v}")
+    print(f"  Étudiants : {len(project.students)}")
+    return 0
+
+
+def cmd_variants(args: argparse.Namespace) -> int:
+    """Génère les variantes d'un projet et les sauvegarde dans le JSON."""
+    project = _load_project(args.project)
+    ids, failed = generator.generate_all(project, retry=args.retry)
+    if failed:
+        print(f"Variantes en échec : {failed}", file=sys.stderr)
+    print(f"Variantes générées : {ids}")
+    # Sauvegarde le projet mis à jour (variantes + ids).
+    save_path = args.save_project or args.project
+    project_mod.save_project(project, save_path)
+    print(f"Projet sauvegardé : {save_path}")
+    return 0
+
+
+def cmd_pdf(args: argparse.Namespace) -> int:
+    """Génère le sujet PDF à partir des variantes existantes d'un projet."""
+    project = _load_project(args.project)
+    if not any(k not in ("p", "l") for k in project.variants):
+        raise SystemExit("Le projet ne contient pas de variantes générées. "
+                         "Lancez d'abord 'qcm-papier variants'.")
+    out = args.output
+    if not out:
+        out = (project.settings.evaluation_short or "sujet") + ".pdf"
+    # Forcer l'extension .pdf pour éviter d'écraser un fichier existant
+    if not out.endswith('.pdf'):
+        out += '.pdf'
+    pdf_writer.generate_pdf(project, out, per_student=args.per_student)
+    print(f"Sujet PDF généré : {out}")
+    return 0
+
+
 def cmd_generate(args: argparse.Namespace) -> int:
-    """Génère le sujet PDF à partir d'un projet."""
+    """Génère le sujet PDF à partir d'un projet (variantes + PDF en un appel)."""
     project = _load_project(args.project)
     # Génère les variantes si nécessaire.
     if not any(k not in ("p", "l") for k in project.variants):
@@ -119,20 +166,7 @@ def cmd_correct(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_check(args: argparse.Namespace) -> int:
-    """Valide qu'un projet est bien formé."""
-    project = _load_project(args.project)
-    n_ex = len(project.structure)
-    n_q = sum(len(e.questions) for e in project.structure)
-    n_c = sum(len(q.choices) for e in project.structure for q in e.questions)
-    n_v = len([k for k in project.variants if k not in ("p", "l")])
-    print(f"Projet : {args.project}")
-    print(f"  Exercices : {n_ex}")
-    print(f"  Questions : {n_q}")
-    print(f"  Choix : {n_c}")
-    print(f"  Variantes générées : {n_v}")
-    print(f"  Étudiants : {len(project.students)}")
-    return 0
+cmd_check = cmd_open  # alias rétro-compatible (l'ancienne commande 'check')
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -143,8 +177,36 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command")
 
-    # generate
-    p_gen = sub.add_parser("generate", help="Générer le sujet PDF")
+    # open : ouvrir/valider un projet JSON
+    p_open = sub.add_parser("open", help="Ouvrir et valider un projet JSON")
+    p_open.add_argument("--project", "-p", required=True,
+                        help="Fichier projet JSON")
+    p_open.set_defaults(func=cmd_open)
+
+    # variants : générer les variantes et les sauvegarder
+    p_var = sub.add_parser("variants",
+                           help="Générer les variantes et les sauvegarder dans le JSON")
+    p_var.add_argument("--project", "-p", required=True,
+                       help="Fichier projet JSON")
+    p_var.add_argument("--save-project", help="Sauvegarder le projet mis à jour "
+                       "(par défaut : le fichier d'entrée)")
+    p_var.add_argument("--retry", action="store_true", default=True,
+                       help="Réessayer avec un nouvel id si une variante échoue")
+    p_var.add_argument("--no-retry", dest="retry", action="store_false",
+                       help="Ne pas réessayer en cas d'échec")
+    p_var.set_defaults(func=cmd_variants)
+
+    # pdf : générer le PDF à partir des variantes existantes
+    p_pdf = sub.add_parser("pdf", help="Générer le PDF à partir des variantes existantes")
+    p_pdf.add_argument("--project", "-p", required=True,
+                       help="Fichier projet JSON (avec variantes générées)")
+    p_pdf.add_argument("--output", "-o", help="Fichier PDF de sortie")
+    p_pdf.add_argument("--per-student", action="store_true",
+                       help="Générer une copie par étudiant (au lieu d'une par variante)")
+    p_pdf.set_defaults(func=cmd_pdf)
+
+    # generate : tout en un (rétro-compatible)
+    p_gen = sub.add_parser("generate", help="Générer le sujet PDF (variantes + PDF en un appel)")
     p_gen.add_argument("--project", "-p", required=True,
                        help="Fichier projet JSON")
     p_gen.add_argument("--output", "-o", help="Fichier PDF de sortie")
@@ -183,17 +245,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    # Sans sous-commande : génère le sujet du projet par défaut
-    # (math/2026/OML1_bis.json -> math/2026/OML1_bis.pdf).
     if not args.command:
-        project_path = os.path.join("math", "2026", "OML1_bis.json")
-        out_path = os.path.splitext(project_path)[0] + ".pdf"
-        args = argparse.Namespace(
-            project=project_path, output=out_path,
-            retry=True, per_student=False,
-            save_project=project_path,
-        )
-        return cmd_generate(args)
+        parser.print_help()
+        return 1
     return args.func(args)
 
 
