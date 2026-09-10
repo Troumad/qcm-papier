@@ -141,7 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Générateur/Correcteur de QCM papier (portage Python du "
                     "code HTML+JS de l'Université Lyon 1).",
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command")
 
     # generate
     p_gen = sub.add_parser("generate", help="Générer le sujet PDF")
@@ -183,6 +183,17 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    # Sans sous-commande : génère le sujet du projet par défaut
+    # (math/2026/OML1_bis.json -> math/2026/OML1_bis.pdf).
+    if not args.command:
+        project_path = os.path.join("math", "2026", "OML1_bis.json")
+        out_path = os.path.splitext(project_path)[0] + ".pdf"
+        args = argparse.Namespace(
+            project=project_path, output=out_path,
+            retry=True, per_student=False,
+            save_project=project_path,
+        )
+        return cmd_generate(args)
     return args.func(args)
 
 
