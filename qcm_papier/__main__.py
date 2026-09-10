@@ -12,18 +12,20 @@ import sys
 def main(argv: list[str] | None = None) -> int:
     # Si des arguments de sous-commande sont passés, on utilise la CLI.
     argv = argv if argv is not None else sys.argv[1:]
-    if argv and argv[0] in ("generate", "correct", "check", "-h", "--help"):
+    if argv and argv[0] in ("open", "variants", "pdf", "generate",
+                            "correct", "check", "-h", "--help"):
         from .cli import main as cli_main
         return cli_main(argv)
 
-    # Sans argument : on tente l'interface graphique. Si GTK n'est pas
-    # disponible, on bascule sur la CLI qui génère le sujet du projet par
-    # défaut (math/2026/OML1_bis.json -> math/2026/OML1_bis.pdf).
+    # Sinon, on lance l'interface graphique.
     try:
         from .ui.app import run
-    except ImportError:
-        from .cli import main as cli_main
-        return cli_main(argv)
+    except ImportError as e:
+        print(f"Interface graphique indisponible ({e}).", file=sys.stderr)
+        print("Utilisez la ligne de commande : "
+              "qcm-papier <open|variants|pdf|generate|correct|check>",
+              file=sys.stderr)
+        return 1
     return run(argv)
 
 
