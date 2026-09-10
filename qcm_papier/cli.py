@@ -159,7 +159,8 @@ def cmd_correct(args: argparse.Namespace) -> int:
             print(f"  {copy_path} : ERREUR de chargement ({e})", file=sys.stderr)
             continue
         for page in pages:
-            ok = scanner.auto_check(page, project)
+            ok = scanner.auto_check(page, project,
+                                     clair=getattr(args, "clair", 140))
             if not ok:
                 print(f"  {copy_path} : correction échouée (alignement ?)",
                       file=sys.stderr)
@@ -293,6 +294,9 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Résolution de rendu des PDF (défaut 150)")
     p_cor.add_argument("--note-max", type=float, default=20.0,
                        help="Note maximale de l'échelle Scodoc (défaut 20)")
+    p_cor.add_argument("--clair", type=int, default=140,
+                       help="Seuil de détection des cases cochées (défaut 140 ; "
+                            "augmenter pour des scans plus sombres)")
     p_cor.add_argument("--render", nargs="?", const="", default=None,
                        help="Rendre les pages corrigées en PNG (overlay vert/rouge) ; "
                             "valeur optionnelle = répertoire de sortie (défaut : répertoire des copies)")

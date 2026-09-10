@@ -1017,6 +1017,14 @@ class QcmWindow(Gtk.ApplicationWindow):
         files_box.append(btn_export)
         box.append(files_box)
 
+        clair_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        clair_box.append(Gtk.Label(label="Seuil de détection :"))
+        self.clair_spin = Gtk.SpinButton.new_with_range(50, 255, 5)
+        self.clair_spin.set_value(140)
+        clair_box.append(self.clair_spin)
+        clair_box.append(Gtk.Label(label="(↑ pour scans plus sombres)"))
+        box.append(clair_box)
+
         self.copies: list[str] = []
         self.copies_store = Gtk.ListStore(str)
         tree = Gtk.TreeView(model=self.copies_store)
@@ -1112,7 +1120,8 @@ class QcmWindow(Gtk.ApplicationWindow):
                                             "", "", f"Erreur : {e}"])
                 continue
             for page in pages:
-                ok = scanner.auto_check(page, self.project)
+                ok = scanner.auto_check(page, self.project,
+                                         clair=int(self.clair_spin.get_value()))
                 if ok:
                     n_ok += 1
                     eid = page.student_eid or page.student_id or ""
