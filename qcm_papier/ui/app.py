@@ -1043,8 +1043,11 @@ class QcmWindow(Gtk.ApplicationWindow):
         btn_prev.connect("clicked", lambda _b: self._show_marked_page(-1))
         btn_next = Gtk.Button(label="Suivant")
         btn_next.connect("clicked", lambda _b: self._show_marked_page(+1))
+        btn_enlarge = Gtk.Button(label="Agrandir")
+        btn_enlarge.connect("clicked", self._on_enlarge_page)
         view_box.append(btn_prev)
         view_box.append(btn_next)
+        view_box.append(btn_enlarge)
         box.append(view_box)
 
         self.marked_pages: list = []
@@ -1152,17 +1155,29 @@ class QcmWindow(Gtk.ApplicationWindow):
         img = scanner.render_marked_page(page)
         if img is None:
             return
-        import io
         from PIL import Image as PILImage
         max_w = max(200, self.get_width() - 40)
         if img.width > max_w:
             ratio = max_w / img.width
             img = img.resize((max_w, int(img.height * ratio)), PILImage.LANCZOS)
+        self.marked_image.set_paintable(self._img_to_texture(img))
+
+    def _img_to_texture(self, img) -> object:
+        import io
         buf = io.BytesIO()
         img.save(buf, format="png")
-        bytes_data = buf.getvalue()
-        texture = Gdk.Texture.new_from_bytes(GLib.Bytes.new(bytes_data))
-        self.marked_image.set_paintable(texture)
+        return Gdk.Texture.new_from_bytes(GLib.Bytes.new(buf.getvalue()))
+
+    def _on_enlarge_page(self, _btn) -> None:
+        idx = self.page_selector.get_selected()
+        if idx < 0 or idx >= len(self.marked_pages):
+            return
+        _label, page = self.marked_pages[idx]
+        img = scanner.render_marked_page(page)
+        if img is None:
+            return
+        win = MarkedPageWindow(img, self)
+        win.present()
 
     def _on_export_scodoc(self, _btn) -> None:
         if not self._last_notes:
@@ -1264,6 +1279,100 @@ class QcmWindow(Gtk.ApplicationWindow):
             self.generate_status.set_text(f"Projet enregistré : {path}")
         except Exception as e:
             self.generate_status.set_text(f"Erreur : {e}")
+
+
+class MarkedPageWindow(Gtk.Window):
+    """Fenêtre pop-up affichant une page corrigée en grand avec zoom et menu latéral."""
+
+    def __init__(self, img, parent=None):
+        super().__init__(title="Page corrigée", transient_for=parent,
+                         default_width=1100, default_height=800,
+                         modal=False, destroy_with_parent=True)
+        self._img = img
+        self._zoom = 1.0
+        from PIL import Image as PILImage
+
+        main = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        self.set_child(main)
+
+        # Zone d'affichage : ScrolledWindow + Image
+        left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        left.set_hexpand(True)
+        left.set_vexpand(True)
+        main.append(left)
+
+        # Barre de zoom
+        zoom_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        zoom_box.set_margin_start(6)
+        zoom_box.set_margin_end(6)
+        zoom_box.set_margin_top(6)
+        zoom_box.set_margin_bottom(6)
+        btn_out = Gtk.Button(label="−")
+        btn_out.connect("clicked", lambda _b: self._set_zoom(self._zoom - 0.25))
+        self.zoom_label = Gtk.Label(label="100 %")
+        btn_in = Gtk.Button(label="+")
+        btn_in.connect("clicked", lambda _b: self._set_zoom(self._zoom + 0.25))
+        scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.25, 4.0, 0.25)
+        scale.set_value(1.0)
+        scale.set_hexpand(True)
+        scale.connect("value-changed", lambda s: self._set_zoom(s.get_value(), from_scale=True))
+        self.zoom_scale = scale
+        zoom_box.append(btn_out)
+        zoom_box.append(btn_in)
+        zoom_box.append(scale)
+        zoom_box.append(self.zoom_label)
+        left.append(zoom_box)
+
+        self.scroll = Gtk.ScrolledWindow()
+        self.scroll.set_hexpand(True)
+        self.scroll.set_vexpand(True)
+        self.image = Gtk.Image()
+        self.scroll.set_child(self.image)
+        left.append(self.scroll)
+
+        # Menu latéral droit (vide, prêt pour du contenu futur)
+        self.side = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.side.set_margin_start(8)
+        self.side.set_margin_end(8)
+        self.side.set_margin_top(8)
+        self.side.set_margin_bottom(8)
+        self.side.set_size_request(250, -1)
+        side_label = Gtk.Label(label="<b>Menu</b>")
+        side_label.set_use_markup(True)
+        self.side.append(side_label)
+        side_scroll = Gtk.ScrolledWindow()
+        side_scroll.set_vexpand(True)
+        self.side_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        side_scroll.set_child(self.side_content)
+        self.side.append(side_scroll)
+        main.append(self.side)
+
+        self._update_image()
+
+    def _set_zoom(self, value, from_scale=False):
+        value = max(0.25, min(4.0, round(value * 4) / 4))
+        if abs(value - self._zoom) < 0.01:
+            return
+        self._zoom = value
+        if not from_scale:
+            self.zoom_scale.set_value(value)
+        self.zoom_label.set_text(f"{int(value * 100)} %")
+        self._update_image()
+
+    def _update_image(self):
+        from PIL import Image as PILImage
+        w = max(1, int(self._img.width * self._zoom))
+        h = max(1, int(self._img.height * self._zoom))
+        resized = self._img.resize((w, h), PILImage.LANCZOS)
+        import io
+        buf = io.BytesIO()
+        resized.save(buf, format="png")
+        texture = Gdk.Texture.new_from_bytes(GLib.Bytes.new(buf.getvalue()))
+        self.image.set_from_paintable(texture)
+
+    def add_side_widget(self, widget):
+        self.side_content.append(widget)
+
 
 class QcmApplication(Gtk.Application):
     def __init__(self, project_path: str | None = None):
