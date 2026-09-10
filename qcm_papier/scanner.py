@@ -907,11 +907,8 @@ def auto_marks(page: ScannedPage, matrix_inv: Matrix) -> None:
     for mark in page.marks:
         if (mark.get("e") is not None and mark.get("q") is not None
                 and mark.get("c") is not None and mark.get("r") is not None):
-            mark["checked"] = any(
-                read_mark(pimg, matrix_inv, mark["x"], mark["y"],
-                          mark["r"], clair)
-                for clair in range(CLAIR, 241, 10)
-            )
+            mark["checked"] = read_mark(pimg, matrix_inv, mark["x"],
+                                        mark["y"], mark["r"], CLAIR)
 
 
 def show_marks(page: ScannedPage, project: Project) -> None:
