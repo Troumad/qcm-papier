@@ -59,7 +59,7 @@ def cmd_open(args: argparse.Namespace) -> int:
     print(f"  Choix : {n_c}")
     print(f"  Variantes générées : {n_v}")
     print(f"  Étudiants : {len(project.students)}")
-    return 0
+    return _maybe_open_gui(args.project, getattr(args, "edit", False))
 
 
 def cmd_variants(args: argparse.Namespace) -> int:
@@ -230,6 +230,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_open = sub.add_parser("open", help="Ouvrir et valider un projet JSON")
     p_open.add_argument("--project", "-p", required=True,
                         help="Fichier projet JSON")
+    p_open.add_argument("--edit", action="store_true",
+                        help="Ouvrir l'interface graphique sur le projet")
     p_open.set_defaults(func=cmd_open)
 
     # variants : générer les variantes et les sauvegarder
