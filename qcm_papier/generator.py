@@ -454,7 +454,7 @@ def _place_choices(variant, variant_id,
         # je ne sais pas quand on peut passer ici !
         if (exercise.get("index", -1) >= 0 and question.get("index", -1) >= 0
                 and choice.get("index", -1) >= 0):
-            marks.append({"x": x, "y": y, "r": 2.3*0.1,
+            marks.append({"x": x, "y": y, "r": 2.3,
                           "e": exercise.get("index", -1), "q": question.get("index", -1),
                           "c": choice.get("index", 0)})
         choice_iter += 1
