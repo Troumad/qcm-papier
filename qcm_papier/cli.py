@@ -150,6 +150,7 @@ def cmd_correct(args: argparse.Namespace) -> int:
         raise SystemExit("Aucune copie à corriger.")
 
     print(f"Correction de {len(copies)} fichier(s)...")
+    state_path = getattr(args, "load_state", None) or getattr(args, "save_state", None)
     notes: dict[str, float] = {}
     corrected_pages: list = []
     for copy_path in copies:
@@ -159,12 +160,19 @@ def cmd_correct(args: argparse.Namespace) -> int:
             print(f"  {copy_path} : ERREUR de chargement ({e})", file=sys.stderr)
             continue
         for page in pages:
-            ok = scanner.auto_check(page, project,
-                                     clair=getattr(args, "clair", 140))
-            if not ok:
-                print(f"  {copy_path} : correction échouée (alignement ?)",
-                      file=sys.stderr)
-                continue
+            restored = False
+            if getattr(args, "load_state", None):
+                restored = scanner.load_correction_state(
+                    copy_path, page, args.load_state)
+            if not restored:
+                ok = scanner.auto_check(page, project,
+                                        clair=getattr(args, "clair", 140))
+                if not ok:
+                    print(f"  {copy_path} : correction échouée (alignement ?)",
+                          file=sys.stderr)
+                    continue
+            else:
+                print(f"  {copy_path} : état restauré depuis la sauvegarde")
             if page.student_eid is not None and page.value is not None:
                 notes[page.student_eid] = page.value
             elif page.student_id is not None and page.value is not None:
@@ -189,6 +197,14 @@ def cmd_correct(args: argparse.Namespace) -> int:
             n += 1
             print(f"  Page corrigée rendue : {out}")
         print(f"{n} page(s) rendue(s) dans {render_dir}")
+
+    # Sauvegarde de l'état de correction (optionnel).
+    if getattr(args, "save_state", None):
+        scanner.save_correction_state(
+            [p for _, p in corrected_pages],
+            [c for c, _ in corrected_pages],
+            args.save_state)
+        print(f"État de correction sauvegardé : {args.save_state}")
 
     # Export Scodoc (optionnel).
     if args.scodoc_input:
@@ -294,6 +310,10 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Résolution de rendu des PDF (défaut 150)")
     p_cor.add_argument("--note-max", type=float, default=20.0,
                        help="Note maximale de l'échelle Scodoc (défaut 20)")
+    p_cor.add_argument("--save", dest="save_state", metavar="FICHIER",
+                       help="Sauvegarder l'état de correction dans un fichier JSON")
+    p_cor.add_argument("--load", dest="load_state", metavar="FICHIER",
+                       help="Recharger un état de correction sauvegardé (skip alignement)")
     p_cor.add_argument("--clair", type=int, default=140,
                        help="Seuil de détection des cases cochées (défaut 140 ; "
                             "augmenter pour des scans plus sombres)")
