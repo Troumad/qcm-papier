@@ -560,22 +560,39 @@ class ProjectSettings:
             'exercise_new_exercises', 'exercise_new_questions', 'exercise_new_choices',
             'question_new_questions', 'question_new_choices', 'choice_new_choices',
         }
+        # Champs à convertir en float (même s'ils sont stockés en string dans le JSON)
+        float_fields = {
+            'margin_left', 'margin_top', 'margin_right', 'margin_bottom',
+        }
+
+        def _coerce(value, is_int):
+            # Conversion d'une chaîne en int/float ; chaîne vide -> valeur par défaut (10.0)
+            if isinstance(value, str):
+                value = value.strip()
+                if value == '':
+                    return 10.0
+                return int(value) if is_int else float(value)
+            return value
 
         for key, value in d.items():
             # Convertir les clés JSON avec préfixe pos_ en clés internes
             internal_key = config.to_internal_key(key)
             
             if internal_key in known:
-                # Conversion automatique pour les champs entiers
-                if internal_key in int_fields and isinstance(value, str):
-                    setattr(s, internal_key, int(value))
+                # Conversion automatique pour les champs numériques
+                if internal_key in int_fields:
+                    setattr(s, internal_key, _coerce(value, True))
+                elif internal_key in float_fields:
+                    setattr(s, internal_key, _coerce(value, False))
                 else:
                     setattr(s, internal_key, copy.deepcopy(value))
             elif key in info_mapping:
                 target_key = info_mapping[key]
                 if target_key in known:
-                    if target_key in int_fields and isinstance(value, str):
-                        setattr(s, target_key, int(value))
+                    if target_key in int_fields:
+                        setattr(s, target_key, _coerce(value, True))
+                    elif target_key in float_fields:
+                        setattr(s, target_key, _coerce(value, False))
                     else:
                         setattr(s, target_key, copy.deepcopy(value))
         return s
