@@ -1192,11 +1192,18 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
     img_dir = base + "_images"
     os.makedirs(img_dir, exist_ok=True)
     data = {"copies": [], "image_dir": img_dir}
+    used_names: set[str] = set()
     for i, (copy_path, page) in enumerate(zip(copy_paths, pages)):
         if page.variant_id is not None or page.student_id is not None or page.marks:
             img_name = None
             if page.img is not None and page.img.img is not None:
-                img_name = f"page_{i}.png"
+                base_name = str(page.student_id) if page.student_id else f"anonyme_{i}"
+                img_name = base_name + ".png"
+                n = 1
+                while img_name in used_names:
+                    img_name = f"{base_name}_{n}.png"
+                    n += 1
+                used_names.add(img_name)
                 page.img.img.save(os.path.join(img_dir, img_name))
             entry = {
                 "file": copy_path,
@@ -1205,6 +1212,12 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
             if img_name:
                 entry["image"] = img_name
             data["copies"].append(entry)
+    for fname in os.listdir(img_dir):
+        if fname.endswith(".png") and fname not in used_names:
+            try:
+                os.remove(os.path.join(img_dir, fname))
+            except OSError:
+                pass
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
