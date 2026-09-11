@@ -24,6 +24,7 @@ gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, Gdk, GLib
 
 from .. import generator, pdf_writer, project as project_mod, scanner, scodoc
+from ..marking import score_page
 from ..model import Project
 from .editor import StructureEditor
 
@@ -1190,13 +1191,14 @@ class QcmWindow(Gtk.ApplicationWindow):
         btn_cancel.connect("clicked", lambda _b: win.destroy())
         btn_ok = Gtk.Button(label="Supprimer")
         def _do_remove(_b):
-            removed = [p for p, cb in checks.items() if cb.get_active()]
+            removed = set(p for p, cb in checks.items() if cb.get_active())
             for path in removed:
                 info = self.copy_rows.pop(path, None)
                 if info is not None:
                     self.copies_list.remove(info["row"])
                 if path in self.copies:
                     self.copies.remove(path)
+            self._purge_marked_pages(removed)
             self.marking_status.set_text(
                 f"{len(self.copies)} copie(s) restante(s).")
             win.destroy()
@@ -1337,6 +1339,38 @@ class QcmWindow(Gtk.ApplicationWindow):
         if self.marked_pages:
             self._display_marked_page(0)
 
+    def _purge_marked_pages(self, removed_paths: set[str]) -> None:
+        """Retire des résultats et de l'aperçu les copies des fichiers
+        supprimés, puis reconstruit le sélecteur et le tableau."""
+        if not removed_paths:
+            return
+        kept = []
+        for label, page in self.marked_pages:
+            if getattr(page, "copy_path", None) in removed_paths:
+                continue
+            kept.append((label, page))
+        self.marked_pages = kept
+        self.results_store.clear()
+        for idx, (label, page) in enumerate(self.marked_pages):
+            fname = os.path.basename(getattr(page, "copy_path", "") or "")
+            note = page.value if page.value is not None else 0.0
+            failed = (page.matrix_inv is None or page.variant_id is None
+                      or page.student_id is None)
+            if failed:
+                reason = "Échec alignement"
+                if page.variant_id is not None and page.student_id is None:
+                    reason = "N° étudiant non trouvé"
+                elif page.variant_id is None:
+                    reason = "Code-barres non trouvé"
+                self.results_store.append([fname, "", "", "", reason, idx])
+            else:
+                self.results_store.append([
+                    fname, str(page.variant_id or ""),
+                    page.student_id or "", f"{note:.2f}",
+                    "complète" if page.complete else "incomplète", idx,
+                ])
+        self._refresh_page_selector()
+
     def _on_result_selected(self, selection) -> None:
         model, tree_iter = selection.get_selected()
         if tree_iter is None or model is None:
@@ -1399,6 +1433,31 @@ class QcmWindow(Gtk.ApplicationWindow):
     def _enlarge_navigate(self, idx: int) -> None:
         if 0 <= idx < len(self.marked_pages):
             self.page_selector.set_selected(idx)
+        self._update_result_row(idx)
+
+    def _update_result_row(self, marked_idx: int) -> None:
+        """Met à jour la ligne du tableau de résultats correspondant à la
+        page marquée d'index ``marked_idx`` (note, étudiant, statut)."""
+        if marked_idx < 0 or marked_idx >= len(self.marked_pages):
+            return
+        _label, page = self.marked_pages[marked_idx]
+        fname = os.path.basename(getattr(page, "copy_path", "") or "")
+        failed = (page.matrix_inv is None or page.variant_id is None
+                  or page.student_id is None)
+        for row in self.results_store:
+            if row[5] == marked_idx:
+                if failed:
+                    reason = "Échec alignement"
+                    if page.variant_id is not None and page.student_id is None:
+                        reason = "N° étudiant non trouvé"
+                    elif page.variant_id is None:
+                        reason = "Code-barres non trouvé"
+                    row[4] = reason
+                else:
+                    row[2] = page.student_id or ""
+                    row[3] = f"{page.value:.2f}"
+                    row[4] = "complète" if page.complete else "incomplète"
+                break
 
 
     def _on_export_scodoc(self, _btn) -> None:
@@ -1764,7 +1823,15 @@ class MarkedPageWindow(Gtk.Window):
                 page.student_eid = student.eid
                 page.student_name = student.name
                 page.student_firstname = student.firstname
+        score = score_page(self._project, page.marks,
+                           variant_id=page.variant_id,
+                           student_id=page.student_id)
+        page.value = score.value
+        page.total = score.total
+        page.complete = score.complete
         self._load_page()
+        if self.on_navigate is not None:
+            self.on_navigate(self.idx)
 
     def _on_ctrl_scroll(self, ctrl, dx, dy):
         state = ctrl.get_current_event_state()
