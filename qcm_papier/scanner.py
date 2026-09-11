@@ -1204,7 +1204,9 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
                     img_name = f"{base_name}_{n}.png"
                     n += 1
                 used_names.add(img_name)
-                page.img.img.save(os.path.join(img_dir, img_name))
+                rendered = render_marked_page(page)
+                save_img = rendered if rendered is not None else page.img.img
+                save_img.save(os.path.join(img_dir, img_name))
             entry = {
                 "file": copy_path,
                 "page": _page_to_state(page),
