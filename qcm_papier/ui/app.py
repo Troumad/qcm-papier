@@ -1025,11 +1025,17 @@ class QcmWindow(Gtk.ApplicationWindow):
         btn_export.connect("clicked", self._on_export_scodoc)
         btn_remove = Gtk.Button(label="Supprimer")
         btn_remove.connect("clicked", self._on_remove_copies)
+        btn_save_state = Gtk.Button(label="Sauvegarder…")
+        btn_save_state.connect("clicked", self._on_save_state)
+        btn_load_state = Gtk.Button(label="Recharger…")
+        btn_load_state.connect("clicked", self._on_load_state)
         files_box.append(btn_load)
         files_box.append(btn_correct)
         files_box.append(btn_students)
         files_box.append(btn_export)
         files_box.append(btn_remove)
+        files_box.append(btn_save_state)
+        files_box.append(btn_load_state)
         box.append(files_box)
 
         clair_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -1207,6 +1213,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                 info["n_err"] = 0
                 info["n_pages"] = len(pages)
             for page in pages:
+                page.copy_path = copy_path
                 ok = scanner.auto_check(page, self.project,
                                          clair=int(self.clair_spin.get_value()))
                 if ok:
@@ -1342,6 +1349,88 @@ class QcmWindow(Gtk.ApplicationWindow):
                 f"{count} note(s) exportée(s) → {path_out}")
         except Exception as e:
             self.marking_status.set_text(f"Erreur : {e}")
+
+    def _on_save_state(self, _btn) -> None:
+        if not self.marked_pages:
+            self.marking_status.set_text("Aucune correction à sauvegarder.")
+            return
+        path = _file_dialog(self, "Sauvegarder l'état de correction",
+                             Gtk.FileChooserAction.SAVE,
+                             initial_name="correction.json",
+                             filters=[("JSON", ["*.json"])])
+        if path is None:
+            return
+        try:
+            pages = [p for _lbl, p in self.marked_pages]
+            copy_paths = [p.copy_path or "" for _lbl, p in self.marked_pages]
+            scanner.save_correction_state(pages, copy_paths, path)
+            self.marking_status.set_text(f"État sauvegardé : {path}")
+        except Exception as e:
+            self.marking_status.set_text(f"Erreur : {e}")
+
+    def _on_load_state(self, _btn) -> None:
+        path = _file_dialog(self, "Recharger un état de correction",
+                             Gtk.FileChooserAction.OPEN,
+                             filters=[("JSON", ["*.json"])])
+        if path is None:
+            return
+        if not self.copies:
+            self.marking_status.set_text("Chargez les copies avant de recharger.")
+            return
+        self.results_store.clear()
+        self.marked_pages = []
+        notes: dict[str, float] = {}
+        n_ok = 0
+        n_err = 0
+        for copy_path in self.copies:
+            fname = os.path.basename(copy_path)
+            info = self.copy_rows.get(copy_path)
+            try:
+                pages = scanner.load_pages_from_file(copy_path, dpi=150)
+            except Exception as e:
+                n_err += 1
+                self.results_store.append([fname, "", "", "", f"Erreur : {e}"])
+                if info:
+                    info["n_err"] = 1
+                    info["n_pages"] = 1
+                    self._update_copy_row(copy_path)
+                continue
+            if info:
+                info["n_ok"] = 0
+                info["n_err"] = 0
+                info["n_pages"] = len(pages)
+            for page in pages:
+                page.copy_path = copy_path
+                restored = scanner.load_correction_state(copy_path, page, path)
+                if not restored:
+                    n_err += 1
+                    if info:
+                        info["n_err"] += 1
+                    self.results_store.append([fname, "", "", "",
+                                               "Non trouvé dans la sauvegarde"])
+                    continue
+                n_ok += 1
+                if info:
+                    info["n_ok"] += 1
+                eid = page.student_eid or page.student_id or ""
+                note = page.value if page.value is not None else 0.0
+                if eid:
+                    notes[eid] = note
+                self.results_store.append([
+                    fname, str(page.variant_id or ""),
+                    page.student_id or "", f"{note:.2f}",
+                    "complète" if page.complete else "incomplète",
+                ])
+                label = f"{fname} v{page.variant_id} {page.student_id or ''}"
+                self.marked_pages.append((label, page))
+                if info:
+                    self._update_copy_row(copy_path)
+            if info:
+                info["check"].set_active(False)
+        self._last_notes = notes
+        self.marking_status.set_text(
+            f"{n_ok} restaurée(s), {n_err} en erreur.")
+        self._refresh_page_selector()
 
     # ------------------------------------------------------------------
     # Menu

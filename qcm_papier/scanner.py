@@ -188,6 +188,7 @@ class ScannedPage:
     value: float | None = None
     total: float | None = None
     complete: bool = False
+    copy_path: str | None = None
 
     def clear_marks(self) -> None:
         self.shapes = []
