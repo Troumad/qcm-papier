@@ -113,16 +113,6 @@ class QcmWindow(Gtk.ApplicationWindow):
         header.set_show_title_buttons(True)
         self.set_titlebar(header)
 
-        btn_new = Gtk.Button(label="Nouveau")
-        btn_new.connect("clicked", self._on_new)
-        btn_open = Gtk.Button(label="Ouvrir")
-        btn_open.connect("clicked", self._on_open)
-        btn_save = Gtk.Button(label="Enregistrer")
-        btn_save.connect("clicked", self._on_save)
-        header.pack_start(btn_new)
-        header.pack_start(btn_open)
-        header.pack_start(btn_save)
-
         # Notebook
         self.notebook = Gtk.Notebook()
         self.set_child(self.notebook)
@@ -152,13 +142,49 @@ class QcmWindow(Gtk.ApplicationWindow):
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
 
+        self._build_file_tab()
         self._build_info_tab()
         self._build_structure_tab()
         self._build_generate_tab()
         self._build_marking_tab()
 
         self._last_notes: dict[str, float] = {}
-        self.notebook.set_current_page(1)
+        self.notebook.set_current_page(2)
+
+    # ------------------------------------------------------------------
+    # Onglet Fichier
+    # ------------------------------------------------------------------
+    def _build_file_tab(self) -> None:
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.set_margin_start(12)
+        box.set_margin_end(12)
+        box.set_margin_top(12)
+        box.set_margin_bottom(12)
+
+        title = Gtk.Label(label="<b>Fichier</b>")
+        title.set_use_markup(True)
+        title.set_xalign(0)
+        box.append(title)
+
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        btn_new = Gtk.Button(label="Nouveau")
+        btn_new.connect("clicked", self._on_new)
+        btn_open = Gtk.Button(label="Ouvrir…")
+        btn_open.connect("clicked", self._on_open)
+        btn_save = Gtk.Button(label="Enregistrer")
+        btn_save.connect("clicked", self._on_save)
+        btn_box.append(btn_new)
+        btn_box.append(btn_open)
+        btn_box.append(btn_save)
+        box.append(btn_box)
+
+        self.file_status = Gtk.Label(label="")
+        self.file_status.set_xalign(0)
+        box.append(self.file_status)
+
+        box.set_halign(Gtk.Align.START)
+        box.set_valign(Gtk.Align.START)
+        self.notebook.append_page(box, Gtk.Label(label="Fichier"))
 
     # ------------------------------------------------------------------
     # Onglet Informations
@@ -1198,7 +1224,16 @@ class QcmWindow(Gtk.ApplicationWindow):
                     self.copies_list.remove(info["row"])
                 if path in self.copies:
                     self.copies.remove(path)
-            self._purge_marked_pages(removed)
+            total = sum(1 for _l, pg in self.marked_pages
+                        if getattr(pg, "copy_path", None) in removed)
+            def progress(i):
+                self.marking_status.set_text(
+                    f"Suppression copie {i}/{total}…")
+                ctx = GLib.MainContext.default()
+                while ctx.pending():
+                    ctx.iteration(False)
+                ctx.iteration(False)
+            self._purge_marked_pages(removed, progress=progress)
             self.marking_status.set_text(
                 f"{len(self.copies)} copie(s) restante(s).")
             win.destroy()
@@ -1339,14 +1374,19 @@ class QcmWindow(Gtk.ApplicationWindow):
         if self.marked_pages:
             self._display_marked_page(0)
 
-    def _purge_marked_pages(self, removed_paths: set[str]) -> None:
+    def _purge_marked_pages(self, removed_paths: set[str],
+                            progress=None) -> None:
         """Retire des résultats et de l'aperçu les copies des fichiers
         supprimés, puis reconstruit le sélecteur et le tableau."""
         if not removed_paths:
             return
         kept = []
+        i = 0
         for label, page in self.marked_pages:
             if getattr(page, "copy_path", None) in removed_paths:
+                i += 1
+                if progress is not None:
+                    progress(i)
                 continue
             kept.append((label, page))
         self.marked_pages = kept
@@ -1577,6 +1617,8 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.results_store.clear()
         self.generate_status.set_text("Nouveau projet.")
         self.set_title("Générateur/Correcteur de QCM papier - Nouveau")
+        if hasattr(self, "file_status"):
+            self.file_status.set_text("Projet nouveau (non enregistré).")
         self.present()
 
     def _on_open(self, _btn) -> None:
@@ -1625,7 +1667,9 @@ class QcmWindow(Gtk.ApplicationWindow):
             self._load_generation_params()
 
             self.set_title(f"Générateur/Correcteur de QCM papier - {os.path.basename(path)}")
-            self.generate_status.set_text(f"Projet chargé : {path}")            
+            self.generate_status.set_text(f"Projet chargé : {path}")
+            if hasattr(self, "file_status"):
+                self.file_status.set_text(f"Projet chargé : {path}")
 
         except Exception as e:
             self.generate_status.set_text(f"Erreur : {e}")
@@ -1642,6 +1686,8 @@ class QcmWindow(Gtk.ApplicationWindow):
         try:
             project_mod.save_project(self.project, path)
             self.generate_status.set_text(f"Projet enregistré : {path}")
+            if hasattr(self, "file_status"):
+                self.file_status.set_text(f"Projet enregistré : {path}")
         except Exception as e:
             self.generate_status.set_text(f"Erreur : {e}")
 
