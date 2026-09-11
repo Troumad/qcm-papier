@@ -1048,7 +1048,7 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         self.copies: list[str] = []
         self.copies_list = Gtk.ListBox()
-        self.copies_list.set_selection_mode(Gtk.SelectionMode.MULTIPLE)
+        self.copies_list.set_selection_mode(Gtk.SelectionMode.NONE)
         self.copy_rows: dict[str, dict] = {}
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
@@ -1060,11 +1060,16 @@ class QcmWindow(Gtk.ApplicationWindow):
         box.append(self.marking_status)
 
         # Résultats
-        self.results_store = Gtk.ListStore(str, str, str, str, str)
+        self.results_store = Gtk.ListStore(str, str, str, str, str, int)
         results_tree = Gtk.TreeView(model=self.results_store)
-        for i, title in enumerate(["Fichier", "Variante", "Étudiant", "Note", "Statut"]):
+        for i, title in enumerate(["Fichier", "Variante", "Étudiant",
+                                    "Note", "Statut"]):
             results_tree.append_column(
                 Gtk.TreeViewColumn(title, Gtk.CellRendererText(), text=i))
+        sel = results_tree.get_selection()
+        sel.connect("changed", self._on_result_selected)
+        results_tree.connect("row-activated", self._on_result_activated)
+        self.results_tree = results_tree
         scroll2 = Gtk.ScrolledWindow()
         scroll2.set_vexpand(True)
         scroll2.set_child(results_tree)
@@ -1142,22 +1147,64 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.marking_status.set_text(f"{len(self.copies)} copie(s) chargée(s).")
 
     def _on_remove_copies(self, _btn) -> None:
-        selected_rows = self.copies_list.get_selected_rows()
-        if not selected_rows:
+        if not self.copies:
+            self.marking_status.set_text("Aucune copie à supprimer.")
             return
-        paths_to_remove = []
-        for lbrow in selected_rows:
-            for path, info in self.copy_rows.items():
-                if info["row"] is lbrow:
-                    paths_to_remove.append(path)
-                    break
-        for path in paths_to_remove:
-            info = self.copy_rows.pop(path, None)
-            if info is not None:
-                self.copies_list.remove(info["row"])
-            if path in self.copies:
-                self.copies.remove(path)
-        self.marking_status.set_text(f"{len(self.copies)} copie(s) restante(s).")
+        win = Gtk.Window(title="Supprimer des fichiers de correction",
+                          transient_for=self, modal=True,
+                          default_width=420, default_height=400)
+        main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        main.set_margin_start(8)
+        main.set_margin_end(8)
+        main.set_margin_top(8)
+        main.set_margin_bottom(8)
+        win.set_child(main)
+
+        main.append(Gtk.Label(label="Cochez les fichiers à supprimer :"))
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_hexpand(True)
+        checks_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        scroll.set_child(checks_box)
+        main.append(scroll)
+
+        checks: dict[str, Gtk.CheckButton] = {}
+        for path in list(self.copies):
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            row.set_margin_start(4)
+            row.set_margin_end(4)
+            row.set_margin_top(2)
+            row.set_margin_bottom(2)
+            cb = Gtk.CheckButton()
+            row.append(cb)
+            lbl = Gtk.Label(label=os.path.basename(path))
+            lbl.set_hexpand(True)
+            lbl.set_xalign(0)
+            row.append(lbl)
+            checks_box.append(row)
+            checks[path] = cb
+
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        btn_box.set_halign(Gtk.Align.END)
+        btn_cancel = Gtk.Button(label="Annuler")
+        btn_cancel.connect("clicked", lambda _b: win.destroy())
+        btn_ok = Gtk.Button(label="Supprimer")
+        def _do_remove(_b):
+            removed = [p for p, cb in checks.items() if cb.get_active()]
+            for path in removed:
+                info = self.copy_rows.pop(path, None)
+                if info is not None:
+                    self.copies_list.remove(info["row"])
+                if path in self.copies:
+                    self.copies.remove(path)
+            self.marking_status.set_text(
+                f"{len(self.copies)} copie(s) restante(s).")
+            win.destroy()
+        btn_ok.connect("clicked", _do_remove)
+        btn_box.append(btn_cancel)
+        btn_box.append(btn_ok)
+        main.append(btn_box)
+        win.present()
 
     def _on_load_students(self, _btn) -> None:
         path = _file_dialog(self, "Table étudiants Scodoc",
@@ -1202,7 +1249,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             except Exception as e:
                 n_err += 1
                 self.results_store.append([fname, "",
-                                            "", "", f"Erreur : {e}"])
+                                            "", "", f"Erreur : {e}", -1])
                 if info:
                     info["n_err"] = 1
                     info["n_pages"] = 1
@@ -1230,6 +1277,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                         page.student_id or "",
                         f"{note:.2f}",
                         "complète" if page.complete else "incomplète",
+                        len(self.marked_pages),
                     ])
                     label = f"{fname} v{page.variant_id} {page.student_id or ''}"
                     self.marked_pages.append((label, page))
@@ -1243,7 +1291,8 @@ class QcmWindow(Gtk.ApplicationWindow):
                     elif page.student_id is None:
                         reason = "N° étudiant non trouvé"
                     self.results_store.append([fname, "",
-                                                "", "", reason])
+                                                "", "", reason,
+                                                len(self.marked_pages)])
                     label = f"{fname} ⚠ {reason}"
                     self.marked_pages.append((label, page))
                 if info:
@@ -1287,6 +1336,29 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.page_selector.set_model(sm)
         if self.marked_pages:
             self._display_marked_page(0)
+
+    def _on_result_selected(self, selection) -> None:
+        model, tree_iter = selection.get_selected()
+        if tree_iter is None or model is None:
+            return
+        page_idx = model.get_value(tree_iter, 5)
+        if page_idx is not None and 0 <= page_idx < len(self.marked_pages):
+            self.page_selector.set_selected(page_idx)
+            self._display_marked_page(page_idx)
+
+    def _on_result_activated(self, _tree, path, _column) -> None:
+        model = self.results_tree.get_model()
+        if model is None:
+            return
+        tree_iter = model.get_iter(path)
+        if tree_iter is None:
+            return
+        page_idx = model.get_value(tree_iter, 5)
+        if page_idx is not None and 0 <= page_idx < len(self.marked_pages):
+            win = MarkedPageWindow(self.marked_pages, page_idx, self,
+                                   on_navigate=self._enlarge_navigate,
+                                   project=self.project)
+            win.present()
 
     def _on_page_selected(self, _dropdown, _pspec) -> None:
         idx = self.page_selector.get_selected()
