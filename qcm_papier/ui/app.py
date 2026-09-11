@@ -1071,12 +1071,11 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.clair_spin.set_value(140)
         clair_box.append(self.clair_spin)
         clair_box.append(Gtk.Label(label="(↑ pour scans plus sombres)"))
-        box.append(clair_box)
-
         help_lbl = Gtk.Label(label="Cocher un fichier pour le corriger.")
         help_lbl.set_xalign(0)
         help_lbl.get_style_context().add_class("suggestion")
-        box.append(help_lbl)
+        clair_box.append(help_lbl)
+        box.append(clair_box)
 
         self.copies: list[str] = []
         self.copies_list = Gtk.ListBox()
