@@ -1065,8 +1065,13 @@ class QcmWindow(Gtk.ApplicationWindow):
         files_box.append(btn_load_state)
         box.append(files_box)
 
+        help_lbl = Gtk.Label(label="Cocher un fichier pour le corriger.")
+        help_lbl.set_xalign(0)
+        help_lbl.get_style_context().add_class("suggestion")
+        box.append(help_lbl)
+
         clair_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        clair_box.append(Gtk.Label(label="Seuil de détection :"))
+        clair_box.append(Gtk.Label(label="Nouveau seuil de détection :"))
         self.clair_spin = Gtk.SpinButton.new_with_range(50, 255, 5)
         self.clair_spin.set_value(140)
         clair_box.append(self.clair_spin)
