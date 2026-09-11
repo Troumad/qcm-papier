@@ -1182,16 +1182,30 @@ def _page_from_state(page: ScannedPage, state: dict) -> None:
 
 def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
                           path: str) -> None:
-    """Sauvegarde l'état de correction des pages dans un fichier JSON."""
-    data = {"copies": []}
-    for copy_path, page in zip(copy_paths, pages):
+    """Sauvegarde l'état de correction des pages dans un fichier JSON.
+
+    Les images des copies sont sauvegardées dans un dossier portant le
+    même nom que le fichier JSON (sans extension) à côté de celui-ci.
+    """
+    import json
+    base = os.path.splitext(path)[0]
+    img_dir = base + "_images"
+    os.makedirs(img_dir, exist_ok=True)
+    data = {"copies": [], "image_dir": img_dir}
+    for i, (copy_path, page) in enumerate(zip(copy_paths, pages)):
         if page.variant_id is not None or page.student_id is not None or page.marks:
-            data["copies"].append({
+            img_name = None
+            if page.img is not None and page.img.img is not None:
+                img_name = f"page_{i}.png"
+                page.img.img.save(os.path.join(img_dir, img_name))
+            entry = {
                 "file": copy_path,
                 "page": _page_to_state(page),
-            })
+            }
+            if img_name:
+                entry["image"] = img_name
+            data["copies"].append(entry)
     with open(path, "w", encoding="utf-8") as f:
-        import json
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
@@ -1206,8 +1220,16 @@ def load_correction_state(copy_path: str, page: ScannedPage,
         return False
     with open(state_path, "r", encoding="utf-8") as f:
         data = json.load(f)
+    img_dir = data.get("image_dir")
     for entry in data.get("copies", []):
         if os.path.abspath(entry["file"]) == os.path.abspath(copy_path):
             _page_from_state(page, entry["page"])
+            img_name = entry.get("image")
+            if img_name and img_dir:
+                img_path = os.path.join(os.path.dirname(state_path),
+                                        img_dir, img_name)
+                if os.path.exists(img_path):
+                    img = Image.open(img_path)
+                    page.img = PixelImage(img)
             return True
     return False
