@@ -1065,11 +1065,6 @@ class QcmWindow(Gtk.ApplicationWindow):
         files_box.append(btn_load_state)
         box.append(files_box)
 
-        help_lbl = Gtk.Label(label="Cocher un fichier pour le corriger.")
-        help_lbl.set_xalign(0)
-        help_lbl.get_style_context().add_class("suggestion")
-        box.append(help_lbl)
-
         clair_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         clair_box.append(Gtk.Label(label="Nouveau seuil de détection :"))
         self.clair_spin = Gtk.SpinButton.new_with_range(50, 255, 5)
@@ -1077,6 +1072,11 @@ class QcmWindow(Gtk.ApplicationWindow):
         clair_box.append(self.clair_spin)
         clair_box.append(Gtk.Label(label="(↑ pour scans plus sombres)"))
         box.append(clair_box)
+
+        help_lbl = Gtk.Label(label="Cocher un fichier pour le corriger.")
+        help_lbl.set_xalign(0)
+        help_lbl.get_style_context().add_class("suggestion")
+        box.append(help_lbl)
 
         self.copies: list[str] = []
         self.copies_list = Gtk.ListBox()
