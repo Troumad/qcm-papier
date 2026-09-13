@@ -1714,6 +1714,8 @@ class MarkedPageWindow(Gtk.Window):
         self._base_img = None  # image brute (sans overlay) pour l'alignement manuel
         self._align_points = []  # points cliqués pour l'alignement manuel
         self._align_mode = False
+        # Repères placés manuellement qu'on garde affichés en bleu après réussite.
+        self._manual_marks = []
 
         main = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         self.set_child(main)
@@ -1857,6 +1859,8 @@ class MarkedPageWindow(Gtk.Window):
         self._align_mode = False
         self.btn_align.set_active(False)
         self._update_align_label()
+        # Repères placés manuellement (conservés sur la page, affichés en bleu).
+        self._manual_marks = getattr(page, "manual_marks", [])
         n = len(self.pages)
         self.lbl_index.set_markup(f"<b>Copie {self.idx + 1} / {n}</b>")
         failed = page.matrix_inv is None or page.variant_id is None or page.student_id is None
@@ -1948,6 +1952,19 @@ class MarkedPageWindow(Gtk.Window):
                 draw.text((px + r + 2, py - r), str(i + 1),
                           fill=(255, 0, 0, 255))
             display = PILImage.alpha_composite(src, overlay)
+        elif self._manual_marks and self._img is not None:
+            # Repères placés manuellement, affichés en bleu par-dessus la
+            # page corrigée (même après réussite de l'alignement).
+            src = self._img.convert("RGBA")
+            overlay = PILImage.new("RGBA", src.size, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(overlay)
+            for i, (px, py) in enumerate(self._manual_marks):
+                r = 8
+                draw.ellipse((px - r, py - r, px + r, py + r),
+                             fill=(0, 0, 255, 200))
+                draw.text((px + r + 2, py - r), str(i + 1),
+                          fill=(0, 0, 255, 255))
+            display = PILImage.alpha_composite(src, overlay)
         else:
             display = self._img
         if display is None:
@@ -2006,20 +2023,22 @@ class MarkedPageWindow(Gtk.Window):
             return
         if len(self._align_points) >= 5:
             return
-        # Conversion des coordonnées widget → pixels image (selon le zoom).
-        w_alloc = self.image.get_allocated_width()
-        h_alloc = self.image.get_allocated_height()
-        if w_alloc <= 0 or h_alloc <= 0:
-            return
         base_w = self._base_img.width
         base_h = self._base_img.height
-        # Gtk.Picture recentre l'image ; on calcule l'offset de centrage.
-        disp_w = base_w * self._zoom
-        disp_h = base_h * self._zoom
-        off_x = (w_alloc - disp_w) / 2 if w_alloc > disp_w else 0.0
-        off_y = (h_alloc - disp_h) / 2 if h_alloc > disp_h else 0.0
-        px = (_x - off_x) / self._zoom
-        py = (_y - off_y) / self._zoom
+        # Coordos du clic relatives au widget image (viewport visible).
+        # L'image affichée peut déborder du viewport : sa propre origine
+        # (haut-gauche du contenu) est décalée du scroll de la ScrolledWindow.
+        x = _x
+        y = _y
+        hadj = self.scroll.get_hadjustment()
+        vadj = self.scroll.get_vadjustment()
+        if hadj is not None:
+            x += hadj.get_value()
+        if vadj is not None:
+            y += vadj.get_value()
+        # Conversion pixels affichés → pixels image.
+        px = x / self._zoom
+        py = y / self._zoom
         # bornage dans l'image
         px = max(0.0, min(base_w, px))
         py = max(0.0, min(base_h, py))
@@ -2045,15 +2064,32 @@ class MarkedPageWindow(Gtk.Window):
         ok = scanner.correct_with_manual_align(
             page, self._project, list(self._align_points), clair=clair)
         if ok:
+            # On mémorise les repères sur la page pour les garder affichés
+            # en bleu après l'alignement.
+            page.manual_marks = list(self._align_points)
             self._align_mode = False
             self.btn_align.set_active(False)
             self._load_page()
             if self.on_navigate is not None:
                 self.on_navigate(self.idx)
+            self._show_align_success(page)
         else:
             self.lbl_align.set_markup(
                 "<span color='#F00'>Alignement impossible (repères mal placés ? "
                 "Reprendre les 5 repères).</span>")
+
+    def _show_align_success(self, page) -> None:
+        """Pop-up de confirmation après alignement manuel réussi."""
+        variant = page.variant_id if page.variant_id is not None else "—"
+        note = f"{page.value:.2f}" if page.value is not None else "—"
+        statut = "complète" if page.complete else "incomplète"
+        dialog = Gtk.AlertDialog()
+        dialog.set_modal(True)
+        dialog.set_message("Alignement manuel réussi ✓")
+        dialog.set_detail(
+            f"Variante : {variant}\n"
+            f"Note : {note} / {page.total or 20:.0f} ({statut})")
+        dialog.show(self)
 
     def add_side_widget(self, widget):
         self.side.append(widget)
