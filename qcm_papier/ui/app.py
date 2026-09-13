@@ -1859,8 +1859,18 @@ class MarkedPageWindow(Gtk.Window):
         self._align_mode = False
         self.btn_align.set_active(False)
         self._update_align_label()
-        # Repères placés manuellement (conservés sur la page, affichés en bleu).
-        self._manual_marks = getattr(page, "manual_marks", [])
+        # Repères d'orientation à afficher en bleu sur toutes les copies :
+        # - repères trouvés par l'alignement auto (page.shapes, canvas_x/y)
+        # - repères placés manuellement (page.manual_marks, canvas_x/y)
+        marks = []
+        for s in getattr(page, "shapes", []):
+            cx = s.get("canvas_x")
+            cy = s.get("canvas_y")
+            if cx is not None and cy is not None:
+                marks.append((float(cx), float(cy)))
+        if len(marks) != 5:
+            marks = list(getattr(page, "manual_marks", []))
+        self._manual_marks = marks
         n = len(self.pages)
         self.lbl_index.set_markup(f"<b>Copie {self.idx + 1} / {n}</b>")
         failed = page.matrix_inv is None or page.variant_id is None or page.student_id is None
@@ -1946,10 +1956,16 @@ class MarkedPageWindow(Gtk.Window):
             overlay = PILImage.new("RGBA", src.size, (0, 0, 0, 0))
             draw = ImageDraw.Draw(overlay)
             for i, (px, py) in enumerate(self._align_points):
-                r = 8
+                r = 10
                 draw.ellipse((px - r, py - r, px + r, py + r),
                              fill=(255, 0, 0, 200))
-                draw.text((px + r + 2, py - r), str(i + 1),
+                # croix
+                draw.line((px - r - 4, py, px + r + 4, py),
+                          fill=(255, 0, 0, 255), width=2)
+                draw.line((px, py - r - 4, px, py + r + 4),
+                          fill=(255, 0, 0, 255), width=2)
+                draw.text((px + r + 2, py - r),
+                          f"{i + 1} ({px:.0f},{py:.0f})",
                           fill=(255, 0, 0, 255))
             display = PILImage.alpha_composite(src, overlay)
         elif self._manual_marks and self._img is not None:
@@ -2028,17 +2044,23 @@ class MarkedPageWindow(Gtk.Window):
         # Coordos du clic relatives au widget image (viewport visible).
         # L'image affichée peut déborder du viewport : sa propre origine
         # (haut-gauche du contenu) est décalée du scroll de la ScrolledWindow.
-        x = _x
-        y = _y
         hadj = self.scroll.get_hadjustment()
         vadj = self.scroll.get_vadjustment()
-        if hadj is not None:
-            x += hadj.get_value()
-        if vadj is not None:
-            y += vadj.get_value()
+        hadj_val = hadj.get_value() if hadj is not None else 0.0
+        vadj_val = vadj.get_value() if vadj is not None else 0.0
+        # Sortie de débogage pour calibrer la conversion clic → image.
+        print(f"[align-click] raw=({_x:.1f},{_y:.1f}) "
+              f"zoom={self._zoom} "
+              f"scroll=({hadj_val:.1f},{vadj_val:.1f}) "
+              f"img_size=({base_w},{base_h}) "
+              f"alloc=({self.image.get_allocated_width()},"
+              f"{self.image.get_allocated_height()})")
+        x = _x + hadj_val
+        y = _y + vadj_val
         # Conversion pixels affichés → pixels image.
         px = x / self._zoom
         py = y / self._zoom
+        print(f"[align-click] → image=({px:.1f},{py:.1f})")
         # bornage dans l'image
         px = max(0.0, min(base_w, px))
         py = max(0.0, min(base_h, py))
