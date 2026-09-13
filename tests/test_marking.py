@@ -73,6 +73,38 @@ def test_choix_multiple_gain_progressif():
     assert sc.total == 3.0
 
 
+def test_choix_multiple_gain_progressif_avec_penalite():
+    """Question à gain progressif : 1 bonne sur 2 cochée + 1 erreur pénéalisante.
+    Le malus est soustrait du gain progressif : gain * 1/2 - penalty = 2 - 0,5 = 1,5.
+    (Régression : avant, toute erreur remplaçait la note par -malus.)
+    """
+    p = model.Project()
+    ex = model.Exercise(name="Ex", index=0)
+    q = model.Question(name="Q", gain=4.0, penalty=0.5, single=False,
+                       multiple_progressive=True, index=0)
+    q.choices = [
+        model.Choice(name="A", correct=True, neutral=False, index=0),
+        model.Choice(name="B", correct=False, neutral=False, penalty=True, index=1),
+        model.Choice(name="C", correct=False, neutral=False, penalty=True, index=2),
+        model.Choice(name="F", correct=True, neutral=False, index=3),
+    ]
+    ex.questions = [q]
+    p.structure = [ex]
+    # A (correct) + C (pénalité) cochés : 1 bonne sur 2 + 1 erreur.
+    marks = _marks([True, False, True, False])
+    sc = marking.score_page(p, marks, variant_id=1, student_id="p1")
+    assert sc.value == 1.5  # 4 * 1/2 - 0.5
+    assert sc.total == 4.0
+    # Aucune erreur, juste 1 bonne sur 2 : gain progressif pur.
+    sc = marking.score_page(p, _marks([True, False, False, False]),
+                            variant_id=1, student_id="p1")
+    assert sc.value == 2.0  # 4 * 1/2
+    # Tout juste : gain complet.
+    sc = marking.score_page(p, _marks([True, False, False, True]),
+                            variant_id=1, student_id="p1")
+    assert sc.value == 4.0
+
+
 def test_choix_multiple_correspondance_exacte():
     """Question à correspondance exacte : il faut TOUTES les bonnes cases."""
     p = model.Project()
