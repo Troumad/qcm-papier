@@ -1704,12 +1704,16 @@ class MarkedPageWindow(Gtk.Window):
         super().__init__(title="Page corrigée", transient_for=parent,
                          default_width=1100, default_height=800,
                          modal=False, destroy_with_parent=True)
+        self._parent_window = parent
         self.pages = marked_pages
         self.idx = idx
         self.on_navigate = on_navigate
         self._project = project
         self._zoom = 1.0
         self._img = None
+        self._base_img = None  # image brute (sans overlay) pour l'alignement manuel
+        self._align_points = []  # points cliqués pour l'alignement manuel
+        self._align_mode = False
 
         main = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         self.set_child(main)
@@ -1753,6 +1757,12 @@ class MarkedPageWindow(Gtk.Window):
             Gtk.EventControllerScrollFlags.BOTH_AXES)
         scroll_ctrl.connect("scroll", self._on_ctrl_scroll)
         self.scroll.add_controller(scroll_ctrl)
+
+        # Clic pour le placement manuel des 5 repères d'orientation.
+        click_ctrl = Gtk.GestureClick()
+        click_ctrl.set_button(1)
+        click_ctrl.connect("pressed", self._on_image_click)
+        self.image.add_controller(click_ctrl)
 
         # Menu latéral droit
         self.side = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
@@ -1800,6 +1810,21 @@ class MarkedPageWindow(Gtk.Window):
 
         self.side.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
+        # Alignement manuel des 5 repères (quand l'auto a échoué)
+        self.btn_align = Gtk.ToggleButton(label="Alignement manuel")
+        self.btn_align.connect("toggled", self._on_align_toggled)
+        self.side.append(self.btn_align)
+        self.lbl_align = Gtk.Label(label="")
+        self.lbl_align.set_wrap(True)
+        self.lbl_align.set_xalign(0)
+        self.side.append(self.lbl_align)
+        btn_reset_align = Gtk.Button(label="Reprendre les 5 repères")
+        btn_reset_align.connect("clicked", lambda _b: self._reset_align_points())
+        self.btn_reset_align = btn_reset_align
+        self.side.append(btn_reset_align)
+
+        self.side.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
         # Navigation entre copies
         nav_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.btn_prev = Gtk.Button(label="‹ Précédent")
@@ -1826,6 +1851,12 @@ class MarkedPageWindow(Gtk.Window):
             return
         label, page = self.pages[self.idx]
         self._img = scanner.render_marked_page(page)
+        # Image brute pour le placement manuel des repères.
+        self._base_img = page.img.img if page.img is not None else None
+        self._align_points = []
+        self._align_mode = False
+        self.btn_align.set_active(False)
+        self._update_align_label()
         n = len(self.pages)
         self.lbl_index.set_markup(f"<b>Copie {self.idx + 1} / {n}</b>")
         failed = page.matrix_inv is None or page.variant_id is None or page.student_id is None
@@ -1903,14 +1934,126 @@ class MarkedPageWindow(Gtk.Window):
         self._update_image()
 
     def _update_image(self):
-        if self._img is None:
+        from PIL import Image as PILImage, ImageDraw
+        # En mode alignement manuel, on part de l'image brute et on dessine
+        # les points cliqués par-dessus pour guider l'utilisateur.
+        if self._align_mode and self._base_img is not None:
+            src = self._base_img.convert("RGBA")
+            overlay = PILImage.new("RGBA", src.size, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(overlay)
+            for i, (px, py) in enumerate(self._align_points):
+                r = 8
+                draw.ellipse((px - r, py - r, px + r, py + r),
+                             fill=(255, 0, 0, 200))
+                draw.text((px + r + 2, py - r), str(i + 1),
+                          fill=(255, 0, 0, 255))
+            display = PILImage.alpha_composite(src, overlay)
+        else:
+            display = self._img
+        if display is None:
             return
-        from PIL import Image as PILImage
-        w = max(1, int(self._img.width * self._zoom))
-        h = max(1, int(self._img.height * self._zoom))
-        resized = self._img.resize((w, h), PILImage.LANCZOS)
+        w = max(1, int(display.width * self._zoom))
+        h = max(1, int(display.height * self._zoom))
+        resized = display.resize((w, h), PILImage.LANCZOS)
         self.image.set_size_request(w, h)
         self.image.set_paintable(_img_to_texture(resized))
+
+    # ------------------------------------------------------------------
+    # Alignement manuel des 5 repères d'orientation
+    # ------------------------------------------------------------------
+    def _on_align_toggled(self, btn) -> None:
+        if self.idx < 0 or self.idx >= len(self.pages):
+            return
+        _label, page = self.pages[self.idx]
+        self._align_mode = btn.get_active()
+        # On ne peut placer les repères que sur une page non alignée
+        # (sinon l'alignement auto a déjà réussi).
+        if self._align_mode and self._base_img is None:
+            btn.set_active(False)
+            self._align_mode = False
+            self.lbl_align.set_text("Aucune image à afficher.")
+            self._update_image()
+            return
+        self._align_points = []
+        self._update_align_label()
+        self._update_image()
+
+    def _update_align_label(self) -> None:
+        n = len(self._align_points)
+        if not self._align_mode:
+            self.lbl_align.set_markup("")
+            return
+        rest = 5 - n
+        if rest > 1:
+            txt = f"Cliquer les {rest} repères restants."
+        elif rest == 1:
+            txt = "Cliquer le dernier repère."
+        elif rest == 0:
+            txt = "<span color='#080'><b>Alignement terminé ✓ — correction en cours…</b></span>"
+        else:
+            txt = ""
+        self.lbl_align.set_markup(txt)
+
+    def _reset_align_points(self) -> None:
+        if not self._align_mode:
+            return
+        self._align_points = []
+        self._update_align_label()
+        self._update_image()
+
+    def _on_image_click(self, gesture, _npress, _x, _y) -> None:
+        if not self._align_mode or self._base_img is None:
+            return
+        if len(self._align_points) >= 5:
+            return
+        # Conversion des coordonnées widget → pixels image (selon le zoom).
+        w_alloc = self.image.get_allocated_width()
+        h_alloc = self.image.get_allocated_height()
+        if w_alloc <= 0 or h_alloc <= 0:
+            return
+        base_w = self._base_img.width
+        base_h = self._base_img.height
+        # Gtk.Picture recentre l'image ; on calcule l'offset de centrage.
+        disp_w = base_w * self._zoom
+        disp_h = base_h * self._zoom
+        off_x = (w_alloc - disp_w) / 2 if w_alloc > disp_w else 0.0
+        off_y = (h_alloc - disp_h) / 2 if h_alloc > disp_h else 0.0
+        px = (_x - off_x) / self._zoom
+        py = (_y - off_y) / self._zoom
+        # bornage dans l'image
+        px = max(0.0, min(base_w, px))
+        py = max(0.0, min(base_h, py))
+        self._align_points.append((px, py))
+        self._update_align_label()
+        self._update_image()
+        if len(self._align_points) == 5:
+            self._run_manual_align()
+
+    def _run_manual_align(self) -> None:
+        if self.idx < 0 or self.idx >= len(self.pages):
+            return
+        _label, page = self.pages[self.idx]
+        if self._project is None:
+            self.lbl_align.set_markup("<span color='#F00'>Projet requis.</span>")
+            return
+        clair = 140
+        if hasattr(self, "_parent_window") and self._parent_window is not None:
+            try:
+                clair = int(self._parent_window.clair_spin.get_value())
+            except Exception:
+                pass
+        ok = scanner.correct_with_manual_align(
+            page, self._project, list(self._align_points), clair=clair)
+        if ok:
+            self._align_mode = False
+            self.btn_align.set_active(False)
+            self._load_page()
+            if self.on_navigate is not None:
+                self.on_navigate(self.idx)
+        else:
+            self.lbl_align.set_markup(
+                "<span color='#F00'>Alignement impossible (repères mal placés ? "
+                "Reprendre les 5 repères).</span>")
 
     def add_side_widget(self, widget):
         self.side.append(widget)
