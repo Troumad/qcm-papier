@@ -970,7 +970,7 @@ def auto_check(page: ScannedPage, project: Project,
     page.matrix_inv = matrix_inv
     if not read_barcode(page, vs, matrix):
         return False
-    read_student_id(page, vs, matrix_inv, clair_max=clair + 1)
+    read_student_id(page, vs, matrix_inv, 41,241)
     if page.student_id is not None:
         student = project.students.get(page.student_id)
         if student is not None:
