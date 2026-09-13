@@ -157,24 +157,30 @@ def _question_score(question: Question, marks: list[dict],
     value = 0.0
     if joker_correct == 0 and joker_neutral == 0 and joker_penalty == 0:
         # Cases normales.
-        if box_penalty > 0:
+        if question.multiple_progressive:
+            # Gain dégressif selon les omissions ; toute erreur entraîne le
+            # malus (soustrait du gain, et non en remplacement de la note).
+            progressive = float(question.gain) * (box_correct / q_correct) \
+                if (q_correct and box_correct > 0) else 0.0
+            value = progressive - float(question.penalty) * min(box_penalty, 1)
+        elif box_penalty > 0:
             value = -float(question.penalty)
         elif question.single and box_correct > 0:
             value = float(question.gain)
         elif question.multiple_exact and box_correct == q_correct:
             value = float(question.gain)
-        elif question.multiple_progressive and box_correct > 0:
-            value = float(question.gain) * (box_correct / q_correct) if q_correct else 0.0
     else:
         # Cases joker (seconde chance).
-        if joker_penalty > 0:
+        if question.multiple_progressive:
+            progressive = float(question.gain) * (joker_correct / q_correct) \
+                if (q_correct and joker_correct > 0) else 0.0
+            value = progressive - float(question.penalty) * min(joker_penalty, 1)
+        elif joker_penalty > 0:
             value = -float(question.penalty)
         elif question.single and joker_correct > 0:
             value = float(question.gain)
         elif question.multiple_exact and joker_correct == q_correct:
             value = float(question.gain)
-        elif question.multiple_progressive and joker_correct > 0:
-            value = float(question.gain) * (joker_correct / q_correct) if q_correct else 0.0
 
     total = float(question.gain) if q_correct > 0 else 0.0
 
