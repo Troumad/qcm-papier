@@ -31,6 +31,8 @@ from .code39 import CODE39
 from .marking import score_page, PageScore
 from .model import Layout, Project, Variant, VariantStore
 
+CLAIR = 140  # variable globale du JS (index.html ligne 4)
+
 
 def _variant_store(variants) -> VariantStore:
     if isinstance(variants, VariantStore):
@@ -547,6 +549,56 @@ def align_viewer(page: ScannedPage, variants: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Alignement manuel (placement des 5 repères à la main)
+# ---------------------------------------------------------------------------
+
+def align_manual(page: ScannedPage, variants: dict,
+                 points: list[tuple[float, float]]) -> bool:
+    """Alignement manuel : l'utilisateur clique 5 repères sur l'image scannée.
+
+    ``points`` est la liste des 5 positions (x, y) en pixels canvas. On
+    construit les ``page.shapes`` (au même format que ``align_adjust_shape`` :
+    ``canvas_x``, ``canvas_y``) puis on appelle ``align_viewer`` pour calculer
+    ``page.adjust`` (rotation + échelle moyennes → transformation affine de la
+    page). Reprend le placement manuel du code JS (``navigate_align_manual`` +
+    ``page.alignViewer()`` après 5 clics, index.html ~4000-4020).
+
+    Renvoie True si ``page.adjust`` a pu être calculé.
+    """
+    if page.img is None or len(points) != 5:
+        return False
+    page.clear_marks()
+    # On conserve uniquement les positions cliquées (canvas_x, canvas_y).
+    page.shapes = [{"canvas_x": float(x), "canvas_y": float(y)}
+                   for (x, y) in points]
+    try:
+        align_viewer(page, variants)
+    except RuntimeError:
+        return False
+    return page.adjust is not None
+
+
+def correct_with_manual_align(page: ScannedPage, project: Project,
+                             points: list[tuple[float, float]],
+                             check_manual_active: bool = False,
+                             clair: float = CLAIR) -> bool:
+    """Alignement manuel des 5 repères puis correction de la page.
+
+    Utilisé quand l'alignement automatique échoue (repères introuvables) :
+    l'utilisateur place les 5 repères à la main, on calcule la transformation
+    affine de la page, puis on reprend la correction (code-barres, n° étudiant,
+    cases, note).
+    """
+    if page.ignore:
+        return False
+    if not align_manual(page, project.variants, points):
+        return False
+    return _apply_correction(page, project,
+                             check_manual_active=check_manual_active,
+                             clair=clair)
+
+
+# ---------------------------------------------------------------------------
 # Lecture du code-barres
 # ---------------------------------------------------------------------------
 
@@ -895,9 +947,6 @@ def read_student_id(page: ScannedPage, variants: dict,
 # Détection automatique des cases cochées
 # ---------------------------------------------------------------------------
 
-CLAIR = 140  # variable globale du JS (index.html ligne 4)
-
-
 def auto_marks(page: ScannedPage, matrix_inv: Matrix,
                clair: float = CLAIR) -> None:
     """Détecte les cases cochées parmi les marks de la page.
@@ -949,20 +998,18 @@ def show_marks(page: ScannedPage, project: Project) -> None:
 # Correction automatique complète d'une page
 # ---------------------------------------------------------------------------
 
-def auto_check(page: ScannedPage, project: Project,
-               check_manual_active: bool = False,
-               clair: float = CLAIR) -> bool:
-    """Corrige automatiquement une page : aligne, lit code-barres, n° étudiant,
-    détecte les cases, calcule la note.
+def _apply_correction(page: ScannedPage, project: Project,
+                      check_manual_active: bool = False,
+                      clair: float = CLAIR) -> bool:
+    """Étape de correction post-alignement : calcule la matrice de
+    transformation affine page→canvas (via ``compute_viewport`` à partir de
+    ``page.adjust``), lit le code-barres, le n° étudiant, détecte les cases
+    et calcule la note.
 
-    Reprend ``Page.autoCheck`` (index.html ~3631-3645). Renvoie True si la
-    correction a réussi (alignement + code-barres lus).
+    Suppose que ``page.adjust`` est déjà calculé (alignement auto ou manuel).
+    Renvoie True si le code-barres a pu être lu.
     """
-    if page.ignore:
-        return False
     vs = project.variants
-    if not align_auto(page, vs):
-        return False
     matrix = compute_viewport(page, vs,
                               page.img.width, page.img.height)["matrix"]
     matrix_inv = matrix.inverse()
@@ -986,6 +1033,24 @@ def auto_check(page: ScannedPage, project: Project,
     page.total = score.total
     page.complete = score.complete
     return True
+
+
+def auto_check(page: ScannedPage, project: Project,
+               check_manual_active: bool = False,
+               clair: float = CLAIR) -> bool:
+    """Corrige automatiquement une page : aligne, lit code-barres, n° étudiant,
+    détecte les cases, calcule la note.
+
+    Reprend ``Page.autoCheck`` (index.html ~3631-3645). Renvoie True si la
+    correction a réussi (alignement + code-barres lus).
+    """
+    if page.ignore:
+        return False
+    if not align_auto(page, project.variants):
+        return False
+    return _apply_correction(page, project,
+                             check_manual_active=check_manual_active,
+                             clair=clair)
 
 
 # ---------------------------------------------------------------------------
