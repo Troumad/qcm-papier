@@ -1860,14 +1860,17 @@ class MarkedPageWindow(Gtk.Window):
         self.btn_align.set_active(False)
         self._update_align_label()
         # Repères d'orientation à afficher en bleu sur toutes les copies :
-        # - repères trouvés par l'alignement auto (page.shapes, canvas_x/y)
-        # - repères placés manuellement (page.manual_marks, canvas_x/y)
+        # - repères trouvés par l'alignement auto (page.shapes) UNIQUEMENT si
+        #   l'alignement a réussi (page.matrix_inv est calculé). Sinon les shapes
+        #   d'un essai échoué ne sont pas fiables (orientation/rotation fausse).
+        # - repères placés manuellement (page.manual_marks)
         marks = []
-        for s in getattr(page, "shapes", []):
-            cx = s.get("canvas_x")
-            cy = s.get("canvas_y")
-            if cx is not None and cy is not None:
-                marks.append((float(cx), float(cy)))
+        if page.matrix_inv is not None:
+            for s in getattr(page, "shapes", []):
+                cx = s.get("canvas_x")
+                cy = s.get("canvas_y")
+                if cx is not None and cy is not None:
+                    marks.append((float(cx), float(cy)))
         if len(marks) != 5:
             marks = list(getattr(page, "manual_marks", []))
         self._manual_marks = marks
@@ -2041,26 +2044,14 @@ class MarkedPageWindow(Gtk.Window):
             return
         base_w = self._base_img.width
         base_h = self._base_img.height
-        # Coordos du clic relatives au widget image (viewport visible).
-        # L'image affichée peut déborder du viewport : sa propre origine
-        # (haut-gauche du contenu) est décalée du scroll de la ScrolledWindow.
-        hadj = self.scroll.get_hadjustment()
-        vadj = self.scroll.get_vadjustment()
-        hadj_val = hadj.get_value() if hadj is not None else 0.0
-        vadj_val = vadj.get_value() if vadj is not None else 0.0
-        # Sortie de débogage pour calibrer la conversion clic → image.
-        print(f"[align-click] raw=({_x:.1f},{_y:.1f}) "
-              f"zoom={self._zoom} "
-              f"scroll=({hadj_val:.1f},{vadj_val:.1f}) "
-              f"img_size=({base_w},{base_h}) "
-              f"alloc=({self.image.get_allocated_width()},"
-              f"{self.image.get_allocated_height()})")
-        x = _x + hadj_val
-        y = _y + vadj_val
-        # Conversion pixels affichés → pixels image.
-        px = x / self._zoom
-        py = y / self._zoom
-        print(f"[align-click] → image=({px:.1f},{py:.1f})")
+        # Les coordonnées du GestureClick sont déjà relatives au widget image
+        # complet (haut-gauche du contenu défilable, de taille img_size*zoom),
+        # PAS du viewport visible. On NE doit donc PAS ajouter le scroll.
+        # Conversion pixels affichés → pixels image (selon le zoom).
+        px = _x / self._zoom
+        py = _y / self._zoom
+        print(f"[align-click] raw=({_x:.1f},{_y:.1f}) zoom={self._zoom} "
+              f"→ image=({px:.1f},{py:.1f})")
         # bornage dans l'image
         px = max(0.0, min(base_w, px))
         py = max(0.0, min(base_h, py))
