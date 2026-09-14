@@ -62,20 +62,31 @@ def load_students_table(path: str) -> dict[str, Student]:
         )
 
     students: dict[str, Student] = {}
+    _debug_first = True
     for row in rows:
         if col_eid >= len(row) or col_nip >= len(row):
             continue
         eid = str(row[col_eid] or "")
-        nip = str(row[col_nip] or "")
+        nip = row[col_nip]
         name = str(row[col_name] or "")
         firstname = str(row[col_firstname] or "")
-        if not nip:
+        if nip is None:
+            continue
+        nip_str = str(nip)
+        if _debug_first:
+            print(f"[scodoc-load] première ligne : eid={eid!r} nip={nip!r} "
+                  f"(type={type(nip).__name__}) -> nip_str={nip_str!r}")
+            _debug_first = False
+        if not nip_str:
             continue
         # L'id étudiant est 'p' + les 7 chiffres après le 'p' initial.
-        student_id = "p" + (nip[1:] if nip.startswith("p") else nip)
+        # (Scodoc stocke code_nip commençant par 'p'.)
+        student_id = "p" + (nip_str[1:] if nip_str.startswith("p") else nip_str)
         students[student_id] = Student(
-            id=student_id, eid=eid, nip=nip, name=name, firstname=firstname,
+            id=student_id, eid=eid, nip=nip_str, name=name, firstname=firstname,
         )
+    print(f"[scodoc-load] {len(students)} étudiant(s) chargé(s). "
+          f"Premiers ids : {list(students.keys())[:5]}")
     wb.close()
     return students
 
