@@ -1830,9 +1830,15 @@ class QcmWindow(Gtk.ApplicationWindow):
         notes: dict[str, float] = {}
         n_ok = 0
         n_err = 0
-        for copy_path in self.copies:
+        n_skip = 0
+        total = len(self.copies)
+        for copy_idx, copy_path in enumerate(self.copies, 1):
             fname = os.path.basename(copy_path)
             info = self.copy_rows.get(copy_path)
+            self.marking_status.set_text(
+                f"Rechargement {copy_idx}/{total} : {fname}")
+            self._scroll_to_copy(copy_path)
+            self._ui_flush()
             try:
                 pages = scanner.load_pages_from_file(copy_path, dpi=150)
             except Exception as e:
@@ -1859,6 +1865,11 @@ class QcmWindow(Gtk.ApplicationWindow):
                                                "Non trouvée dans la sauvegarde",
                                                len(self.marked_pages)])
                     continue
+                # Page non corrigée (alignement échoué) : on l'ignore,
+                # elle n'apparaît pas dans les résultats.
+                if page.variant_id is None and not page.marks:
+                    n_skip += 1
+                    continue
                 n_ok += 1
                 if info:
                     info["n_ok"] += 1
@@ -1876,11 +1887,12 @@ class QcmWindow(Gtk.ApplicationWindow):
                 self.marked_pages.append((label, page))
                 if info:
                     self._update_copy_row(copy_path)
+                self._ui_flush()
             if info:
                 info["check"].set_active(False)
         self._last_notes = notes
         self.marking_status.set_text(
-            f"{n_ok} restaurée(s), {n_err} en erreur.")
+            f"{n_ok} restaurée(s), {n_err} en erreur, {n_skip} non lue(s).")
         self._refresh_page_selector()
 
     # ------------------------------------------------------------------
