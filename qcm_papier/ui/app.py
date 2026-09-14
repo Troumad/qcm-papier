@@ -1526,9 +1526,11 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         Les images vivent dans ``qcm_papier/data/scodoc/`` ; l'utilisateur
         peut les remplacer librement (logiciels mis à jour régulièrement).
+        Ce module est dans ``qcm_papier/ui/``, donc ``data/`` est un niveau
+        au-dessus (``qcm_papier/data/scodoc``), pas dans ``ui/``.
         """
         here = os.path.dirname(os.path.abspath(__file__))
-        return os.path.join(here, "data", "scodoc")
+        return os.path.join(os.path.dirname(here), "data", "scodoc")
 
     def _on_correct(self, _btn) -> None:
         variant_keys = [k for k in self.project.variants if k not in ("p", "l")]
