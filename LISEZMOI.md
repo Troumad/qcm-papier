@@ -87,7 +87,48 @@ git pull origin nouvelle_main
 
 ---
 
-## 3. Les images d'aide Scodoc
+## 3. Lancer le programme depuis l'explorateur de fichiers
+
+Pour ouvrir l'interface graphique sans passer par le terminal, des lanceurs
+sont fournis à la racine du projet. Un double-clic ouvre l'application vide ;
+le projet se charge ensuite depuis le menu **Fichier → Ouvrir**.
+
+### Linux
+
+**Double-clic sur `qcm-papier.desktop`** : selon votre gestionnaire de
+fichiers, il peut demander confirmation la première fois (c'est normal, le
+fichier n'est pas encore « approuvé »).
+
+Pour l'installer durablement dans le menu des applications :
+
+```bash
+cp qcm-papier.desktop ~/.local/share/applications/
+chmod +x ~/.local/share/applications/qcm-papier.desktop
+```
+
+Il apparaîtra dans le menu des applications sous le nom **QCM-Papier**.
+
+### Windows
+
+Double-cliquez sur **`qcm-papier.bat`** (placé à la racine du projet).
+Il utilise `pythonw` pour ne pas ouvrir de fenêtre de terminal.
+
+> Si `pythonw` n'est pas trouvé, remplacez `pythonw` par `python` dans le
+> fichier `.bat`.
+
+### macOS
+
+Double-cliquez sur **`qcm-papier.command`** (placé à la racine du projet).
+La première fois, le Finder peut bloquer le lancement : faites
+**clic droit → Ouvrir** pour autoriser, puis confirmez.
+
+> Les lanceurs partent du principe que Python est accessible sous le nom
+> `python3` (Linux/macOS) ou `pythonw` (Windows) et que le paquet
+> `qcm-papier` est installé (`pip install -e ".[gui]"`).
+
+---
+
+## 4. Les images d'aide Scodoc
 
 Les captures d'écran affichées dans les dialogues de levée d'anonymat et
 d'export des notes se trouvent dans :
@@ -106,7 +147,7 @@ conservant les mêmes noms) puis de relancer l'application.
 
 ---
 
-## 4. Utilisation
+## 5. Utilisation
 
 ### En ligne de commande
 
@@ -215,7 +256,7 @@ trouvés automatiquement, le logiciel demande de les placer à la main :
 
 ---
 
-## 5. Dépannage
+## 6. Dépannage
 
 ### « Interface graphique indisponible »
 
@@ -235,6 +276,6 @@ augmentez le seuil `--clair` (ex. `--clair 160`).
 
 ---
 
-## 6. Licence
+## 7. Licence
 
 GPL-3.0-or-later. Portage Python/GTK 4 du code HTML+JS de l'Université Lyon 1.
