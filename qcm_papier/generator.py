@@ -778,7 +778,6 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
                     placed = True
                 else:
                     has_error = True
-                    print(f"[ERREUR] Exercice '{exercise.get('name', 'SANS NOM')}' ne tient pas (x+largeur={place_x + exercise_width:.1f}mm > {max_width}mm OU y+hauteur={place_y + exercise_height:.1f}mm > {max_height}mm) - mode droite")
                     break
 
             # Mettre à jour y_max si nécessaire
@@ -802,7 +801,6 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
                     placed = True
                 else:
                     has_error = True
-                    print(f"[ERREUR] Exercice '{exercise.get('name', 'SANS NOM')}' ne tient pas (x+largeur={place_x + exercise_width:.1f}mm > {max_width}mm OU y+hauteur={place_y + exercise_height:.1f}mm > {max_height}mm) - mode bas")
                     break
 
             # Mettre à jour x_max si nécessaire
