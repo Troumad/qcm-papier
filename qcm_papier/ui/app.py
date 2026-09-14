@@ -1984,10 +1984,23 @@ class MarkedPageWindow(Gtk.Window):
             draw = ImageDraw.Draw(overlay)
             for i, (px, py) in enumerate(self._manual_marks):
                 r = 8
+                # Anneau blanc épais pour bien décoller le point du fond,
+                # puis disque bleu vif et numéro blanc lisibles.
+                draw.ellipse((px - r - 3, py - r - 3, px + r + 3, py + r + 3),
+                            outline=(255, 255, 255, 255), width=3)
                 draw.ellipse((px - r, py - r, px + r, py + r),
-                             fill=(0, 0, 255, 200))
-                draw.text((px + r + 2, py - r), str(i + 1),
-                          fill=(0, 0, 255, 255))
+                             fill=(0, 120, 255, 230),
+                             outline=(255, 255, 255, 255), width=1)
+                # pastille de numéro
+                txt = str(i + 1)
+                tw, th = draw.textbbox((0, 0), txt, size=16)[-2:]
+                bx0 = px + r + 2
+                by0 = py - th / 2 - 2
+                draw.rectangle((bx0, by0, bx0 + tw + 6, by0 + th + 4),
+                               fill=(0, 120, 255, 230),
+                               outline=(255, 255, 255, 255), width=1)
+                draw.text((bx0 + 3, by0 + 1), txt,
+                          fill=(255, 255, 255, 255))
             display = PILImage.alpha_composite(src, overlay)
         else:
             display = self._img
