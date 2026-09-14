@@ -1146,10 +1146,29 @@ class QcmWindow(Gtk.ApplicationWindow):
         # Résultats
         self.results_store = Gtk.ListStore(str, str, str, str, str, int)
         results_tree = Gtk.TreeView(model=self.results_store)
+        # Tri numérique pour la colonne Note (stockée en texte) : id de tri 100
+        # pour ne pas confondre avec les indices de colonnes.
+        def _note_sort_func(_model, a, b, _d):
+            va = _model.get_value(a, 3)
+            vb = _model.get_value(b, 3)
+            try:
+                fa = float(va)
+                fb = float(vb)
+            except (TypeError, ValueError):
+                fa = fb = 0.0
+            return (fa > fb) - (fa < fb)
+
+        self.results_store.set_sort_func(100, _note_sort_func)
+
         for i, title in enumerate(["Fichier", "Variante", "Étudiant",
                                     "Note", "Statut"]):
-            results_tree.append_column(
-                Gtk.TreeViewColumn(title, Gtk.CellRendererText(), text=i))
+            col = Gtk.TreeViewColumn(title, Gtk.CellRendererText(), text=i)
+            col.set_resizable(True)
+            if i == 3:
+                col.set_sort_column_id(100)
+            else:
+                col.set_sort_column_id(i)
+            results_tree.append_column(col)
         sel = results_tree.get_selection()
         sel.connect("changed", self._on_result_selected)
         results_tree.connect("row-activated", self._on_result_activated)
