@@ -1797,7 +1797,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                 pages = scanner.load_pages_from_file(copy_path, dpi=150)
             except Exception as e:
                 n_err += 1
-                self.results_store.append([fname, "", "", "", f"Erreur : {e}"])
+                self.results_store.append([fname, "", "", "", f"Erreur : {e}", -1])
                 if info:
                     info["n_err"] = 1
                     info["n_pages"] = 1
@@ -1815,7 +1815,8 @@ class QcmWindow(Gtk.ApplicationWindow):
                     if info:
                         info["n_err"] += 1
                     self.results_store.append([fname, "", "", "",
-                                               "Non trouvé dans la sauvegarde"])
+                                               "Non trouvé dans la sauvegarde",
+                                               len(self.marked_pages)])
                     continue
                 n_ok += 1
                 if info:
@@ -1828,6 +1829,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                     fname, str(page.variant_id or ""),
                     _student_display(page), f"{note:.2f}",
                     "complète" if page.complete else "incomplète",
+                    len(self.marked_pages),
                 ])
                 label = f"{fname} v{page.variant_id} {page.student_id or ''}"
                 self.marked_pages.append((label, page))
