@@ -1462,9 +1462,13 @@ class QcmWindow(Gtk.ApplicationWindow):
         n_ok = 0
         n_err = 0
         total = len(to_correct)
-        for copy_path in to_correct:
+        for copy_idx, copy_path in enumerate(to_correct, 1):
             fname = os.path.basename(copy_path)
             info = self.copy_rows.get(copy_path)
+            self.marking_status.set_text(
+                f"Correction {copy_idx}/{total} : {fname}")
+            self._scroll_to_copy(copy_path)
+            self._ui_flush()
             try:
                 pages = scanner.load_pages_from_file(copy_path, dpi=150)
             except Exception as e:
@@ -1518,12 +1522,37 @@ class QcmWindow(Gtk.ApplicationWindow):
                     self.marked_pages.append((label, page))
                 if info:
                     self._update_copy_row(copy_path)
+                self._ui_flush()
             if info:
                 info["check"].set_active(False)
         self._last_notes = notes
         self.marking_status.set_text(
             f"{n_ok} corrigée(s), {n_err} en erreur sur {total}.")
         self._refresh_page_selector()
+
+    def _scroll_to_copy(self, copy_path: str) -> None:
+        """Fait défiler la liste des copies pour que la ligne du fichier en
+        cours de correction soit visible."""
+        info = self.copy_rows.get(copy_path)
+        if info is None:
+            return
+        row = info.get("row")
+        if row is None:
+            return
+        # grab_focus() fait défiler le ScrolledWindow parent pour rendre la
+        # ligne visible (compatible toutes versions GTK 4).
+        try:
+            row.grab_focus()
+        except Exception:
+            pass
+
+    def _ui_flush(self) -> None:
+        """Traite les événements GTK en attente pour rafraîchir l'affichage
+        pendant une boucle longue (correction par lots)."""
+        ctx = GLib.MainContext.default()
+        while ctx.pending():
+            ctx.iteration(False)
+        ctx.iteration(False)
 
     def _update_copy_row(self, copy_path: str) -> None:
         info = self.copy_rows.get(copy_path)

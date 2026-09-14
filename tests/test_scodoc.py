@@ -8,7 +8,12 @@ from qcm_papier import scodoc
 
 
 def test_load_students_table(tmp_path):
-    """Charge une table étudiants Scodoc (etudid, code_nip, nom, prenom)."""
+    """Charge une table étudiants Scodoc (etudid, code_nip, nom, prenom).
+
+    Le code_nip Scodoc est numérique (ex: 12504873) ; l'ID étudiant lu sur
+    la copie est 'p' + nip sans son 1er chiffre (ex: p2504873), comme le
+    code JS (id = 'p' + nip.substring(1)).
+    """
     wb = Workbook()
     ws = wb.active
     ws.append(["etudid", "code_nip", "nom", "prenom"])
@@ -25,6 +30,28 @@ def test_load_students_table(tmp_path):
     assert s.nip == "p1000001"
     assert s.name == "DUPONT"
     assert s.firstname == "Jean"
+
+
+def test_load_students_table_nip_numerique(tmp_path):
+    """code_nip numérique Scodoc (sans 'p' initial) → 'p' + nip[1:].
+
+    Cas réel : nip=12504873 (8 chiffres) → id='p2504873' (7 chiffres),
+    qui correspond à l'identifiant lu sur la copie scannée.
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["etudid", "code_nip", "nom", "prenom"])
+    ws.append(["1416", "12504873", "DUPONT", "Jean"])
+    ws.append(["1417", "12505117", "MARTIN", "Marie"])
+    path = tmp_path / "etudiants.xlsx"
+    wb.save(str(path))
+
+    students = scodoc.load_students_table(str(path))
+    assert "p2504873" in students  # 12504873 → p2504873
+    assert "p2505117" in students  # 12505117 → p2505117
+    s = students["p2504873"]
+    assert s.eid == "1416"
+    assert s.nip == "12504873"
 
 
 def test_load_students_table_colonnes_manquantes(tmp_path):

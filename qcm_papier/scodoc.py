@@ -79,9 +79,11 @@ def load_students_table(path: str) -> dict[str, Student]:
             _debug_first = False
         if not nip_str:
             continue
-        # L'id étudiant est 'p' + les 7 chiffres après le 'p' initial.
-        # (Scodoc stocke code_nip commençant par 'p'.)
-        student_id = "p" + (nip_str[1:] if nip_str.startswith("p") else nip_str)
+        # L'id étudiant est 'p' + nip sans son premier caractère, comme
+        # le code JS (id = 'p' + nip.substring(1)). Le nip Scodoc est
+        # numérique (ex: 12504873) : on enlève le 1er chiffre puis on ajoute
+        # 'p' -> 'p2504873', qui correspond à l'identifiant lu sur la copie.
+        student_id = "p" + nip_str[1:]
         students[student_id] = Student(
             id=student_id, eid=eid, nip=nip_str, name=name, firstname=firstname,
         )
