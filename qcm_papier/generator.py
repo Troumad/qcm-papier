@@ -375,8 +375,8 @@ def _place_choices(variant, variant_id,
                 additional = 0
         if exercise.get("index", -1) >= 0 and question.get("index", -1) >= 0:
             rg.insert_choices(variant_id + question_iter, choice_list, additional,
-                              new_choices_name=settings.question_new_choices_name,
-                              new_choices_count=settings.question_new_choices
+                              new_choices_name=settings.choice_new_choices_name,
+                              new_choices_count=settings.choice_new_choices
                               if exercise.get("index", -1) >= 0 else 1)
 
     choice_x = 0.0
