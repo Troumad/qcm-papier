@@ -186,6 +186,11 @@ class QcmWindow(Gtk.ApplicationWindow):
         # n'a été fait (ou aucun fichier ouvert). Pilote la sensibilité du
         # bouton « Enregistrer ».
         self.project_path: str | None = None
+        # Vrai s'il y a des modifications non enregistrées (drapeau « dirty »).
+        self._dirty = False
+
+        # Demander confirmation avant de fermer si le projet est modifié.
+        self.connect("close-request", self._on_close_request)
 
         # HeaderBar
         header = Gtk.HeaderBar()
@@ -497,6 +502,26 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         self.notebook.append_page(box, Gtk.Label(label="Informations"))
 
+        # Suivi des modifications (onglet Informations) : chaque champ marque le
+        # projet « dirty ». On ajoute un second gestionnaire à chaque widget
+        # (les lambdas existants écrivent déjà les settings).
+        info_widgets = [self.entry_establishment, self.entry_institute,
+                       self.entry_formation, self.entry_year,
+                       self.entry_semester, self.entry_teaching_unit,
+                       self.entry_module_full, self.entry_module_short,
+                       self.entry_evaluation_full, self.entry_evaluation_short,
+                       self.entry_teachers, self.entry_date, self.entry_duration,
+                       self.paper_format_combo, self.paper_orientation_combo,
+                       self.margin_top_spin, self.margin_left_spin,
+                       self.margin_right_spin, self.margin_bottom_spin]
+        for w in info_widgets:
+            if isinstance(w, (Gtk.Entry,)):
+                w.connect("changed", self._mark_dirty)
+            elif isinstance(w, (Gtk.ComboBoxText,)):
+                w.connect("changed", self._mark_dirty)
+            elif isinstance(w, (Gtk.SpinButton,)):
+                w.connect("value-changed", self._mark_dirty)
+
     # ------------------------------------------------------------------
     # Onglet Structure
     # ------------------------------------------------------------------
@@ -511,8 +536,12 @@ class QcmWindow(Gtk.ApplicationWindow):
         box.append(self.editor)
         self.notebook.append_page(box, Gtk.Label(label="Structure"))
 
+    def _mark_dirty(self, *_args) -> None:
+        """Marque le projet comme modifié (non enregistré)."""
+        self._dirty = True
+
     def _on_structure_changed(self) -> None:
-        self.project.settings.modified = True
+        self._mark_dirty()
 
     def _on_paper_format_changed(self, combo) -> None:
         """Gère le changement de format de papier."""
@@ -2082,6 +2111,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.generate_status.set_text("Nouveau projet.")
         self.set_title("Générateur/Correcteur de QCM papier - Nouveau")
         self.project_path = None
+        self._dirty = False
         if hasattr(self, "btn_save"):
             self.btn_save.set_sensitive(False)
         if hasattr(self, "file_status"):
@@ -2100,6 +2130,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         try:
             self.project = project_mod.load_project(path)
             self.project_path = path
+            self._dirty = False
             if hasattr(self, "btn_save"):
                 self.btn_save.set_sensitive(True)
             self.editor.project = self.project
@@ -2157,6 +2188,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self._save_generation_params()  # Sauvegarder les paramètres avant d'enregistrer
         try:
             project_mod.save_project(self.project, self.project_path)
+            self._dirty = False
             self.generate_status.set_text(f"Projet enregistré : {self.project_path}")
             if hasattr(self, "file_status"):
                 self.file_status.set_text(f"Projet enregistré : {self.project_path}")
@@ -2175,6 +2207,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         try:
             project_mod.save_project(self.project, path)
             self.project_path = path
+            self._dirty = False
             if hasattr(self, "btn_save"):
                 self.btn_save.set_sensitive(True)
             self.set_title(f"Générateur/Correcteur de QCM papier - {os.path.basename(path)}")
@@ -2183,6 +2216,48 @@ class QcmWindow(Gtk.ApplicationWindow):
                 self.file_status.set_text(f"Projet enregistré : {path}")
         except Exception as e:
             self.generate_status.set_text(f"Erreur : {e}")
+
+    def _on_close_request(self, _window) -> bool:
+        """Demande confirmation avant de fermer si le projet est modifié.
+
+        Comme dans un traitement de texte : Enregistrer / Ne pas enregistrer /
+        Annuler. Renvoie True (stoppe la fermeture) sauf si l'on quitte vraiment.
+        """
+        if not self._dirty:
+            return False  # Laisser la fenêtre se fermer
+
+        dialog = Gtk.MessageDialog(
+            transient_for=self,
+            modal=True,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.NONE,
+            text="Modifications non enregistrées",
+            secondary_text=(
+                "Le projet a été modifié depuis le dernier enregistrement."
+                " Voulez-vous l'enregistrer avant de quitter ?"))
+        dialog.add_buttons(
+            "Enregistrer", Gtk.ResponseType.YES,
+            "Ne pas enregistrer", Gtk.ResponseType.NO,
+            "Annuler", Gtk.ResponseType.CANCEL)
+        dialog.set_default_response(Gtk.ResponseType.CANCEL)
+
+        response = dialog.run()
+        dialog.destroy()
+
+        if response == Gtk.ResponseType.CANCEL:
+            return True  # Bloquer la fermeture
+        if response == Gtk.ResponseType.YES:
+            # Enregistrer ; ne fermer que si l'enregistrement réussit.
+            if self.project_path is None:
+                # Pas de chemin : « Enregistrer sous » ; on garde la fenêtre
+                # ouverte pour que l'utilisateur voie le dialogue fichier.
+                self._on_save_as(None)
+                # Si l'utilisateur annule le sélecteur, _dirty reste True.
+                return self._dirty
+            self._on_save(None)
+            return self._dirty  # Fermer uniquement si sauvegarde réussie
+        # NO : on quitte sans enregistrer.
+        return False
 
 
 class MarkedPageWindow(Gtk.Window):

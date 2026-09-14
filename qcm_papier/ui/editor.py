@@ -393,12 +393,22 @@ class StructureEditor(Gtk.Box):
         choice.penalty = (selected == 2)
 
         if selected == 0 and question.single:
-            # Différer la désélection des autres « Correct » hors du callback.
+            # Appliquer l'unicité au MODÈLE immédiatement (les autres choix
+            # corrects redeviennent neutres), pour ne pas se retrouver avec
+            # plusieurs « Correct » si le popover se ferme avant l'idle.
+            for i, c in enumerate(question.choices):
+                if i != idx and c.correct:
+                    c.correct = False
+                    c.neutral = True
+                    c.penalty = False
+            # Mettre à jour visuellement les menus déroulants des autres choix
+            # hors du callback notify::selected (via idle) pour ne pas fermer le
+            # popover ; le modèle est déjà corrigé ci-dessus.
             def _deselect_others():
                 self._popover_updating = True
                 try:
-                    for d in dropdowns:
-                        if d is not dropdown and d.get_selected() == 0:
+                    for i, d in enumerate(dropdowns):
+                        if i != idx and d.get_selected() == 0:
                             d.set_selected(1)  # Neutre
                 finally:
                     self._popover_updating = False
