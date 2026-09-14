@@ -1,0 +1,240 @@
+# QCM-Papier — Guide d'installation et d'utilisation
+
+QCM-Papier est un générateur et correcteur de QCM sur papier. Il s'agit d'un
+portage en Python/GTK 4 du code HTML+JS de l'Université Lyon 1.
+
+Le principe : on crée un sujet (plusieurs variantes d'un même QCM), on l'imprime,
+les étudiants le remplissent, on scanne les copies, puis le logiciel corrige
+automatiquement et exporte les notes vers Scodoc.
+
+---
+
+## 1. Prérequis
+
+### Python
+
+- **Python 3.10** ou plus récent.
+
+Vérifiez votre version :
+
+```bash
+python3 --version
+```
+
+### Dépendances système
+
+Le logiciel utilise GTK 4 pour l'interface graphique. Cette bibliothèque doit
+être installée séparément (Python seul ne suffit pas).
+
+#### Linux (Fedora / RHEL)
+
+```bash
+sudo dnf install gtk4 python3-gobject gtk3-devel
+```
+
+#### Linux (Debian / Ubuntu / Mint)
+
+```bash
+sudo apt install libgtk-4-dev python3-gi
+```
+
+#### macOS (avec Homebrew)
+
+```bash
+brew install pygobject3 gtk4
+```
+
+#### Windows
+
+L'installation de GTK 4 sur Windows est plus délicate. La méthode recommandée
+est d'utiliser [MSYS2](https://www.msys2.org/) :
+
+1. Installez MSYS2 puis ouvrez un terminal **MSYS2 UCRT64**.
+2. Installez GTK 4 et les bindings Python :
+
+   ```bash
+   pacman -S mingw-w64-ucrt-x86_64-python-gobject mingw-w64-ucrt-x86_64-gtk4
+   ```
+
+3. Installez ensuite le paquet `qcm-papier` (voir ci-dessous) depuis ce même
+   terminal.
+
+> Si l'interface graphique ne se lance pas, vous pouvez tout de même utiliser
+> les commandes en ligne de commande (sans `--edit`).
+
+---
+
+## 2. Installation de qcm-papier
+
+### Depuis les sources (développement)
+
+```bash
+git clone https://github.com/Troumad/qcm-papier.git
+cd qcm-papier
+pip install -e ".[gui]"
+```
+
+L'option `-e` (editable) permet de profiter des mises à jour par un simple
+`git pull` sans réinstaller le paquet.
+
+### Pour mettre à jour
+
+```bash
+git pull origin nouvelle_main
+```
+
+(Si vous n'avez pas installé en mode `-e`, refaites `pip install -e ".[gui]"`.)
+
+---
+
+## 3. Les images d'aide Scodoc
+
+Les captures d'écran affichées dans les dialogues de levée d'anonymat et
+d'export des notes se trouvent dans :
+
+```
+qcm_papier/data/scodoc/
+```
+
+- `Scodoc_student_list.png` — téléchargement de la table des étudiants.
+- `Scodoc_eval_get1.png` et `Scodoc_eval_get2.png` — récupération de la feuille
+  de notes.
+- `Scodoc_eval_send.png` — renvoi des notes dans Scodoc.
+
+Scodoc est régulièrement mis à jour : il suffit de remplacer ces PNG (en
+conservant les mêmes noms) puis de relancer l'application.
+
+---
+
+## 4. Utilisation
+
+### En ligne de commande
+
+Le programme s'appelle `qcm-papier` (ou `python3 -m qcm_papier`).
+
+#### Ouvrir un projet dans l'interface graphique
+
+```bash
+qcm-papier open -p math/2026/OML1_bis.json --edit
+```
+
+`--edit` ouvre la fenêtre graphique. Sans `--edit`, le projet est seulement
+validé et un résumé s'affiche.
+
+#### Générer les variantes
+
+Les variantes sont les versions différentes du sujet (ordre des questions/choix
+modifié selon l'id de la variante).
+
+```bash
+qcm-papier variants -p math/2026/OML1_bis.json
+```
+
+Les variantes sont sauvegardées dans le JSON du projet.
+
+#### Générer le PDF du sujet
+
+```bash
+qcm-papier pdf -p math/2026/OML1_bis.json -o sujet.pdf
+```
+
+Ou tout en un (variantes + PDF) :
+
+```bash
+qcm-papier generate -p math/2026/OML1_bis.json -o sujet.pdf
+```
+
+Avec `--per-student`, une copie par étudiant est générée (au lieu d'une par
+variante).
+
+#### Corriger des copies
+
+```bash
+qcm-papier correct -p math/2026/OML1_bis.json --copies math/2026/correction3.pdf --edit
+```
+
+Options utiles :
+
+- `--students table.xlsx` — table des étudiants Scodoc (pour la levée d'anonymat).
+- `--save etat.json` — sauvegarde l'état de correction (pour recharger plus tard
+  sans refaire l'alignement).
+- `--load etat.json` — recharge un état de correction sauvegardé.
+- `--clair 140` — seuil de détection des cases cochées (augmentez pour des scans
+  plus sombres, ex. `--clair 160`).
+- `--render dossier/` — produit des images PNG des copies corrigées (overlay
+  vert/rouge).
+- `--scodoc-input feuille.xlsx` — remplit une feuille Scodoc avec les notes.
+
+### Interface graphique
+
+L'interface est organisée en onglets :
+
+1. **Fichier** — ouvrir, créer, enregistrer un projet.
+2. **Informations** — résumé du projet (exercices, questions, choix, variantes).
+3. **Structure** — éditeur des exercices, questions et choix.
+4. **Génération** — générer les variantes et le PDF sujet.
+5. **Correction** — charger les copies, lancer la correction, voir les pages
+   corrigées, lever l'anonymat (Scodoc) et exporter les notes.
+6. **Aide** — ce guide.
+
+#### Levée d'anonymat (Scodoc)
+
+Après la correction, les copies sont identifiées par un numéro « p******* ».
+Pour associer les noms et prénoms :
+
+1. Téléchargez la table des étudiants depuis Scodoc (menu en haut de la page
+   principale du semestre).
+2. Onglet **Correction** → bouton **Levée d'anonymat Scodoc…**
+3. Chargez le fichier Excel obtenu.
+
+L'identifiant lu sur la copie est `p` + le NIP Scodoc sans son premier chiffre
+(ex. NIP `12504873` → `p2504873`).
+
+#### Export des notes Scodoc
+
+Onglet **Correction** → bouton **Exporter les notes Scodoc…**
+
+- Choisissez le fichier tableur Scodoc (entrée) et le fichier de sortie.
+- Option « Monter les notes négatives à 0 » : les notes négatives sont
+  ramenées à 0.
+
+#### Alignement manuel des repères
+
+Si une copie est mal scannée et que les 5 repères d'orientation ne sont pas
+trouvés automatiquement, le logiciel demande de les placer à la main :
+
+1. Cliquez sur les 5 repères dans l'ordre : à gauche de haut en bas, puis à
+   droite de bas en haut.
+2. Les repères déjà détectés sont marqués en bleu clair sur toutes les copies.
+3. Une fois les 5 points placés, la correction se fait par transformation
+   affine de la page.
+
+> Pour un alignement manuel fiable, évitez de zoomer : restez à 100 % et
+> utilisez la fenêtre à sa taille initiale. Le défilement (scroll) n'affecte
+> pas le placement.
+
+---
+
+## 5. Dépannage
+
+### « Interface graphique indisponible »
+
+GTK 4 n'est pas installé. Revenez à la section *Dépendances système*.
+En attendant, les commandes en ligne de commande fonctionnent sans `--edit`.
+
+### Les captures d'écran Scodoc ne s'affichent pas
+
+Vérifiez que les fichiers sont bien présents dans `qcm_papier/data/scodoc/`.
+En cas d'erreur, un message s'affiche dans le terminal :
+`[scodoc-image] image absente : …` ou `[scodoc-image] échec chargement …`.
+
+### Une copie mal scannée n'est pas corrigée
+
+Utilisez l'alignement manuel (clic sur les 5 repères). Si le problème persiste,
+augmentez le seuil `--clair` (ex. `--clair 160`).
+
+---
+
+## 6. Licence
+
+GPL-3.0-or-later. Portage Python/GTK 4 du code HTML+JS de l'Université Lyon 1.
