@@ -182,6 +182,10 @@ class QcmWindow(Gtk.ApplicationWindow):
                         default_width=1000, default_height=700, **kwargs)
 
         self.project = Project()
+        # Chemin courant du projet : None tant qu'aucun « Enregistrer sous »
+        # n'a été fait (ou aucun fichier ouvert). Pilote la sensibilité du
+        # bouton « Enregistrer ».
+        self.project_path: str | None = None
 
         # HeaderBar
         header = Gtk.HeaderBar()
@@ -246,11 +250,17 @@ class QcmWindow(Gtk.ApplicationWindow):
         btn_new.connect("clicked", self._on_new)
         btn_open = Gtk.Button(label="Ouvrir…")
         btn_open.connect("clicked", self._on_open)
-        btn_save = Gtk.Button(label="Enregistrer")
-        btn_save.connect("clicked", self._on_save)
+        # « Enregistrer » écrase le chemin courant (celui d'origine ou celui du
+        # dernier « Enregistrer sous ») ; grisé tant qu'aucun chemin n'est défini.
+        self.btn_save = Gtk.Button(label="Enregistrer")
+        self.btn_save.connect("clicked", self._on_save)
+        self.btn_save.set_sensitive(False)
+        btn_save_as = Gtk.Button(label="Enregistrer sous…")
+        btn_save_as.connect("clicked", self._on_save_as)
         btn_box.append(btn_new)
         btn_box.append(btn_open)
-        btn_box.append(btn_save)
+        btn_box.append(self.btn_save)
+        btn_box.append(btn_save_as)
         box.append(btn_box)
 
         self.file_status = Gtk.Label(label="")
@@ -2071,6 +2081,9 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.results_store.clear()
         self.generate_status.set_text("Nouveau projet.")
         self.set_title("Générateur/Correcteur de QCM papier - Nouveau")
+        self.project_path = None
+        if hasattr(self, "btn_save"):
+            self.btn_save.set_sensitive(False)
         if hasattr(self, "file_status"):
             self.file_status.set_text("Projet nouveau (non enregistré).")
         self.present()
@@ -2086,6 +2099,9 @@ class QcmWindow(Gtk.ApplicationWindow):
         """Charge un projet depuis un fichier JSON et rafraîchit l'interface."""
         try:
             self.project = project_mod.load_project(path)
+            self.project_path = path
+            if hasattr(self, "btn_save"):
+                self.btn_save.set_sensitive(True)
             self.editor.project = self.project
             self.editor._fill_tree()
             self.editor._update_interval_label()
@@ -2129,7 +2145,26 @@ class QcmWindow(Gtk.ApplicationWindow):
             self.generate_status.set_text(f"Erreur : {e}")
 
     def _on_save(self, _btn) -> None:
-        """Enregistre le projet dans un fichier JSON."""
+        """Enregistre le projet dans le fichier courant.
+
+        Si aucun chemin n'est défini (nouveau projet non encore enregistré),
+        on bascule sur « Enregistrer sous » (le bouton est de toute façon grisé,
+        mais on garde un comportement cohérent).
+        """
+        if self.project_path is None:
+            self._on_save_as(_btn)
+            return
+        self._save_generation_params()  # Sauvegarder les paramètres avant d'enregistrer
+        try:
+            project_mod.save_project(self.project, self.project_path)
+            self.generate_status.set_text(f"Projet enregistré : {self.project_path}")
+            if hasattr(self, "file_status"):
+                self.file_status.set_text(f"Projet enregistré : {self.project_path}")
+        except Exception as e:
+            self.generate_status.set_text(f"Erreur : {e}")
+
+    def _on_save_as(self, _btn) -> None:
+        """Enregistre le projet sous un nouveau chemin (demande le nom)."""
         self._save_generation_params()  # Sauvegarder les paramètres avant d'enregistrer
         name = self.project.settings.evaluation_short or "qcm_papier"
         path = _file_dialog(self, "Enregistrer le projet",
@@ -2139,6 +2174,10 @@ class QcmWindow(Gtk.ApplicationWindow):
             return
         try:
             project_mod.save_project(self.project, path)
+            self.project_path = path
+            if hasattr(self, "btn_save"):
+                self.btn_save.set_sensitive(True)
+            self.set_title(f"Générateur/Correcteur de QCM papier - {os.path.basename(path)}")
             self.generate_status.set_text(f"Projet enregistré : {path}")
             if hasattr(self, "file_status"):
                 self.file_status.set_text(f"Projet enregistré : {path}")
