@@ -1752,6 +1752,11 @@ class MarkedPageWindow(Gtk.Window):
         self.scroll.set_hexpand(True)
         self.scroll.set_vexpand(True)
         self.image = Gtk.Picture()
+        # On épingle l'image en haut-gauche pour que les coordonnées de clic
+        # soient toujours relatives au coin haut-gauche de l'image, quel que
+        # soit le zoom ou la taille de la fenêtre (pas de centrage).
+        self.image.set_halign(Gtk.Align.START)
+        self.image.set_valign(Gtk.Align.START)
         self.scroll.set_child(self.image)
         left.append(self.scroll)
 
@@ -2044,10 +2049,11 @@ class MarkedPageWindow(Gtk.Window):
             return
         base_w = self._base_img.width
         base_h = self._base_img.height
-        # Les coordonnées du GestureClick sont déjà relatives au widget image
-        # complet (haut-gauche du contenu défilable, de taille img_size*zoom),
-        # PAS du viewport visible. On NE doit donc PAS ajouter le scroll.
-        # Conversion pixels affichés → pixels image (selon le zoom).
+        # L'image est épinglée en haut-gauche (halign/valign = START) : il n'y a
+        # donc JAMAIS de centrage dans le widget, quel que soit le zoom ou la
+        # taille de la fenêtre. Les coordonnées du GestureClick sont ainsi
+        # toujours relatives au coin haut-gauche de l'image. Il suffit de
+        # convertir pixels affichés → pixels image selon le zoom.
         px = _x / self._zoom
         py = _y / self._zoom
         print(f"[align-click] raw=({_x:.1f},{_y:.1f}) zoom={self._zoom} "
