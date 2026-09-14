@@ -177,10 +177,12 @@ def build_layout(settings: ProjectSettings, orientation: str) -> Layout:
         layout.page_width = paper_h
         layout.page_height = paper_w
 
-    layout.margin_left = settings.margin_left
-    layout.margin_top = settings.margin_top
-    layout.margin_right = settings.margin_right
-    layout.margin_bottom = settings.margin_bottom
+    # Coercition en float : les marges peuvent être stockées en chaîne
+    # dans d'anciens projets JSON ou via l'UI (avant correction).
+    layout.margin_left = float(settings.margin_left)
+    layout.margin_top = float(settings.margin_top)
+    layout.margin_right = float(settings.margin_right)
+    layout.margin_bottom = float(settings.margin_bottom)
     layout.page_center = (layout.margin_left + layout.page_width
                           - layout.margin_right) / 2
 
