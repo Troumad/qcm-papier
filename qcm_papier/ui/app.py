@@ -1865,10 +1865,17 @@ class QcmWindow(Gtk.ApplicationWindow):
                                                "Non trouvée dans la sauvegarde",
                                                len(self.marked_pages)])
                     continue
-                # Page non corrigée (alignement échoué) : on l'ignore,
-                # elle n'apparaît pas dans les résultats.
+                # Page non corrigée (alignement échoué) : on l'affiche
+                # quand même (statut « Non lue ») pour qu'on puisse l'ouvrir
+                # et la corriger manuellement.
                 if page.variant_id is None and not page.marks:
                     n_skip += 1
+                    self.results_store.append([
+                        fname, "", "", "", "Non lue",
+                        len(self.marked_pages),
+                    ])
+                    label = f"{fname} ⚠ Non lue"
+                    self.marked_pages.append((label, page))
                     continue
                 n_ok += 1
                 if info:

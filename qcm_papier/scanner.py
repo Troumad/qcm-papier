@@ -1487,12 +1487,13 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
                      or page.student_id is not None
                      or bool(page.marks))
         img_name = None
-        if corrected and page.img is not None and page.img.img is not None:
-            base_name = str(page.student_id) if page.student_id else f"anonyme_{i}"
-            img_name = base_name + ".png"
+        if page.img is not None and page.img.img is not None:
+            base_name = os.path.splitext(os.path.basename(copy_path))[0]
+            # Numérotation à partir de 1 pour lisibilité.
+            img_name = f"{base_name}_{page_index + 1}.png"
             n = 1
             while img_name in used_names:
-                img_name = f"{base_name}_{n}.png"
+                img_name = f"{base_name}_{page_index + 1}_{n}.png"
                 n += 1
             used_names.add(img_name)
             rendered = render_marked_page(page)
