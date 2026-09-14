@@ -137,11 +137,9 @@ class StructureEditor(Gtk.Box):
                     selected_iter = ex_iter
 
                 for j, question in enumerate(exercise.questions):
-                    q_min, q_max = question.get_mark_range()
-                    choices_str = " ".join([f'<span foreground="{self._get_choice_color(c)}">({c.name})</span>'
-                                          for c in question.choices])
-                    q_label = f"  Q{j+1} : {question.name} {q_min} 🡕 {q_max} {choices_str}"
-                    q_iter = self.store.append(ex_iter, [q_label, "question", question])
+                    q_iter = self.store.append(
+                        ex_iter,
+                        [self._question_label(j, question), "question", question])
 
                     if selected_obj is question:
                         selected_iter = q_iter
@@ -157,6 +155,60 @@ class StructureEditor(Gtk.Box):
             self.tree.set_sensitive(True)
             self._updating = False
             self._update_interval_label()
+
+    def _question_label(self, j, question):
+        """Construit le label Pango d'une ligne de question (lettres colorées)."""
+        q_min, q_max = question.get_mark_range()
+        choices_str = " ".join([f'<span foreground="{self._get_choice_color(c)}">({c.name})</span>'
+                               for c in question.choices])
+        return f"  Q{j+1} : {question.name} {q_min} 🡕 {q_max} {choices_str}"
+
+    def _choice_label_color(self, state_index):
+        """Couleur d'un choix selon l'index du menu déroulant (0/1/2)."""
+        if state_index == 0:
+            return "#00aa00"  # Correct -> vert
+        elif state_index == 1:
+            return "#0000ff"  # Neutre -> bleu
+        return "#ff0000"  # Faux -> rouge
+
+    def _refresh_question_row(self, question, dropdowns):
+        """Met à jour les couleurs des lettres d'une ligne question en place.
+
+        Évite de reconstruire tout l'arbre (ce qui fermerait le popover) : on
+        retrouve l'itérateur de la ligne et on ne réécrit que son label.
+        """
+        if self._updating:
+            return
+        # Retrouver l'exercice et l'index de la question.
+        q_index = None
+        for i, exercise in enumerate(self.project.structure):
+            if question in exercise.questions:
+                q_index = exercise.questions.index(question)
+                break
+        if q_index is None:
+            return
+        # Reconstruire le label à partir des états courants des menus déroulants.
+        q_min, q_max = question.get_mark_range()
+        parts = []
+        for d, c in zip(dropdowns, question.choices):
+            color = self._choice_label_color(d.get_selected())
+            parts.append(f'<span foreground="{color}">({c.name})</span>')
+        choices_str = " ".join(parts)
+        q_label = f"  Q{q_index+1} : {question.name} {q_min} 🡕 {q_max} {choices_str}"
+        # Retrouver l'itérateur correspondant à cette question.
+        ex_iter = self.store.get_iter_first()
+        while ex_iter is not None:
+            child = self.store.iter_children(ex_iter)
+            while child is not None:
+                if self.store[child][2] is question:
+                    self._updating = True
+                    try:
+                        self.store.set(child, 0, q_label)
+                    finally:
+                        self._updating = False
+                    return
+                child = self.store.iter_next(child)
+            ex_iter = self.store.iter_next(ex_iter)
 
     def _schedule_update(self):
         """Planifie une mise à jour différée."""
@@ -327,6 +379,9 @@ class StructureEditor(Gtk.Box):
                         d.set_selected(1)  # Neutre
             finally:
                 self._popover_updating = False
+        # Couleurs des lettres mises à jour en temps réel dans l'arbre (sans
+        # le reconstruire, pour garder le popover ouvert).
+        self._refresh_question_row(question, dropdowns)
 
     def _on_choice_menu_validate(self, _btn, question, dropdowns):
         """Applique tous les états édités au modèle en une fois, puis ferme."""
