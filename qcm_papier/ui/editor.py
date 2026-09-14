@@ -362,42 +362,60 @@ class StructureEditor(Gtk.Box):
         # popover rattaché à un parent réalisé.
         popover.set_parent(treeview)
         self.current_popover = popover
+        # Nettoyage si le popover se ferme sans « Valider » (clic ailleurs) :
+        # les états sont déjà appliqués au modèle (sauvegarde progressive),
+        # il suffit de libérer la référence.
+        popover.connect("closed", self._on_popover_closed)
         popover.popup()
 
-    def _on_dropdown_in_popover_changed(self, dropdown, _pspec, dropdowns, question):
-        """Synchronise les menus déroulants sans toucher au modèle.
+    def _on_popover_closed(self, popover):
+        """Nettoie la référence au popover fermé."""
+        if self.current_popover is popover:
+            self.current_popover = None
 
-        En mode « choix unique », sélectionner « Correct » sur un choix
-        désélectionne automatiquement les autres choix marqués « Correct » dans
-        leurs propres menus déroulants (visuellement), pour rester cohérent
-        avant la validation.
+    def _on_dropdown_in_popover_changed(self, dropdown, _pspec, dropdowns, question):
+        """Applique l'état au modèle en place + met à jour les couleurs.
+
+        On applique chaque modification au modèle immédiatement (et pas
+        seulement au « Valider ») pour ne jamais perdre une modification si le
+        popover se ferme inopinément. En mode « choix unique », marquer un choix
+        « Correct » désélectionne les autres : on le fait via GLib.idle_add pour
+        ne pas ré-entrer dans notify::selected pendant le callback (ce qui
+        pouvait fermer le popover).
         """
         if self._popover_updating:
             return
         selected = dropdown.get_selected()
+        idx = dropdowns.index(dropdown)
+        choice = question.choices[idx]
+        choice.correct = (selected == 0)
+        choice.neutral = (selected == 1)
+        choice.penalty = (selected == 2)
+
         if selected == 0 and question.single:
-            self._popover_updating = True
-            try:
-                for d in dropdowns:
-                    if d is not dropdown and d.get_selected() == 0:
-                        d.set_selected(1)  # Neutre
-            finally:
-                self._popover_updating = False
+            # Différer la désélection des autres « Correct » hors du callback.
+            def _deselect_others():
+                self._popover_updating = True
+                try:
+                    for d in dropdowns:
+                        if d is not dropdown and d.get_selected() == 0:
+                            d.set_selected(1)  # Neutre
+                finally:
+                    self._popover_updating = False
+                self._refresh_question_row(question, dropdowns)
+                return False
+            GLib.idle_add(_deselect_others)
+
         # Couleurs des lettres mises à jour en temps réel dans l'arbre (sans
         # le reconstruire, pour garder le popover ouvert).
         self._refresh_question_row(question, dropdowns)
 
     def _on_choice_menu_validate(self, _btn, question, dropdowns):
-        """Applique tous les états édités au modèle en une fois, puis ferme."""
-        self._popover_updating = True
-        try:
-            for d, c in zip(dropdowns, question.choices):
-                selected = d.get_selected()
-                c.correct = (selected == 0)
-                c.neutral = (selected == 1)
-                c.penalty = (selected == 2)
-        finally:
-            self._popover_updating = False
+        """Ferme le popover.
+
+        Les états sont déjà appliqués au modèle à chaque modification
+        (_on_dropdown_in_popover_changed) ; on normalise, ferme et rafraîchit.
+        """
         self._normalize_single_choices(question)
         if self.current_popover:
             self.current_popover.popdown()
