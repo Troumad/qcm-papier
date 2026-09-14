@@ -1501,7 +1501,6 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
                 "page": _page_to_state(page),
                 "page_index": page_index,
             }
-            _file_page_idx[copy_path] = _file_page_idx.get(copy_path, 0) + 1
             if img_name:
                 entry["image"] = img_name
             data["copies"].append(entry)
