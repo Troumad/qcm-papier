@@ -23,6 +23,8 @@ class StructureEditor(Gtk.Box):
         # Variable pour bloquer les mises à jour pendant les modifications
         self._updating = False
         self._update_id = None
+        # Empêche les rebonds lors de la synchronisation des menus déroulants
+        self._popover_updating = False
 
         # Barre d'outils.
         toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -243,7 +245,13 @@ class StructureEditor(Gtk.Box):
                 self._show_choice_menu(treeview, path, column, obj)
 
     def _show_choice_menu(self, treeview, path, column, question):
-        """Affiche le menu pour modifier les états des choix."""
+        """Affiche le menu pour modifier les états des choix.
+
+        Tous les choix sont éditables en une fois ; l'ensemble est appliqué au
+        modèle (et l'arbre rafraîchi) uniquement quand on valide avec le bouton
+        « Valider », plutôt qu'à chaque modification (ce qui fermait le menu et
+        obligeait à re-cliquer sur chaque lettre).
+        """
         if self.current_popover:
             self.current_popover.popdown()
             self.current_popover = None
@@ -259,6 +267,7 @@ class StructureEditor(Gtk.Box):
         box.set_margin_end(6)
         self.current_popover.set_child(box)
 
+        dropdowns: list[Gtk.DropDown] = []
         for choice in question.choices:
             choice_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
             label = Gtk.Label(label=f"{choice.name})")
@@ -267,9 +276,17 @@ class StructureEditor(Gtk.Box):
 
             state_dropdown = Gtk.DropDown.new_from_strings(["Correct", "Neutre", "Faux"])
             state_dropdown.set_selected(self._get_choice_state_index(choice))
-            state_dropdown.connect("notify::selected", self._on_state_changed, choice, question)
+            state_dropdown.connect("notify::selected",
+                                   self._on_dropdown_in_popover_changed,
+                                   dropdowns, question)
             choice_box.append(state_dropdown)
             box.append(choice_box)
+            dropdowns.append(state_dropdown)
+
+        validate_btn = Gtk.Button(label="Valider")
+        validate_btn.connect("clicked", self._on_choice_menu_validate,
+                             question, dropdowns)
+        box.append(validate_btn)
 
         cell_area = treeview.get_cell_area(path, column)
         if cell_area:
@@ -282,6 +299,43 @@ class StructureEditor(Gtk.Box):
 
         GLib.idle_add(lambda: self.current_popover.popup())
 
+    def _on_dropdown_in_popover_changed(self, dropdown, _pspec, dropdowns, question):
+        """Synchronise les menus déroulants sans toucher au modèle.
+
+        En mode « choix unique », sélectionner « Correct » sur un choix
+        désélectionne automatiquement les autres choix marqués « Correct » dans
+        leurs propres menus déroulants (visuellement), pour rester cohérent
+        avant la validation.
+        """
+        if self._popover_updating:
+            return
+        selected = dropdown.get_selected()
+        if selected == 0 and question.single:
+            self._popover_updating = True
+            try:
+                for d in dropdowns:
+                    if d is not dropdown and d.get_selected() == 0:
+                        d.set_selected(1)  # Neutre
+            finally:
+                self._popover_updating = False
+
+    def _on_choice_menu_validate(self, _btn, question, dropdowns):
+        """Applique tous les états édités au modèle en une fois, puis ferme."""
+        self._popover_updating = True
+        try:
+            for d, c in zip(dropdowns, question.choices):
+                selected = d.get_selected()
+                c.correct = (selected == 0)
+                c.neutral = (selected == 1)
+                c.penalty = (selected == 2)
+        finally:
+            self._popover_updating = False
+        self._normalize_single_choices(question)
+        if self.current_popover:
+            self.current_popover.popdown()
+            self.current_popover = None
+        self._schedule_update()
+
     def _get_choice_state_index(self, choice):
         """Retourne l'index de l'état pour le menu déroulant."""
         if choice.correct:
@@ -291,42 +345,6 @@ class StructureEditor(Gtk.Box):
         elif choice.penalty:
             return 2
         return 1
-
-    def _on_state_changed(self, dropdown, _pspec, choice, question):
-        """Gère le changement d'état avec gestion du mode single."""
-        selected = dropdown.get_selected()
-
-        # Bloquer la désélection du dernier choix correct en mode single
-        if selected != 0 and question.single:
-            correct_choices = [c for c in question.choices if c.correct]
-            if len(correct_choices) == 1 and choice in correct_choices:
-                GLib.idle_add(lambda: dropdown.set_selected(0))
-                return
-
-        # Gestion du mode single
-        if selected == 0 and question.single:
-            for c in question.choices:
-                if c != choice and c.correct:
-                    c.correct = False
-                    c.neutral = True
-                    c.penalty = False
-
-        # Appliquer le nouvel état
-        if selected == 0:
-            choice.correct = True
-            choice.neutral = False
-            choice.penalty = False
-        elif selected == 1:
-            choice.correct = False
-            choice.neutral = True
-            choice.penalty = False
-        elif selected == 2:
-            choice.correct = False
-            choice.neutral = False
-            choice.penalty = True
-
-        self._normalize_single_choices(question)
-        self._schedule_update()
 
     def _on_selection_changed(self, selection):
         """Gère le changement de sélection dans l'arbre."""
