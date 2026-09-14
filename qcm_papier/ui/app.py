@@ -1760,22 +1760,128 @@ class QcmWindow(Gtk.ApplicationWindow):
         if not self._last_notes:
             self.marking_status.set_text("Aucune note à exporter : corrigez d'abord.")
             return
-        path_in = _file_dialog(self, "Feuille de notes Scodoc (entrée)",
+        self._show_export_dialog()
+
+    def _show_export_dialog(self) -> None:
+        """Dialogue modal d'export des notes Scodoc avec aide et options.
+
+        Reprend le contenu HTML ``scodoc_export`` (index.html ~1487-1525) :
+        texte d'aide, captures d'écran Scodoc, choix du fichier d'entrée,
+        checkbox pour ramener les notes négatives à 0.
+        """
+        win = Gtk.Window(title="Exportation des notes Scodoc",
+                         transient_for=self, modal=True,
+                         default_width=900, default_height=700)
+        main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        main.set_margin_start(10)
+        main.set_margin_end(10)
+        main.set_margin_top(10)
+        main.set_margin_bottom(10)
+        win.set_child(main)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_hexpand(True)
+        main.append(scroll)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        content.set_halign(Gtk.Align.CENTER)
+        scroll.set_child(content)
+
+        content.append(Gtk.Label(
+            label="Les fichiers de notes Scodoc peuvent être téléchargés "
+                  "depuis la page de saisie des notes pour l'évaluation :"))
+        content.append(Gtk.Label(label=""))
+
+        data_dir = self._scodoc_data_dir()
+        for img_name in ("Scodoc_eval_get1.png", "Scodoc_eval_get2.png"):
+            pic = _scodoc_picture(data_dir, img_name)
+            if pic is not None:
+                content.append(pic)
+            else:
+                content.append(Gtk.Label(
+                    label=f"(Capture d'écran {img_name} absente \u2014 voir "
+                          "qcm_papier/data/scodoc/ pour l'ajouter.)"))
+
+        content.append(Gtk.Label(
+            label="puis obtenir le fichier tableur."))
+        content.append(Gtk.Label(label=""))
+        content.append(Gtk.Label(
+            label="Charger le fichier tableur obtenu, choisir le fichier "
+                  "de sortie, puis cliquer sur « Exporter »."))
+        content.append(Gtk.Label(label=""))
+
+        # Checkbox : monter les notes négatives à 0.
+        min0_check = Gtk.CheckButton(label="Monter les notes négatives à 0")
+        content.append(min0_check)
+        content.append(Gtk.Label(label=""))
+
+        # Capture d'écran pour le renvoi des notes dans Scodoc.
+        pic_send = _scodoc_picture(data_dir, "Scodoc_eval_send.png")
+        if pic_send is not None:
+            content.append(Gtk.Label(
+                label="Le fichier exporté peut ensuite être chargé dans "
+                      "l'interface Scodoc dans l'encadré suivant :"))
+            content.append(pic_send)
+        else:
+            content.append(Gtk.Label(
+                label="(Capture d'écran Scodoc_eval_send.png absente \u2014 "
+                      "voir qcm_papier/data/scodoc/ pour l'ajouter.)"))
+
+        # Boutons.
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        btn_box.set_halign(Gtk.Align.CENTER)
+        main.append(btn_box)
+        status = Gtk.Label(label="")
+        main.append(status)
+
+        btn_in = Gtk.Button(label="Choisir le fichier tableur Scodoc…")
+        btn_export = Gtk.Button(label="Exporter")
+        btn_close = Gtk.Button(label="Fermer")
+        btn_box.append(btn_in)
+        btn_box.append(btn_export)
+        btn_box.append(btn_close)
+
+        state = {"path_in": None}
+
+        def _choose_in(_b) -> None:
+            path = _file_dialog(win, "Feuille de notes Scodoc (entrée)",
                                 Gtk.FileChooserAction.OPEN,
                                 filters=[("Excel", ["*.xlsx", "*.xls"])])
-        if path_in is None:
-            return
-        path_out = _file_dialog(self, "Enregistrer les notes",
-                                 Gtk.FileChooserAction.SAVE,
-                                 initial_name="notes_scodoc.xlsx")
-        if path_out is None:
-            return
-        try:
-            count = scodoc.export_scodoc_notes(path_in, path_out, self._last_notes)
-            self.marking_status.set_text(
-                f"{count} note(s) exportée(s) → {path_out}")
-        except Exception as e:
-            self.marking_status.set_text(f"Erreur : {e}")
+            if path is None:
+                return
+            state["path_in"] = path
+            status.set_text(f"Fichier : {os.path.basename(path)}")
+
+        def _export(_b) -> None:
+            path_in = state.get("path_in")
+            if path_in is None:
+                status.set_markup(
+                    "<span color='#F00'>Choisissez d'abord le fichier tableur.</span>")
+                return
+            path_out = _file_dialog(win, "Enregistrer les notes",
+                                    Gtk.FileChooserAction.SAVE,
+                                    initial_name="notes_scodoc.xlsx")
+            if path_out is None:
+                return
+            min0 = min0_check.get_active()
+            try:
+                count = scodoc.export_scodoc_notes(
+                    path_in, path_out, self._last_notes, min0=min0)
+                status.set_markup(
+                    f"<span color='#080'>{count} note(s) exportée(s) \u2192 "
+                    f"{os.path.basename(path_out)}</span>")
+                self.marking_status.set_text(
+                    f"{count} note(s) exportée(s) \u2192 {path_out}")
+            except Exception as e:
+                status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
+
+        def _close(_b) -> None:
+            win.destroy()
+
+        btn_in.connect("clicked", _choose_in)
+        btn_export.connect("clicked", _export)
+        btn_close.connect("clicked", _close)
+        win.present()
 
     def _on_save_state(self, _btn) -> None:
         if not self.marked_pages:
