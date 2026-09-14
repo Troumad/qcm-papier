@@ -1344,10 +1344,13 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         # Images d'aide Scodoc (remplaçables dans qcm_papier/data/scodoc/).
         data_dir = self._scodoc_data_dir()
-        for name in ("Scodoc_student_list.png",):
-            pic = _scodoc_picture(data_dir, name)
-            if pic is not None:
-                content.append(pic)
+        pic = _scodoc_picture(data_dir, "Scodoc_student_list.png")
+        if pic is not None:
+            content.append(pic)
+        else:
+            content.append(Gtk.Label(
+                label="(Capture d'écran Scodoc absente — voir "
+                      "qcm_papier/data/scodoc/ pour l'ajouter.)"))
 
         content.append(Gtk.Label(
             label="Charger le fichier Excel obtenu depuis Scodoc :"))
@@ -1396,6 +1399,12 @@ class QcmWindow(Gtk.ApplicationWindow):
         (index.html ~7525-7540).
         """
         n_matched = 0
+        page_ids = [getattr(p, "student_id", None)
+                    for _l, p in self.marked_pages
+                    if getattr(p, "student_id", None) is not None]
+        table_ids = list(self.project.students.keys())
+        print(f"[anonymat] IDs des copies corrigées : {page_ids}")
+        print(f"[anonymat] IDs de la table étudiants : {table_ids[:10]}")
         for _label, page in self.marked_pages:
             if page.student_id is None:
                 continue
