@@ -1425,10 +1425,34 @@ class QcmWindow(Gtk.ApplicationWindow):
                       or page.student_id is None)
             if not failed:
                 row[2] = _student_display(page)
+        # Reconstruit la table des notes indexée par EID, pour que l'export
+        # Scodoc (qui cherche les notes par '!EID') trouve les bons étudiants.
+        # Avant la levée d'anonymat, _last_notes était indexé par student_id.
+        self._last_notes = self._collect_notes_by_eid()
         if self.marking_status is not None:
             self.marking_status.set_text(
                 f"Levée d'anonymat : {n_matched} copie(s) identifiée(s).")
         return n_matched
+
+    def _collect_notes_by_eid(self) -> dict[str, float]:
+        """Reconstruit la table des notes indexée par EID (clé d'export
+        Scodoc), à partir des pages corrigées.
+
+        Comme le ``findPage(EID)`` du JS (MarkingScodocExportLoad), on
+        cherche chaque page dont on a l'EID et on prend sa note. On garde la
+        première page trouvée pour un EID donné.
+        """
+        notes: dict[str, float] = {}
+        for _label, page in self.marked_pages:
+            eid = getattr(page, "student_eid", None)
+            if not eid:
+                continue
+            note = getattr(page, "value", None)
+            if note is None:
+                continue
+            if eid not in notes:
+                notes[eid] = float(note)
+        return notes
 
     @staticmethod
     def _scodoc_data_dir() -> str:
