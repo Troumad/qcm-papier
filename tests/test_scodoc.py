@@ -99,6 +99,39 @@ def test_export_scodoc_notes(tmp_path):
     assert ws2.cell(row=10, column=5).value is None
 
 
+def test_export_scodoc_notes_min0(tmp_path):
+    """Avec min0=True, les notes négatives sont ramenées à 0."""
+    wb = Workbook()
+    ws = wb.active
+    for i in range(7):
+        ws.append([f"header{i}"])
+    ws.append(["!12345", "", "", "", ""])
+    ws.append(["!12346", "", "", "", ""])
+    ws.append(["!12347", "", "", "", ""])
+    path_in = tmp_path / "notes_in.xlsx"
+    wb.save(str(path_in))
+
+    path_out = tmp_path / "notes_out.xlsx"
+    # 12345 : note négative ; 12346 : note positive ; 12347 : zéro.
+    notes = {"12345": -1.5, "12346": 8.0, "12347": 0.0}
+    count = scodoc.export_scodoc_notes(str(path_in), str(path_out), notes,
+                                      min0=True)
+    assert count == 3
+    wb2 = load_workbook(str(path_out))
+    ws2 = wb2.active
+    assert ws2.cell(row=8, column=5).value == "0,00"   # -1.5 → 0
+    assert ws2.cell(row=9, column=5).value == "8,00"
+    assert ws2.cell(row=10, column=5).value == "0,00"
+
+    # Sans min0, la note négative est conservée.
+    path_out2 = tmp_path / "notes_out_raw.xlsx"
+    scodoc.export_scodoc_notes(str(path_in), str(path_out2), notes,
+                              min0=False)
+    wb3 = load_workbook(str(path_out2))
+    ws3 = wb3.active
+    assert ws3.cell(row=8, column=5).value == "-1,50"  # négatif conservé
+
+
 def test_find_page_note():
     """find_page_note retrouve la note d'un EID parmi une liste."""
     notes = [("12345", 15.0), ("12346", None), ("12347", 8.0)]

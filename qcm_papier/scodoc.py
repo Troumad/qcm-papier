@@ -100,7 +100,7 @@ def load_students_table(path: str) -> dict[str, Student]:
 def export_scodoc_notes(path_input: str, path_output: str,
                         notes: dict[str, float],
                         note_max: float = 20.0, notemax: float = 20.0,
-                        header_row: int = 7) -> int:
+                        header_row: int = 7, min0: bool = False) -> int:
     """Injecte les notes dans une feuille Scodoc et sauvegarde en XLS.
 
     Reprend ``MarkingScodocExportLoad`` (index.html ~7625-7710) :
@@ -111,6 +111,7 @@ def export_scodoc_notes(path_input: str, path_output: str,
     * La note est cherchée dans ``notes`` (clé = EID), ramenée à
       ``note_max/notemax`` et écrite dans la colonne 5 (E), au format
       ``'x,xx'`` (virgule décimale).
+    * Si ``min0`` est True, les notes négatives sont ramenées à 0.
     * On sauvegarde en ``.xls`` (format biff8 via openpyxl → en pratique on
       écrit du XLSX/OpenDocument compatible).
 
@@ -132,6 +133,8 @@ def export_scodoc_notes(path_input: str, path_output: str,
             continue
         # Note ramenée à /20 (NOTEMAX).
         note = value * note_max / notemax
+        if min0 and note < 0:
+            note = 0.0
         ws.cell(row=r, column=5).value = f"{note:.2f}".replace(".", ",")
         count += 1
 
