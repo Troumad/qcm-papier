@@ -126,6 +126,22 @@ def _student_display(page) -> str:
     return getattr(page, "student_id", None) or ""
 
 
+def _help_markdown_path() -> str:
+    """Chemin du fichier LISEZMOI.md.
+
+    Recherché à la racine du paquet (qcm_papier/) puis à la racine du dépôt,
+    puis à côté de ui/. Renvoie "" si introuvable.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    pkg_dir = os.path.dirname(here)
+    for cand in (os.path.join(pkg_dir, "LISEZMOI.md"),
+                 os.path.join(here, "LISEZMOI.md"),
+                 os.path.join(os.path.dirname(pkg_dir), "LISEZMOI.md")):
+        if os.path.exists(cand):
+            return cand
+    return ""
+
+
 def _scodoc_picture(data_dir: str, name: str, max_width: int = 800):
     """Crée un Gtk.Picture affichant une capture d'écran Scodoc.
 
@@ -135,6 +151,8 @@ def _scodoc_picture(data_dir: str, name: str, max_width: int = 800):
     """
     path = os.path.join(data_dir, name)
     if not os.path.exists(path) or os.path.getsize(path) < 100:
+        import sys
+        print(f"[scodoc-image] image absente : {path}", file=sys.stderr)
         return None
     try:
         from PIL import Image as PILImage
@@ -146,9 +164,13 @@ def _scodoc_picture(data_dir: str, name: str, max_width: int = 800):
             img = img.resize((max_width, int(img.height * ratio)),
                              PILImage.LANCZOS)
         pic = Gtk.Picture()
-        pic.set_paintable(_img_to_texture(img.convert("RGBA")))
+        texture = _img_to_texture(img.convert("RGBA"))
+        pic.set_paintable(texture)
+        pic.set_size_request(img.width, img.height)
         return pic
-    except Exception:
+    except Exception as e:
+        import sys
+        print(f"[scodoc-image] échec chargement {path} : {e}", file=sys.stderr)
         return None
 
 
@@ -1203,6 +1225,37 @@ class QcmWindow(Gtk.ApplicationWindow):
         box.append(scroll3)
 
         self.notebook.append_page(box, Gtk.Label(label="Correction"))
+
+        self._build_help_tab()
+
+    def _build_help_tab(self) -> None:
+        """Onglet Aide : affiche le contenu de LISEZMOI.md en texte brut."""
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_hexpand(True)
+        view = Gtk.TextView()
+        view.set_editable(False)
+        view.set_cursor_visible(False)
+        view.set_wrap_mode(Gtk.WrapMode.WORD)
+        view.set_left_margin(12)
+        view.set_right_margin(12)
+        view.set_top_margin(12)
+        view.set_bottom_margin(12)
+        buf = view.get_buffer()
+        path = _help_markdown_path()
+        if path:
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    buf.set_text(f.read())
+            except Exception as e:
+                buf.set_text(f"Impossible de charger l'aide ({path}) : {e}")
+        else:
+            buf.set_text(
+                "Fichier LISEZMOI.md introuvable. "
+                "Consultez le dépôt du projet pour le guide d'installation "
+                "et d'utilisation.")
+        scroll.set_child(view)
+        self.notebook.append_page(scroll, Gtk.Label(label="Aide"))
 
     def _add_copy_row(self, path: str) -> None:
         fname = os.path.basename(path)
