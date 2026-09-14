@@ -315,7 +315,11 @@ class StructureEditor(Gtk.Box):
         # Gtk-CRITICAL gtk_css_node_insert_after (nœuds CSS construits avant
         # l'attachement à un parent réalisé).
         popover = Gtk.Popover()
-        popover.set_autohide(True)
+        # autohide=False : sinon le popover se ferme dès qu'un Gtk.DropDown
+        # ouvre son propre popup interne (grab de focus). On ferme explicitement
+        # le popover sur « Valider » (_on_choice_menu_validate) et à l'ouverture
+        # d'un autre popover, pour ne pas le laisser traîner.
+        popover.set_autohide(False)
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         box.set_margin_top(6)
