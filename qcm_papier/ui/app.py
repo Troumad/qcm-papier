@@ -1418,12 +1418,6 @@ class QcmWindow(Gtk.ApplicationWindow):
         (index.html ~7525-7540).
         """
         n_matched = 0
-        page_ids = [getattr(p, "student_id", None)
-                    for _l, p in self.marked_pages
-                    if getattr(p, "student_id", None) is not None]
-        table_ids = list(self.project.students.keys())
-        print(f"[anonymat] IDs des copies corrigées : {page_ids}")
-        print(f"[anonymat] IDs de la table étudiants : {table_ids[:10]}")
         for _label, page in self.marked_pages:
             if page.student_id is None:
                 continue
@@ -2471,8 +2465,6 @@ class MarkedPageWindow(Gtk.Window):
         # convertir pixels affichés → pixels image selon le zoom.
         px = _x / self._zoom
         py = _y / self._zoom
-        print(f"[align-click] raw=({_x:.1f},{_y:.1f}) zoom={self._zoom} "
-              f"→ image=({px:.1f},{py:.1f})")
         # bornage dans l'image
         px = max(0.0, min(base_w, px))
         py = max(0.0, min(base_h, py))
