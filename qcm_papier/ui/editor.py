@@ -256,7 +256,10 @@ class StructureEditor(Gtk.Box):
             self.current_popover.popdown()
             self.current_popover = None
 
-        self.current_popover = Gtk.PopoverMenu()
+        # Gtk.Popover (et non PopoverMenu) : on insère du contenu personnalisé
+        # (menus déroulants + bouton), PopoverMenu est réservé aux GMenuModel et
+        # déclenche des Gtk-CRITICAL (stack/viewport internes) avec set_child().
+        self.current_popover = Gtk.Popover()
         self.current_popover.set_parent(treeview)
         self.current_popover.set_autohide(True)
 
