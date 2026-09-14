@@ -105,6 +105,30 @@ def test_choix_multiple_gain_progressif_avec_penalite():
     assert sc.value == 4.0
 
 
+def test_choix_multiple_gain_progressif_penalite_multiple():
+    """Question à gain progressif : 1 bonne sur 2 + 2 erreurs pénalisantes.
+    Chaque erreur soustrait la pénalité : 4 * 1/2 - 0.5 * 2 = 2 - 1 = 1.
+    (Avant, la pénalité était plafonnée à 1 erreur via min(box_penalty, 1).)
+    """
+    p = model.Project()
+    ex = model.Exercise(name="Ex", index=0)
+    q = model.Question(name="Q", gain=4.0, penalty=0.5, single=False,
+                       multiple_progressive=True, index=0)
+    q.choices = [
+        model.Choice(name="A", correct=True, neutral=False, index=0),
+        model.Choice(name="D", correct=False, neutral=False, penalty=True, index=1),
+        model.Choice(name="E", correct=False, neutral=False, penalty=True, index=2),
+        model.Choice(name="F", correct=True, neutral=False, index=3),
+    ]
+    ex.questions = [q]
+    p.structure = [ex]
+    # A + D + E cochés : 1 bonne sur 2 + 2 erreurs.
+    marks = _marks([True, True, True, False])
+    sc = marking.score_page(p, marks, variant_id=1, student_id="p1")
+    assert sc.value == 1.0  # 4 * 1/2 - 0.5 * 2 = 2 - 1
+    assert sc.total == 4.0
+
+
 def test_choix_multiple_correspondance_exacte():
     """Question à correspondance exacte : il faut TOUTES les bonnes cases."""
     p = model.Project()
