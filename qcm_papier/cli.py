@@ -159,11 +159,11 @@ def cmd_correct(args: argparse.Namespace) -> int:
         except Exception as e:
             print(f"  {copy_path} : ERREUR de chargement ({e})", file=sys.stderr)
             continue
-        for page in pages:
+        for page_idx, page in enumerate(pages):
             restored = False
             if getattr(args, "load_state", None):
                 restored = scanner.load_correction_state(
-                    copy_path, page, args.load_state)
+                    copy_path, page, args.load_state, page_index=page_idx)
             if not restored:
                 ok = scanner.auto_check(page, project,
                                         clair=getattr(args, "clair", 140))

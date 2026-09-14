@@ -1782,9 +1782,30 @@ class QcmWindow(Gtk.ApplicationWindow):
                              filters=[("JSON", ["*.json"])])
         if path is None:
             return
+        # Si aucune copie n'est chargée, on pré-remplit la liste des copies
+        # à partir des chemins enregistrés dans la sauvegarde (sans cocher
+        # la case de correction : les notes sont déjà dans la sauvegarde).
         if not self.copies:
-            self.marking_status.set_text("Chargez les copies avant de recharger.")
-            return
+            import json as _json
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    _data = _json.load(f)
+            except Exception as e:
+                self.marking_status.set_text(f"Erreur lecture sauvegarde : {e}")
+                return
+            seen: set[str] = set()
+            for entry in _data.get("copies", []):
+                cp = entry.get("file", "")
+                if not cp or cp in seen:
+                    continue
+                seen.add(cp)
+                if not os.path.isabs(cp):
+                    cp = os.path.join(os.path.dirname(path), cp)
+                self.copies.append(cp)
+                self._add_copy_row(cp)
+            if not self.copies:
+                self.marking_status.set_text("Aucune copie dans la sauvegarde.")
+                return
         self.results_store.clear()
         self.marked_pages = []
         notes: dict[str, float] = {}
@@ -1807,9 +1828,10 @@ class QcmWindow(Gtk.ApplicationWindow):
                 info["n_ok"] = 0
                 info["n_err"] = 0
                 info["n_pages"] = len(pages)
-            for page in pages:
+            for page_idx, page in enumerate(pages):
                 page.copy_path = copy_path
-                restored = scanner.load_correction_state(copy_path, page, path)
+                restored = scanner.load_correction_state(copy_path, page, path,
+                                                          page_index=page_idx)
                 if not restored:
                     n_err += 1
                     if info:

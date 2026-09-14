@@ -1477,6 +1477,9 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
     os.makedirs(img_dir, exist_ok=True)
     data = {"copies": [], "image_dir": img_dir}
     used_names: set[str] = set()
+    # Index de page relatif au fichier (pour distinguer les pages d'un
+    # même PDF lors du rechargement).
+    _file_page_idx: dict[str, int] = {}
     for i, (copy_path, page) in enumerate(zip(copy_paths, pages)):
         if page.variant_id is not None or page.student_id is not None or page.marks:
             img_name = None
@@ -1494,7 +1497,9 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
             entry = {
                 "file": copy_path,
                 "page": _page_to_state(page),
+                "page_index": _file_page_idx.get(copy_path, 0),
             }
+            _file_page_idx[copy_path] = _file_page_idx.get(copy_path, 0) + 1
             if img_name:
                 entry["image"] = img_name
             data["copies"].append(entry)
@@ -1509,10 +1514,13 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
 
 
 def load_correction_state(copy_path: str, page: ScannedPage,
-                           state_path: str) -> bool:
+                           state_path: str, page_index: int = 0) -> bool:
     """Recharge l'état de correction d'une copie depuis un fichier JSON.
 
     Retourne True si l'état a été trouvé et appliqué.
+
+    ``page_index`` (index de la page dans le fichier, 0 = première) permet de
+    distinguer les pages d'un même PDF lors du rechargement.
     """
     import json
     if not os.path.exists(state_path):
@@ -1520,15 +1528,22 @@ def load_correction_state(copy_path: str, page: ScannedPage,
     with open(state_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     img_dir = data.get("image_dir")
+    abs_copy = os.path.abspath(copy_path)
     for entry in data.get("copies", []):
-        if os.path.abspath(entry["file"]) == os.path.abspath(copy_path):
-            _page_from_state(page, entry["page"])
-            img_name = entry.get("image")
-            if img_name and img_dir:
-                img_path = os.path.join(os.path.dirname(state_path),
-                                        img_dir, img_name)
-                if os.path.exists(img_path):
-                    img = Image.open(img_path)
-                    page.img = PixelImage(img)
-            return True
+        if os.path.abspath(entry["file"]) != abs_copy:
+            continue
+        # page_index présent dans les nouvelles sauvegardes ; pour les anciennes
+        # (sans page_index), on tombe sur 0 = première page.
+        entry_idx = entry.get("page_index", 0)
+        if entry_idx != page_index:
+            continue
+        _page_from_state(page, entry["page"])
+        img_name = entry.get("image")
+        if img_name and img_dir:
+            img_path = os.path.join(os.path.dirname(state_path),
+                                    img_dir, img_name)
+            if os.path.exists(img_path):
+                img = Image.open(img_path)
+                page.img = PixelImage(img)
+        return True
     return False
