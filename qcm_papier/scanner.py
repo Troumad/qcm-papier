@@ -402,7 +402,226 @@ def align_auto(page: ScannedPage, variants: dict) -> bool:
             if success:
                 clair = 230
                 break
-    return success
+    if success:
+        return True
+    # Repli : recherche globale des 5 repères (page fortement décalée/rotée
+    # que la recherche locale ne peut pas récupérer).
+    return align_auto_global(page, variants)
+
+
+def _connected_components(mask):
+    """Étiquetage des composantes connexes (BFS) sur un masque booléen.
+
+    Renvoie la liste des composantes : (cx, cy, area, bbox_w, bbox_h) où
+    (cx, cy) est le centroïde et area le nombre de pixels True.
+    """
+    from collections import deque
+    sh, sw = mask.shape
+    labels = {}
+    out = []
+    cur = 0
+    for sy in range(sh):
+        row = mask[sy]
+        for sx in range(sw):
+            if row[sx] and (sy, sx) not in labels:
+                cur += 1
+                q = deque([(sy, sx)])
+                labels[(sy, sx)] = cur
+                cnt = 0
+                sumx = 0
+                sumy = 0
+                minx = sw
+                miny = sh
+                maxx = 0
+                maxy = 0
+                while q:
+                    y, x = q.popleft()
+                    cnt += 1
+                    sumx += x
+                    sumy += y
+                    if x < minx:
+                        minx = x
+                    if x > maxx:
+                        maxx = x
+                    if y < miny:
+                        miny = y
+                    if y > maxy:
+                        maxy = y
+                    for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                        ny, nx = y + dy, x + dx
+                        if 0 <= ny < sh and 0 <= nx < sw and mask[ny, nx] \
+                                and (ny, nx) not in labels:
+                            labels[(ny, nx)] = cur
+                            q.append((ny, nx))
+                out.append((sumx / cnt, sumy / cnt, cnt,
+                            maxx - minx + 1, maxy - miny + 1))
+    return out
+
+
+def align_auto_global(page: ScannedPage, variants: dict) -> bool:
+    """Recherche globale des 5 repères quand l'alignement local échoue.
+
+    Contrairement à ``align_auto`` (qui cherche les repères près de leurs
+    positions théoriques via ``align_adjust_shape``), cette fonction détecte
+    tous les blobs sombres de l'image, puis cherche une transformation de
+    similarité (translation + rotation + échelle) qui aligne le motif des 5
+    repères du layout sur 5 des blobs détectés. Permet de corriger une page
+    mal scannée (fortement décalée/rotée/redimensionnée) que la recherche
+    locale ne peut pas récupérer.
+
+    Renvoie True si les 5 repères ont été localisés et ``page.adjust`` calculé.
+    """
+    if page.img is None:
+        return False
+    try:
+        import numpy as np
+    except ImportError:
+        return False
+
+    layout_p = _layout_of(variants, "p")
+    layout_l = _layout_of(variants, "l")
+    if layout_p is None and layout_l is None:
+        return False
+
+    # Modèles des 5 repères en coordonnées page (mm) pour les 8 orientations
+    # possibles (4 rotations × portrait/paysage), reproduits comme dans
+    # align_auto (combinaisons de shapes_x/shapes_y avec symétries).
+    pw = layout_p.page_width if layout_p else 210
+    ph = layout_p.page_height if layout_p else 297
+    lw = layout_l.page_width if layout_l else 297
+    lh = layout_l.page_height if layout_l else 210
+    models = []
+    if layout_p is not None:
+        models.append(list(zip(layout_p.shapes_x, layout_p.shapes_y)))  # p0°
+        models.append([(pw - x, ph - y) for x, y in
+                       zip(layout_p.shapes_x, layout_p.shapes_y)])  # p180°
+    if layout_l is not None:
+        models.append(list(zip(layout_l.shapes_y,
+                                [lw - x for x in layout_l.shapes_x])))  # l90°
+        models.append(list(zip([lh - y for y in layout_l.shapes_y],
+                               layout_l.shapes_x)))  # l270°
+        models.append(list(zip(layout_l.shapes_x, layout_l.shapes_y)))  # l0°
+    if layout_l is not None and layout_p is not None:
+        models.append(list(zip([ph - x for x in layout_l.shapes_x],
+                                [pw - y for y in layout_l.shapes_y])))  # l180°
+    if layout_p is not None:
+        models.append(list(zip(layout_p.shapes_y,
+                                [pw - x for x in layout_p.shapes_x])))  # p90°
+        models.append(list(zip([ph - y for y in layout_p.shapes_y],
+                               layout_p.shapes_x)))  # p270°
+    if not models:
+        return False
+
+    img = np.asarray(page.img.img.convert("L"))
+    H, W = img.shape
+
+    # Échelle attendue (px/mm) et rayon des repères (2 mm).
+    scale_ref = max(W, H) / max(pw, ph, lw, lh)
+    # seuil de binarisation ; on prend un seuil modéré pour garder les repères
+    mask = (img < 140)
+    # sous-échantillonnage pour accélérer l'étiquetage (facteur 2)
+    step = 2 if min(W, H) > 800 else 1
+    if step > 1:
+        mask = mask[::step, ::step]
+    comps = _connected_components(mask)
+    # Aire attendue d'un repère : π·r² (r=2mm) à l'échelle, avec une marge large
+    # pour tolérer scans redimensionnés. On filtre aussi la circularité
+    # (ratio largeur/hauteur proche de 1, remplissage ~π/4).
+    area_ref = math.pi * (2.0 * scale_ref) ** 2 / (step * step)
+    area_lo = max(20, area_ref * 0.25)
+    area_hi = area_ref * 3.0
+    blobs = []
+    for cx, cy, area, bw, bh in comps:
+        if area < area_lo or area > area_hi:
+            continue
+        if bw < 2 or bh < 2:
+            continue
+        ratio = bw / bh
+        if not (0.5 <= ratio <= 2.0):
+            continue
+        fill = area / (bw * bh)
+        if not (0.4 <= fill <= 1.6):
+            continue
+        blobs.append((cx * step, cy * step))
+    if len(blobs) < 5:
+        return False
+    blobs = np.array(blobs, dtype=float)
+
+    best = None  # (mean_err, model_pts, blob_idx)
+    tol = 18.0  # tolérance de position (px)
+    n_blobs = len(blobs)
+    for model_pts in models:
+        model = np.array(model_pts, dtype=float)
+        # pour chaque paire (i,j) du modèle comme ancre, on essaie chaque paire
+        # de blobs comme cible et on vérifie la transformation de similarité.
+        for ai in range(5):
+            for aj in range(5):
+                if ai == aj:
+                    continue
+                mv = model[aj] - model[ai]
+                ml = math.hypot(float(mv[0]), float(mv[1]))
+                if ml < 1e-3:
+                    continue
+                for bi in range(n_blobs):
+                    for bj in range(n_blobs):
+                        if bi == bj:
+                            continue
+                        dv = blobs[bj] - blobs[bi]
+                        dl = math.hypot(float(dv[0]), float(dv[1]))
+                        if dl < 5:
+                            continue
+                        scale = dl / ml
+                        if not (scale_ref * 0.4 <= scale <= scale_ref * 2.5):
+                            continue
+                        ang = math.atan2(float(dv[1]), float(dv[0])) \
+                            - math.atan2(float(mv[1]), float(mv[0]))
+                        cs, sn = math.cos(ang), math.sin(ang)
+                        # similarité : pred = blobs[bi] + scale·R·(model - model[ai])
+                        rel = model - model[ai]
+                        pred = blobs[bi] + scale * (
+                            rel @ np.array([[cs, sn], [-sn, cs]])
+                        )
+                        # appariement greedy au plus proche
+                        used = set()
+                        assign = []
+                        ok = True
+                        for k in range(5):
+                            d = np.hypot(blobs[:, 0] - pred[k, 0],
+                                         blobs[:, 1] - pred[k, 1])
+                            order = np.argsort(d)
+                            found = False
+                            for idx in order:
+                                idx = int(idx)
+                                if idx in used:
+                                    continue
+                                if d[idx] <= tol:
+                                    used.add(idx)
+                                    assign.append((k, idx, float(d[idx])))
+                                    found = True
+                                break
+                            if not found:
+                                ok = False
+                                break
+                        if ok and len(assign) == 5:
+                            err = sum(a[2] for a in assign) / 5
+                            if best is None or err < best[0]:
+                                best = (err, model_pts, assign)
+    if best is None:
+        return False
+    _err, model_pts, assign = best
+    # On construit page.shapes dans l'ordre du modèle (0..4).
+    order = [None] * 5
+    for k, idx, _d in assign:
+        order[k] = idx
+    page.clear_marks()
+    page.shapes = [{"canvas_x": float(blobs[order[k]][0]),
+                    "canvas_y": float(blobs[order[k]][1])}
+                   for k in range(5)]
+    try:
+        align_viewer(page, variants)
+    except RuntimeError:
+        return False
+    return page.adjust is not None
 
 
 def align_viewer(page: ScannedPage, variants: dict) -> None:
