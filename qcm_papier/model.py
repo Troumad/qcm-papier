@@ -133,13 +133,23 @@ class Question:
         """Calcule l'intervalle de notes pour cette question (min, max).
         
         - max = gain si la question a au moins un choix correct, sinon 0
-        - min = -penalty si la question a au moins un choix pénalisant, sinon 0
+        - min = pire score possible selon le type :
+          * choix unique : -penalty (une seule erreur possible)
+          * choix multiples (exact/progressif) : -penalty × nombre de choix
+            pénalisants (chaque erreur coûte la pénalité)
         """
         has_correct = any(c.correct for c in self.choices)
-        has_penalty = any(c.penalty for c in self.choices)
+        penalty_count = sum(1 for c in self.choices if c.penalty)
         
         question_max = self.gain if has_correct else 0.0
-        question_min = -self.penalty if has_penalty else 0.0
+        if penalty_count == 0:
+            question_min = 0.0
+        elif self.single:
+            question_min = -self.penalty
+        else:
+            # multiple_exact / multiple_progressive : chaque case pénalisante
+            # cochée soustrait la pénalité (cf. marking._question_score).
+            question_min = -self.penalty * penalty_count
         
         return (question_min, question_max)
 
@@ -191,10 +201,11 @@ class Exercise:
             if any(c.correct for c in question.choices):
                 exercise_max += question.gain
         
-        # Calcul du min : soustraire les pénalités des questions avec choix pénalisants
+        # Calcul du min : somme des pires scores possibles de chaque question
+        # (tient compte du type de question, via Question.get_mark_range).
         for question in self.questions:
-            if any(c.penalty for c in question.choices):
-                exercise_min -= question.penalty
+            q_min, _ = question.get_mark_range()
+            exercise_min += q_min
         
         # Appliquer sum_bias
         if self.sum_bias:
@@ -687,36 +698,11 @@ class Project:
         global_max = 0.0
         
         for exercise in self.structure:
-            exercise_min = 0.0
-            exercise_max = 0.0
-            
-            # Calcul du max : TOUJOURS la somme des gains des questions avec choix corrects
-            # (Le champ exercise.max n'est utilisé que pour la mise à l'échelle si scale=True)
-            for question in exercise.questions:
-                if any(c.correct for c in question.choices):
-                    exercise_max += question.gain
-            
-            # Calcul du min : soustraire les pénalités des questions avec choix pénalisants
-            for question in exercise.questions:
-                if any(c.penalty for c in question.choices):
-                    exercise_min -= question.penalty
-            
-            # Appliquer sum_bias
-            if exercise.sum_bias:
-                exercise_max -= exercise.bias
-                exercise_min -= exercise.bias
-            
-            # Appliquer scale
-            if exercise.scale and exercise.max > 0 and exercise_max > 0:
-                exercise_min = exercise_min * exercise.max / exercise_max
-                exercise_max = exercise.max
-            
-            # Appliquer min0 (dernière étape, comme dans le code original)
-            if exercise.min0:
-                exercise_min = 0.0
-            
+            # Exercise.get_mark_range tient compte du type de question
+            # (pénalité × nombre de choix pénalisants en mode multiple) et
+            # applique sum_bias, scale et min0.
+            exercise_min, exercise_max = exercise.get_mark_range()
             global_min += exercise_min
             global_max += exercise_max
-
         
         return (global_min, global_max)

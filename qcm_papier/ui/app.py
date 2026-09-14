@@ -2221,7 +2221,8 @@ class QcmWindow(Gtk.ApplicationWindow):
         """Demande confirmation avant de fermer si le projet est modifié.
 
         Comme dans un traitement de texte : Enregistrer / Ne pas enregistrer /
-        Annuler. Renvoie True (stoppe la fermeture) sauf si l'on quitte vraiment.
+        Annuler. En GTK 4 les dialogues sont asynchrones : on renvoie True
+        (bloque la fermeture) puis on décide dans le callback « response ».
         """
         if not self._dirty:
             return False  # Laisser la fenêtre se fermer
@@ -2240,24 +2241,34 @@ class QcmWindow(Gtk.ApplicationWindow):
             "Ne pas enregistrer", Gtk.ResponseType.NO,
             "Annuler", Gtk.ResponseType.CANCEL)
         dialog.set_default_response(Gtk.ResponseType.CANCEL)
+        dialog.connect("response", self._on_close_dialog_response)
+        dialog.present()
 
-        response = dialog.run()
+        # Bloquer la fermeture tant que la décision n'est pas prise.
+        return True
+
+    def _on_close_dialog_response(self, dialog, response) -> None:
+        """Réagit au choix de l'utilisateur dans le dialogue de fermeture."""
         dialog.destroy()
 
         if response == Gtk.ResponseType.CANCEL:
-            return True  # Bloquer la fermeture
+            return  # Rester ouvert
         if response == Gtk.ResponseType.YES:
-            # Enregistrer ; ne fermer que si l'enregistrement réussit.
+            # Enregistrer ; ne fermer que si la sauvegarde réussit (_dirty
+            # repasse à False).
             if self.project_path is None:
                 # Pas de chemin : « Enregistrer sous » ; on garde la fenêtre
-                # ouverte pour que l'utilisateur voie le dialogue fichier.
+                # ouverte pour le sélecteur de fichier.
                 self._on_save_as(None)
-                # Si l'utilisateur annule le sélecteur, _dirty reste True.
-                return self._dirty
+                if not self._dirty:
+                    self.destroy()
+                return
             self._on_save(None)
-            return self._dirty  # Fermer uniquement si sauvegarde réussie
+            if not self._dirty:
+                self.destroy()
+            return
         # NO : on quitte sans enregistrer.
-        return False
+        self.destroy()
 
 
 class MarkedPageWindow(Gtk.Window):
