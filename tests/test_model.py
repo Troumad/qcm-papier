@@ -130,3 +130,49 @@ def test_variant_store_layout_variant():
     store2 = model.VariantStore.from_plain_dict(plain)
     assert store2.layout("p").page_height == 297
     assert store2.variant(42).barcode_text == "*TEST-0042*"
+
+
+def test_question_mark_range_single():
+    """Choix unique : min = -penalty (une seule erreur), max = gain."""
+    q = model.Question(name="Q", gain=1.5, penalty=0.5, single=True, index=0)
+    q.choices = [
+        model.Choice(name="A", correct=True, neutral=False, index=0),
+        model.Choice(name="B", correct=False, neutral=False, penalty=True, index=1),
+        model.Choice(name="C", correct=False, neutral=False, penalty=True, index=2),
+        model.Choice(name="D", correct=False, neutral=False, penalty=True, index=3),
+    ]
+    assert q.get_mark_range() == (-0.5, 1.5)
+
+
+def test_question_mark_range_progressive():
+    """Choix multiples à gain progressif : min = -penalty × nb choix
+    pénalisants (chaque erreur coûte la pénalité), max = gain."""
+    q = model.Question(name="Q", gain=1.5, penalty=0.5, single=False,
+                       multiple_progressive=True, index=0)
+    q.choices = [
+        model.Choice(name="A", correct=True, neutral=False, index=0),
+        model.Choice(name="B", correct=False, neutral=False, penalty=True, index=1),
+        model.Choice(name="C", correct=False, neutral=False, penalty=True, index=2),
+        model.Choice(name="D", correct=False, neutral=False, penalty=True, index=3),
+    ]
+    # 3 choix pénalisants -> min = -0.5 * 3 = -1.5 (et non -0.5).
+    assert q.get_mark_range() == (-1.5, 1.5)
+
+
+def test_exercise_mark_range_progressive():
+    """Exercice : l'intervalle cumule les pires scores des questions
+    (tient compte du mode multiple)."""
+    p = model.Project()
+    ex = model.Exercise(name="Ex", index=0)
+    q = model.Question(name="Q", gain=1.5, penalty=0.5, single=False,
+                       multiple_progressive=True, index=0)
+    q.choices = [
+        model.Choice(name="A", correct=True, neutral=False, index=0),
+        model.Choice(name="B", correct=False, neutral=False, penalty=True, index=1),
+        model.Choice(name="C", correct=False, neutral=False, penalty=True, index=2),
+        model.Choice(name="D", correct=False, neutral=False, penalty=True, index=3),
+    ]
+    ex.questions = [q]
+    p.structure = [ex]
+    assert ex.get_mark_range() == (-1.5, 1.5)
+    assert p.get_mark_range() == (-1.5, 1.5)
