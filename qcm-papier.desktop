@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=QCM-Papier
+Comment=Générateur/Correcteur de QCM papier
+Exec=python3 -m qcm_papier
+Terminal=false
+Type=Application
+Categories=Education;

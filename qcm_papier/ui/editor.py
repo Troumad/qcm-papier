@@ -1,0 +1,721 @@
+"""Éditeur de structure du QCM (exercices/questions/choix) en GTK 4."""
+
+from __future__ import annotations
+from typing import Callable
+import gi
+gi.require_version('Gtk', '4.0')
+gi.require_version('Gdk', '4.0')
+from gi.repository import Gtk, Gdk, GLib
+from ..model import Choice, Exercise, Project, Question
+
+class StructureEditor(Gtk.Box):
+    """Panneau d'édition de la structure du QCM."""
+
+    def __init__(self, project: Project, on_change: Callable[[], None] | None = None):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.project = project
+        self.on_change = on_change
+        self.set_margin_start(8)
+        self.set_margin_end(8)
+        self.set_margin_top(8)
+        self.set_margin_bottom(8)
+
+        # Variable pour bloquer les mises à jour pendant les modifications
+        self._updating = False
+        self._update_id = None
+        # Empêche les rebonds lors de la synchronisation des menus déroulants
+        self._popover_updating = False
+
+        # Barre d'outils.
+        toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.append(toolbar)
+        btn_add_ex = Gtk.Button(label="Nouvel exercice")
+        btn_add_ex.connect("clicked", self._on_add_exercise)
+        toolbar.append(btn_add_ex)
+        self.btn_remove_ex = Gtk.Button(label="Retirer un exercice")
+        self.btn_remove_ex.connect("clicked", self._on_remove_exercise)
+        self.btn_remove_ex.set_sensitive(False)
+        toolbar.append(self.btn_remove_ex)
+        toolbar.append(Gtk.Separator())
+        self.label_interval = Gtk.Label(label="Intervalle : ")
+        toolbar.append(self.label_interval)
+
+        # Liste des exercices
+        self.store = Gtk.TreeStore(str, str, object)
+        self.tree = Gtk.TreeView(model=self.store)
+        self.tree.set_headers_visible(False)
+        renderer = Gtk.CellRendererText()
+        col = Gtk.TreeViewColumn("Structure", renderer, markup=0)
+        self.tree.append_column(col)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_hexpand(True)
+        scroll.set_child(self.tree)
+        self.append(scroll)
+
+        # Panneau de propriétés
+        self.props_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.props_box.set_margin_top(6)
+        self.append(self.props_box)
+
+        # Sélection
+        self.selection = self.tree.get_selection()
+        self.selection.connect("changed", self._on_selection_changed)
+        self.tree.connect("row-activated", self._on_row_activated)
+
+        self.current_popover = None
+
+        # Désactiver les animations CSS
+        provider = Gtk.CssProvider()
+        provider.load_from_data(b"""
+            * {
+                transition: none;
+                animation: none;
+            }
+        """)
+
+        self.get_style_context().add_provider_for_display(
+            Gdk.Display.get_default(),
+            provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+        self._fill_tree()
+
+    def _get_choice_color(self, choice):
+        """Retourne la couleur selon l'état du choix."""
+        if choice.correct:
+            return "#00aa00"  # Vert
+        elif choice.neutral:
+            return "#0000ff"  # Bleu
+        elif choice.penalty:
+            return "#ff0000"  # Rouge
+        return "#000000"  # Noir
+
+    def _normalize_single_choices(self, question):
+        """Assure qu'il y a exactement un choix correct en mode single."""
+        if question.single and question.choices:
+            correct_choices = [c for c in question.choices if c.correct]
+
+            if len(correct_choices) == 0:
+                # Aucun choix correct → le premier devient correct
+                question.choices[0].correct = True
+                question.choices[0].neutral = False
+                question.choices[0].penalty = False
+            elif len(correct_choices) > 1:
+                # Plusieurs choix corrects → ne garder que le premier
+                first_correct = correct_choices[0]
+                for c in correct_choices[1:]:
+                    c.correct = False
+                    c.neutral = True
+                    c.penalty = False
+
+    def _notify(self):
+        """Notifie les changements."""
+        if self.on_change and not self._updating:
+            self.on_change()
+
+    def _fill_tree(self):
+        """Remplit l'arbre avec les données du projet."""
+        if self._updating:
+            return
+
+        self._updating = True
+        self.tree.set_sensitive(False)
+
+        try:
+            # Sauvegarder l'objet sélectionné
+            model, treeiter = self.selection.get_selected()
+            selected_obj = model[treeiter][2] if treeiter else None
+
+            self.store.freeze_notify()
+            self.store.clear()
+
+            selected_iter = None
+            for i, exercise in enumerate(self.project.structure):
+                ex_min, ex_max = exercise.get_mark_range()
+                ex_label = f"Exercice {i+1} : {exercise.name} {ex_min:.1f} 🡕 {ex_max:.1f}"
+                ex_iter = self.store.append(None, [ex_label, "exercise", exercise])
+
+                if selected_obj is exercise:
+                    selected_iter = ex_iter
+
+                for j, question in enumerate(exercise.questions):
+                    q_iter = self.store.append(
+                        ex_iter,
+                        [self._question_label(j, question), "question", question])
+
+                    if selected_obj is question:
+                        selected_iter = q_iter
+
+            self.store.thaw_notify()
+            self.tree.expand_all()
+
+            # Restaurer la sélection
+            if selected_iter:
+                GLib.idle_add(lambda: self.selection.select_iter(selected_iter))
+
+        finally:
+            self.tree.set_sensitive(True)
+            self._updating = False
+            self._update_interval_label()
+            # « Retirer un exercice » actif seulement s'il y a plus d'un
+            # exercice (on garde au moins un exercice).
+            if hasattr(self, "btn_remove_ex"):
+                self.btn_remove_ex.set_sensitive(len(self.project.structure) > 1)
+
+    def _question_label(self, j, question):
+        """Construit le label Pango d'une ligne de question (lettres colorées)."""
+        q_min, q_max = question.get_mark_range()
+        choices_str = " ".join([f'<span foreground="{self._get_choice_color(c)}">({c.name})</span>'
+                               for c in question.choices])
+        return f"  Q{j+1} : {question.name} {q_min} 🡕 {q_max} {choices_str}"
+
+    def _choice_label_color(self, state_index):
+        """Couleur d'un choix selon l'index du menu déroulant (0/1/2)."""
+        if state_index == 0:
+            return "#00aa00"  # Correct -> vert
+        elif state_index == 1:
+            return "#0000ff"  # Neutre -> bleu
+        return "#ff0000"  # Faux -> rouge
+
+    def _refresh_question_row(self, question, dropdowns):
+        """Met à jour les couleurs des lettres d'une ligne question en place.
+
+        Évite de reconstruire tout l'arbre (ce qui fermerait le popover) : on
+        retrouve l'itérateur de la ligne et on ne réécrit que son label.
+        """
+        if self._updating:
+            return
+        # Retrouver l'exercice et l'index de la question.
+        q_index = None
+        for i, exercise in enumerate(self.project.structure):
+            if question in exercise.questions:
+                q_index = exercise.questions.index(question)
+                break
+        if q_index is None:
+            return
+        # Reconstruire le label à partir des états courants des menus déroulants.
+        q_min, q_max = question.get_mark_range()
+        parts = []
+        for d, c in zip(dropdowns, question.choices):
+            color = self._choice_label_color(d.get_selected())
+            parts.append(f'<span foreground="{color}">({c.name})</span>')
+        choices_str = " ".join(parts)
+        q_label = f"  Q{q_index+1} : {question.name} {q_min} 🡕 {q_max} {choices_str}"
+        # Retrouver l'itérateur correspondant à cette question.
+        ex_iter = self.store.get_iter_first()
+        while ex_iter is not None:
+            child = self.store.iter_children(ex_iter)
+            while child is not None:
+                if self.store[child][2] is question:
+                    self._updating = True
+                    try:
+                        self.store.set(child, 0, q_label)
+                    finally:
+                        self._updating = False
+                    return
+                child = self.store.iter_next(child)
+            ex_iter = self.store.iter_next(ex_iter)
+
+    def _schedule_update(self):
+        """Planifie une mise à jour différée."""
+        if self._update_id is None:
+            self._update_id = GLib.idle_add(self._do_update)
+
+    def _do_update(self):
+        """Effectue la mise à jour différée."""
+        if not self._updating:
+            self._fill_tree()
+            self._notify()
+        if self._update_id is not None:
+            GLib.source_remove(self._update_id)
+            self._update_id = None
+        return False
+
+    def _update_interval_label(self):
+        """Met à jour le label d'intervalle de notes."""
+        global_min, global_max = self.project.get_mark_range()
+        self.label_interval.set_text(f"Intervalle : {global_min:.1f} 🡕 {global_max:.1f}")
+
+    def _on_add_exercise(self, _btn):
+        """Ajoute un nouvel exercice avec 8 choix par défaut."""
+        ex = Exercise(name=f"Exercice {len(self.project.structure)+1}",
+                      index=len(self.project.structure))
+        q = Question(name="Question 1", gain=1.0, penalty=0.5, single=True, index=0)
+        q.choices = [
+            Choice(name="A", correct=True, neutral=False, index=0),
+            Choice(name="B", correct=False, neutral=False, penalty=True, index=1),
+            Choice(name="C", correct=False, neutral=True, index=2),
+            Choice(name="D", correct=False, neutral=True, index=3),
+            Choice(name="E", correct=False, neutral=True, index=4),
+            Choice(name="F", correct=False, neutral=True, index=5),
+            Choice(name="G", correct=False, neutral=True, index=6),
+            Choice(name="H", correct=False, neutral=True, index=7),
+        ]
+        ex.questions = [q]
+        self.project.structure.append(ex)
+        self._schedule_update()
+
+    def _on_remove_exercise(self, _btn):
+        """Supprime le dernier exercice du projet, après confirmation."""
+        if len(self.project.structure) <= 1:
+            return  # Garder au moins un exercice.
+        exercise = self.project.structure[-1]
+        self._confirm_remove(
+            "Supprimer l'exercice ?",
+            f"Voulez-vous vraiment supprimer \u00ab {exercise.name} \u00bb "
+            "et toutes ses questions ? Cette action est irr\u00e9versible.",
+            lambda: self._do_remove_exercise(exercise))
+
+    def add_question(self, exercise):
+        """Ajoute une nouvelle question avec 8 choix par défaut."""
+        q = Question(name=f"Question {len(exercise.questions)+1}",
+                    gain=1.0, penalty=0.5, single=True, index=len(exercise.questions))
+        q.choices = [
+            Choice(name="A", correct=True, neutral=False, index=0),
+            Choice(name="B", correct=False, neutral=False, penalty=True, index=1),
+            Choice(name="C", correct=False, neutral=True, index=2),
+                       Choice(name="D", correct=False, neutral=True, index=3),
+            Choice(name="E", correct=False, neutral=True, index=4),
+            Choice(name="F", correct=False, neutral=True, index=5),
+            Choice(name="G", correct=False, neutral=True, index=6),
+            Choice(name="H", correct=False, neutral=True, index=7),
+        ]
+        exercise.questions.append(q)
+        self._schedule_update()
+
+    def add_choice(self, question):
+        """Ajoute un nouveau choix."""
+        c = Choice(name=chr(ord("A") + len(question.choices)),
+                  correct=False, neutral=True, index=len(question.choices))
+        question.choices.append(c)
+        if question.single and len(question.choices) == 1:
+            c.correct = True
+            c.neutral = False
+            c.penalty = False
+        self._normalize_single_choices(question)
+        self._schedule_update()
+
+    def remove_choice(self, question):
+        """Supprime le dernier choix de la question si possible."""
+        if len(question.choices) > 1:
+            question.choices.pop()
+            if question.single:
+                self._normalize_single_choices(question)
+            self._schedule_update()
+
+    def _confirm_remove(self, title, message, on_confirm):
+        """Dialogue de confirmation GTK4 (asynchrone) avant suppression.
+
+        ``on_confirm`` est appelé (sans argument) si l'utilisateur valide.
+        """
+        dialog = Gtk.MessageDialog(
+            transient_for=self.get_root(),
+            modal=True,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.NONE,
+            text=title,
+            secondary_text=message)
+        dialog.add_buttons(
+            "Supprimer", Gtk.ResponseType.YES,
+            "Annuler", Gtk.ResponseType.CANCEL)
+        dialog.set_default_response(Gtk.ResponseType.CANCEL)
+
+        def _on_response(_d, response):
+            dialog.destroy()
+            if response == Gtk.ResponseType.YES:
+                on_confirm()
+
+        dialog.connect("response", _on_response)
+        dialog.present()
+
+    def remove_question(self, exercise):
+        """Supprime la dernière question de l'exercice, après confirmation."""
+        if len(exercise.questions) <= 1:
+            return  # Garder au moins une question par exercice.
+        question = exercise.questions[-1]
+        self._confirm_remove(
+            "Supprimer la question ?",
+            f"Voulez-vous vraiment supprimer \u00ab {question.name} \u00bb ? "
+            "Cette action est irr\u00e9versible.",
+            lambda: self._do_remove_question(exercise, question))
+
+    def _do_remove_question(self, exercise, question):
+        """Effectue la suppression effective de la question."""
+        exercise.questions.remove(question)
+        # Réindexer les questions restantes.
+        for i, q in enumerate(exercise.questions):
+            q.index = i
+        self._schedule_update()
+
+    def remove_exercise(self, exercise):
+        """Supprime un exercice du projet, après confirmation."""
+        if len(self.project.structure) <= 1:
+            return  # Garder au moins un exercice.
+        self._confirm_remove(
+            "Supprimer l'exercice ?",
+            f"Voulez-vous vraiment supprimer \u00ab {exercise.name} \u00bb "
+            "et toutes ses questions ? Cette action est irr\u00e9versible.",
+            lambda: self._do_remove_exercise(exercise))
+
+    def _do_remove_exercise(self, exercise):
+        """Effectue la suppression effective de l'exercice."""
+        self.project.structure.remove(exercise)
+        # Réindexer les exercices restants.
+        for i, ex in enumerate(self.project.structure):
+            ex.index = i
+        self._schedule_update()
+
+    def _on_row_activated(self, treeview, path, column):
+        """Gère le double-clic sur une ligne."""
+        model = treeview.get_model()
+        treeiter = model.get_iter(path)
+        if treeiter:
+            kind = model[treeiter][1]
+            obj = model[treeiter][2]
+            if kind == "question":
+                self._show_choice_menu(treeview, path, column, obj)
+
+    def _show_choice_menu(self, treeview, path, column, question):
+        """Affiche le menu pour modifier les états des choix.
+
+        Tous les choix sont éditables en une fois ; l'ensemble est appliqué au
+        modèle (et l'arbre rafraîchi) uniquement quand on valide avec le bouton
+        « Valider », plutôt qu'à chaque modification (ce qui fermait le menu et
+        obligeait à re-cliquer sur chaque lettre).
+        """
+        if self.current_popover:
+            self.current_popover.popdown()
+            self.current_popover = None
+
+        # Gtk.Popover (et non PopoverMenu) : on insère du contenu personnalisé
+        # (menus déroulants + bouton), PopoverMenu est réservé aux GMenuModel et
+        # déclenche des Gtk-CRITICAL (stack/viewport internes) avec set_child().
+        # On construit tout le contenu AVANT set_parent() pour éviter le
+        # Gtk-CRITICAL gtk_css_node_insert_after (nœuds CSS construits avant
+        # l'attachement à un parent réalisé).
+        popover = Gtk.Popover()
+        # autohide=False : sinon le popover se ferme dès qu'un Gtk.DropDown
+        # ouvre son propre popup interne (grab de focus). On ferme explicitement
+        # le popover sur « Valider » (_on_choice_menu_validate) et à l'ouverture
+        # d'un autre popover, pour ne pas le laisser traîner.
+        popover.set_autohide(False)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box.set_margin_top(6)
+        box.set_margin_bottom(6)
+        box.set_margin_start(6)
+        box.set_margin_end(6)
+        popover.set_child(box)
+
+        dropdowns: list[Gtk.DropDown] = []
+        for choice in question.choices:
+            choice_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            label = Gtk.Label(label=f"{choice.name})")
+            label.set_halign(Gtk.Align.START)
+            choice_box.append(label)
+
+            state_dropdown = Gtk.DropDown.new_from_strings(["Correct", "Neutre", "Faux"])
+            state_dropdown.set_selected(self._get_choice_state_index(choice))
+            state_dropdown.connect("notify::selected",
+                                   self._on_dropdown_in_popover_changed,
+                                   dropdowns, question)
+            choice_box.append(state_dropdown)
+            box.append(choice_box)
+            dropdowns.append(state_dropdown)
+
+        validate_btn = Gtk.Button(label="Valider")
+        validate_btn.connect("clicked", self._on_choice_menu_validate,
+                             question, dropdowns)
+        box.append(validate_btn)
+
+        cell_area = treeview.get_cell_area(path, column)
+        if cell_area:
+            rect = Gdk.Rectangle()
+            rect.x = cell_area.x
+            rect.y = cell_area.y + cell_area.height
+            rect.width = 1
+            rect.height = 1
+            popover.set_pointing_to(rect)
+
+        # set_parent() en dernier, puis popup() immédiat (sans idle) une fois le
+        # popover rattaché à un parent réalisé.
+        popover.set_parent(treeview)
+        self.current_popover = popover
+        # Nettoyage si le popover se ferme sans « Valider » (clic ailleurs) :
+        # les états sont déjà appliqués au modèle (sauvegarde progressive),
+        # il suffit de libérer la référence.
+        popover.connect("closed", self._on_popover_closed)
+        popover.popup()
+
+    def _on_popover_closed(self, popover):
+        """Nettoie la référence au popover fermé."""
+        if self.current_popover is popover:
+            self.current_popover = None
+
+    def _on_dropdown_in_popover_changed(self, dropdown, _pspec, dropdowns, question):
+        """Applique l'état au modèle en place + met à jour les couleurs.
+
+        On applique chaque modification au modèle immédiatement (et pas
+        seulement au « Valider ») pour ne jamais perdre une modification si le
+        popover se ferme inopinément. En mode « choix unique », marquer un choix
+        « Correct » désélectionne les autres : on le fait via GLib.idle_add pour
+        ne pas ré-entrer dans notify::selected pendant le callback (ce qui
+        pouvait fermer le popover).
+        """
+        if self._popover_updating:
+            return
+        selected = dropdown.get_selected()
+        idx = dropdowns.index(dropdown)
+        choice = question.choices[idx]
+        choice.correct = (selected == 0)
+        choice.neutral = (selected == 1)
+        choice.penalty = (selected == 2)
+
+        if selected == 0 and question.single:
+            # Appliquer l'unicité au MODÈLE immédiatement (les autres choix
+            # corrects redeviennent neutres), pour ne pas se retrouver avec
+            # plusieurs « Correct » si le popover se ferme avant l'idle.
+            for i, c in enumerate(question.choices):
+                if i != idx and c.correct:
+                    c.correct = False
+                    c.neutral = True
+                    c.penalty = False
+            # Mettre à jour visuellement les menus déroulants des autres choix
+            # hors du callback notify::selected (via idle) pour ne pas fermer le
+            # popover ; le modèle est déjà corrigé ci-dessus.
+            def _deselect_others():
+                self._popover_updating = True
+                try:
+                    for i, d in enumerate(dropdowns):
+                        if i != idx and d.get_selected() == 0:
+                            d.set_selected(1)  # Neutre
+                finally:
+                    self._popover_updating = False
+                self._refresh_question_row(question, dropdowns)
+                return False
+            GLib.idle_add(_deselect_others)
+
+        # Couleurs des lettres mises à jour en temps réel dans l'arbre (sans
+        # le reconstruire, pour garder le popover ouvert).
+        self._refresh_question_row(question, dropdowns)
+
+    def _on_choice_menu_validate(self, _btn, question, dropdowns):
+        """Ferme le popover.
+
+        Les états sont déjà appliqués au modèle à chaque modification
+        (_on_dropdown_in_popover_changed) ; on normalise, ferme et rafraîchit.
+        """
+        self._normalize_single_choices(question)
+        if self.current_popover:
+            self.current_popover.popdown()
+            self.current_popover = None
+        self._schedule_update()
+
+    def _get_choice_state_index(self, choice):
+        """Retourne l'index de l'état pour le menu déroulant."""
+        if choice.correct:
+            return 0
+        elif choice.neutral:
+            return 1
+        elif choice.penalty:
+            return 2
+        return 1
+
+    def _on_selection_changed(self, selection):
+        """Gère le changement de sélection dans l'arbre."""
+        model, treeiter = selection.get_selected()
+        for child in list(self.props_box):
+            self.props_box.remove(child)
+
+        if treeiter is None:
+            return
+
+        kind = model[treeiter][1]
+        obj = model[treeiter][2]
+        if kind == "exercise":
+            self._edit_exercise(obj)
+        elif kind == "question":
+            self._edit_question(obj)
+
+    def _row(self, label, widget):
+        """Crée une ligne pour le panneau de propriétés."""
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        row.append(Gtk.Label(label=label))
+        widget.set_hexpand(True)
+        row.append(widget)
+        return row
+
+    def _edit_exercise(self, exercise):
+        """Affiche les propriétés d'un exercice."""
+        name = Gtk.Entry(text=exercise.name)
+        name.set_hexpand(True)
+        name.connect("changed", lambda e: self._set_and_notify(exercise, "name", e.get_text(), update_tree=False))
+        name.connect("activate", lambda e: (self._schedule_update(), self.tree.grab_focus()))
+        
+        validate_btn = Gtk.Button(label="✓", tooltip_text="Valider (Entrée)")
+        validate_btn.connect("clicked", lambda _: (self._schedule_update(), self.tree.grab_focus()))
+        
+        self.props_box.append(Gtk.Label(label="<b>Exercice</b>", use_markup=True))
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        row.append(Gtk.Label(label="Nom :"))
+        row.append(name)
+        row.append(validate_btn)
+        self.props_box.append(row)
+
+        
+        # Introduction (header) en italique
+        header = Gtk.Entry(text=exercise.header or "")
+        header.set_hexpand(True)
+        header.connect("changed", lambda e: self._set_and_notify(exercise, "header", e.get_text(), update_tree=False))
+        header.connect("activate", lambda e: (self._schedule_update(), self.tree.grab_focus()))
+        header_validate_btn = Gtk.Button(label="✓", tooltip_text="Valider (Entrée)")
+        header_validate_btn.connect("clicked", lambda _: (self._schedule_update(), self.tree.grab_focus()))
+        header_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        header_row.append(Gtk.Label(label="Introduction :"))
+        header_row.append(header)
+        header_row.append(header_validate_btn)
+        self.props_box.append(header_row)
+
+        btn_box_q = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        btn_add_q = Gtk.Button(label="Ajouter une question")
+        btn_add_q.connect("clicked", lambda _b: self.add_question(exercise))
+        btn_box_q.append(btn_add_q)
+        btn_remove_q = Gtk.Button(label="Retirer une question")
+        btn_remove_q.connect("clicked", lambda _b: self.remove_question(exercise))
+        # Inactif s'il ne reste qu'une seule question (on en garde au moins une).
+        btn_remove_q.set_sensitive(len(exercise.questions) > 1)
+        btn_box_q.append(btn_remove_q)
+        self.props_box.append(btn_box_q)
+
+        validation = Gtk.CheckButton(label="Validation par seuil")
+        validation.set_active(exercise.validation)
+        validation.connect("toggled",
+                          lambda b: self._set_and_notify(exercise, "validation", b.get_active()))
+        self.props_box.append(validation)
+
+        # Gain et Seuil sur la même ligne
+        gain_threshold_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        gain = Gtk.SpinButton.new_with_range(0, 1000, 0.5)
+        gain.set_value(exercise.gain)
+        gain.connect("value-changed", lambda b: self._set_and_notify(exercise, "gain", b.get_value()))
+        gain_threshold_row.append(Gtk.Label(label="Gain si validité :"))
+        gain_threshold_row.append(gain)
+        threshold = Gtk.SpinButton.new_with_range(0, 1000, 0.5)
+        threshold.set_value(exercise.threshold)
+        threshold.connect("value-changed", lambda b: self._set_and_notify(exercise, "threshold", b.get_value()))
+        gain_threshold_row.append(Gtk.Label(label="Seuil :"))
+        gain_threshold_row.append(threshold)
+        self.props_box.append(gain_threshold_row)
+        min0 = Gtk.CheckButton(label="Note minimale 0 (pas de points négatifs)")
+        min0.set_active(exercise.min0)
+        min0.connect("toggled",
+                    lambda b: self._set_and_notify(exercise, "min0", b.get_active()))
+        self.props_box.append(min0)
+
+    def _edit_question(self, question):
+        """Affiche les propriétés d'une question."""
+        name = Gtk.Entry(text=question.name)
+        name.set_hexpand(True)
+        name.connect("changed",
+                    lambda e: self._set_and_notify(question, "name", e.get_text(), update_tree=False))
+        name.connect("activate", lambda e: (self._schedule_update(), self.tree.grab_focus()))
+        
+        validate_btn = Gtk.Button(label="✓", tooltip_text="Valider (Entrée)")
+        validate_btn.connect("clicked", lambda _: (self._schedule_update(), self.tree.grab_focus()))
+        
+        self.props_box.append(Gtk.Label(label="<b>Question</b>", use_markup=True))
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        row.append(Gtk.Label(label="Nom :"))
+        row.append(name)
+        row.append(validate_btn)
+        self.props_box.append(row)
+
+        # 🔧 Gain, Malus et boutons sur la même ligne
+        line_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+
+        gain_label = Gtk.Label(label="Gain :")
+        gain = Gtk.SpinButton.new_with_range(0, 1000, 0.5)
+        gain.set_value(question.gain)
+        gain.set_hexpand(True)
+        gain.connect("value-changed", lambda b: self._set_and_notify(question, "gain", b.get_value()))
+        line_box.append(gain_label)
+        line_box.append(gain)
+
+        penalty_label = Gtk.Label(label="Malus :")
+        penalty = Gtk.SpinButton.new_with_range(0, 1000, 0.5)
+        penalty.set_value(question.penalty)
+        penalty.set_hexpand(True)
+        penalty.connect("value-changed", lambda b: self._set_and_notify(question, "penalty", b.get_value()))
+        line_box.append(penalty_label)
+        line_box.append(penalty)
+
+        btn_add_c = Gtk.Button(label="Ajouter un choix")
+        btn_add_c.connect("clicked", lambda _b: self.add_choice(question))
+        line_box.append(btn_add_c)
+
+        btn_remove_c = Gtk.Button(label="Enlever un choix")
+        btn_remove_c.connect("clicked", lambda _b: self.remove_choice(question))
+        line_box.append(btn_remove_c)
+
+        self.props_box.append(line_box)
+
+        # 🔧 Type de question SUR LA MÊME LIGNE
+        type_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        type_label = Gtk.Label(label="Type de question :")
+        type_dropdown = Gtk.DropDown.new_from_strings([
+            "Choix unique",
+            "Choix multiples à correspondance exacte (toute erreur ou omission entraîne le malus)",
+            "Choix multiples à gain progressif (gain dégressif en fonction des omissions, toute erreur entraîne le malus)",
+            "Correction manuelle (réponse libre)"
+        ])
+
+        if question.manual:
+            selected_index = 3
+        elif question.single:
+            selected_index = 0
+        elif question.multiple_exact:
+            selected_index = 1
+        else:
+            selected_index = 2
+
+        type_dropdown.set_selected(selected_index)
+        type_dropdown.connect("notify::selected", self._on_question_type_changed, question)
+
+        type_box.append(type_label)
+        type_box.append(type_dropdown)
+        self.props_box.append(type_box)
+    
+
+    def _on_question_type_changed(self, dropdown, _pspec, question):
+        """Gère le changement de type de question."""
+        selected = dropdown.get_selected()
+
+        question.single = False
+        question.multiple_exact = False
+        question.multiple_progressive = False
+        question.manual = False
+
+        if selected == 0:
+            question.single = True
+            self._normalize_single_choices(question)
+        elif selected == 1:
+            question.multiple_exact = True
+        elif selected == 2:
+            question.multiple_progressive = True
+        elif selected == 3:
+            question.manual = True
+
+        self._schedule_update()
+
+    def _set_and_notify(self, obj, attr, value, update_tree: bool = True):
+        """Modifie un attribut et notifie les changements."""
+        old_value = getattr(obj, attr, None)
+        setattr(obj, attr, value)
+
+        if attr == "single" and value and isinstance(obj, Question):
+            self._normalize_single_choices(obj)
+
+        if update_tree:
+            self._schedule_update()
