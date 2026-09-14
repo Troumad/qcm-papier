@@ -32,6 +32,10 @@ class StructureEditor(Gtk.Box):
         btn_add_ex = Gtk.Button(label="Nouvel exercice")
         btn_add_ex.connect("clicked", self._on_add_exercise)
         toolbar.append(btn_add_ex)
+        self.btn_remove_ex = Gtk.Button(label="Retirer un exercice")
+        self.btn_remove_ex.connect("clicked", self._on_remove_exercise)
+        self.btn_remove_ex.set_sensitive(False)
+        toolbar.append(self.btn_remove_ex)
         toolbar.append(Gtk.Separator())
         self.label_interval = Gtk.Label(label="Intervalle : ")
         toolbar.append(self.label_interval)
@@ -155,6 +159,10 @@ class StructureEditor(Gtk.Box):
             self.tree.set_sensitive(True)
             self._updating = False
             self._update_interval_label()
+            # « Retirer un exercice » actif seulement s'il y a plus d'un
+            # exercice (on garde au moins un exercice).
+            if hasattr(self, "btn_remove_ex"):
+                self.btn_remove_ex.set_sensitive(len(self.project.structure) > 1)
 
     def _question_label(self, j, question):
         """Construit le label Pango d'une ligne de question (lettres colorées)."""
@@ -249,6 +257,17 @@ class StructureEditor(Gtk.Box):
         self.project.structure.append(ex)
         self._schedule_update()
 
+    def _on_remove_exercise(self, _btn):
+        """Supprime le dernier exercice du projet, après confirmation."""
+        if len(self.project.structure) <= 1:
+            return  # Garder au moins un exercice.
+        exercise = self.project.structure[-1]
+        self._confirm_remove(
+            "Supprimer l'exercice ?",
+            f"Voulez-vous vraiment supprimer \u00ab {exercise.name} \u00bb "
+            "et toutes ses questions ? Cette action est irr\u00e9versible.",
+            lambda: self._do_remove_exercise(exercise))
+
     def add_question(self, exercise):
         """Ajoute une nouvelle question avec 8 choix par défaut."""
         q = Question(name=f"Question {len(exercise.questions)+1}",
@@ -257,7 +276,7 @@ class StructureEditor(Gtk.Box):
             Choice(name="A", correct=True, neutral=False, index=0),
             Choice(name="B", correct=False, neutral=False, penalty=True, index=1),
             Choice(name="C", correct=False, neutral=True, index=2),
-            Choice(name="D", correct=False, neutral=True, index=3),
+                       Choice(name="D", correct=False, neutral=True, index=3),
             Choice(name="E", correct=False, neutral=True, index=4),
             Choice(name="F", correct=False, neutral=True, index=5),
             Choice(name="G", correct=False, neutral=True, index=6),
@@ -285,6 +304,68 @@ class StructureEditor(Gtk.Box):
             if question.single:
                 self._normalize_single_choices(question)
             self._schedule_update()
+
+    def _confirm_remove(self, title, message, on_confirm):
+        """Dialogue de confirmation GTK4 (asynchrone) avant suppression.
+
+        ``on_confirm`` est appelé (sans argument) si l'utilisateur valide.
+        """
+        dialog = Gtk.MessageDialog(
+            transient_for=self.get_root(),
+            modal=True,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.NONE,
+            text=title,
+            secondary_text=message)
+        dialog.add_buttons(
+            "Supprimer", Gtk.ResponseType.YES,
+            "Annuler", Gtk.ResponseType.CANCEL)
+        dialog.set_default_response(Gtk.ResponseType.CANCEL)
+
+        def _on_response(_d, response):
+            dialog.destroy()
+            if response == Gtk.ResponseType.YES:
+                on_confirm()
+
+        dialog.connect("response", _on_response)
+        dialog.present()
+
+    def remove_question(self, exercise):
+        """Supprime la dernière question de l'exercice, après confirmation."""
+        if len(exercise.questions) <= 1:
+            return  # Garder au moins une question par exercice.
+        question = exercise.questions[-1]
+        self._confirm_remove(
+            "Supprimer la question ?",
+            f"Voulez-vous vraiment supprimer \u00ab {question.name} \u00bb ? "
+            "Cette action est irr\u00e9versible.",
+            lambda: self._do_remove_question(exercise, question))
+
+    def _do_remove_question(self, exercise, question):
+        """Effectue la suppression effective de la question."""
+        exercise.questions.remove(question)
+        # Réindexer les questions restantes.
+        for i, q in enumerate(exercise.questions):
+            q.index = i
+        self._schedule_update()
+
+    def remove_exercise(self, exercise):
+        """Supprime un exercice du projet, après confirmation."""
+        if len(self.project.structure) <= 1:
+            return  # Garder au moins un exercice.
+        self._confirm_remove(
+            "Supprimer l'exercice ?",
+            f"Voulez-vous vraiment supprimer \u00ab {exercise.name} \u00bb "
+            "et toutes ses questions ? Cette action est irr\u00e9versible.",
+            lambda: self._do_remove_exercise(exercise))
+
+    def _do_remove_exercise(self, exercise):
+        """Effectue la suppression effective de l'exercice."""
+        self.project.structure.remove(exercise)
+        # Réindexer les exercices restants.
+        for i, ex in enumerate(self.project.structure):
+            ex.index = i
+        self._schedule_update()
 
     def _on_row_activated(self, treeview, path, column):
         """Gère le double-clic sur une ligne."""
@@ -497,9 +578,16 @@ class StructureEditor(Gtk.Box):
         header_row.append(header_validate_btn)
         self.props_box.append(header_row)
 
+        btn_box_q = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         btn_add_q = Gtk.Button(label="Ajouter une question")
         btn_add_q.connect("clicked", lambda _b: self.add_question(exercise))
-        self.props_box.append(btn_add_q)
+        btn_box_q.append(btn_add_q)
+        btn_remove_q = Gtk.Button(label="Retirer une question")
+        btn_remove_q.connect("clicked", lambda _b: self.remove_question(exercise))
+        # Inactif s'il ne reste qu'une seule question (on en garde au moins une).
+        btn_remove_q.set_sensitive(len(exercise.questions) > 1)
+        btn_box_q.append(btn_remove_q)
+        self.props_box.append(btn_box_q)
 
         validation = Gtk.CheckButton(label="Validation par seuil")
         validation.set_active(exercise.validation)
