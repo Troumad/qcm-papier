@@ -99,6 +99,23 @@ def _img_to_texture(img) -> object:
     return Gdk.Texture.new_from_bytes(GLib.Bytes.new(buf.getvalue()))
 
 
+def _label_font(size: int = 16):
+    """Police pour les pastilles de numéro des repères bleus.
+
+    Pillow >= 10.1 supporte ``load_default(size=...)``. Pour les versions
+    antérieures on charge la police truetype de repli si disponible, sinon la
+    police bitmap par défaut (sans redimensionnement).
+    """
+    from PIL import ImageFont
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        try:
+            return ImageFont.truetype("DejaVuSans.ttf", size)
+        except Exception:
+            return ImageFont.load_default()
+
+
 class QcmWindow(Gtk.ApplicationWindow):
     """Fenêtre principale de l'application."""
 
@@ -1993,14 +2010,15 @@ class MarkedPageWindow(Gtk.Window):
                              outline=(255, 255, 255, 255), width=1)
                 # pastille de numéro
                 txt = str(i + 1)
-                tw, th = draw.textbbox((0, 0), txt, size=16)[-2:]
+                font = _label_font(16)
+                tw, th = draw.textbbox((0, 0), txt, font=font)[2:]
                 bx0 = px + r + 2
                 by0 = py - th / 2 - 2
                 draw.rectangle((bx0, by0, bx0 + tw + 6, by0 + th + 4),
                                fill=(0, 120, 255, 230),
                                outline=(255, 255, 255, 255), width=1)
                 draw.text((bx0 + 3, by0 + 1), txt,
-                          fill=(255, 255, 255, 255))
+                          font=font, fill=(255, 255, 255, 255))
             display = PILImage.alpha_composite(src, overlay)
         else:
             display = self._img
