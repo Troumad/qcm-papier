@@ -66,24 +66,43 @@ est d'utiliser [MSYS2](https://www.msys2.org/) :
 
 ## 2. Installation de qcm-papier
 
-### Depuis les sources (développement)
+### Installation simple (utilisation)
+
+Récupérez la version publique (branche `main`) :
 
 ```bash
 git clone https://github.com/Troumad/qcm-papier.git
 cd qcm-papier
+pip install ".[gui]"
+```
+
+Pour mettre à jour vers la dernière version publiée :
+
+```bash
+git pull origin main
+pip install ".[gui]"
+```
+
+### Pour développeurs (branche de développement)
+
+La branche `nouvelle_main` contient l'historique de développement. En mode
+editable, les mises à jour se font par un simple `git pull` sans
+réinstaller le paquet :
+
+```bash
+git clone https://github.com/Troumad/qcm-papier.git
+cd qcm-papier
+git checkout nouvelle_main
 pip install -e ".[gui]"
 ```
 
-L'option `-e` (editable) permet de profiter des mises à jour par un simple
-`git pull` sans réinstaller le paquet.
-
-### Pour mettre à jour
+Mises à jour :
 
 ```bash
 git pull origin nouvelle_main
 ```
 
-(Si vous n'avez pas installé en mode `-e`, refaites `pip install -e ".[gui]"`.)
+(Sans le mode `-e`, refaites `pip install -e ".[gui]"`.)
 
 ---
 
