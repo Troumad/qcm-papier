@@ -561,6 +561,12 @@ def _place_choices(variant, variant_id,
         # de haut en bas : la hauteur a augmenté à chaque choix.
         question_height = choice_y + 2  # approximation (5 + 5*nb + 7)
         question_width = question_name_width
+        # Le joker duplique les cercles avec delta_x = 6 : la colonne joker
+        # s'étend à choice_x + 2 + 6, plus le rayon (2.3) et une marge.
+        if settings.choice_joker_always:
+            joker_right = choice_x + 2 + 6 + 2.3 + 2
+            if question_width < joker_right:
+                question_width = joker_right
     else:
         question_width = choice_x
         question_height = 13 if settings.choice_joker_always else 7
