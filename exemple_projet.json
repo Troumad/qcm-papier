@@ -1,0 +1,263 @@
+{
+  "settings": {
+    "establishment": "Université Lyon 1",
+    "institute": "",
+    "formation": "Licence Informatique",
+    "year": "24",
+    "semester": "S3",
+    "teaching_unit": "UE Mathématiques",
+    "module_full": "Algorithmique",
+    "module_short": "ALGO",
+    "evaluation_full": "Examen partiel",
+    "evaluation_short": "PARTIEL",
+    "teachers": "FO",
+    "date": "15/12/2024",
+    "duration": "1h30",
+    "paper_a3": false,
+    "paper_a4": true,
+    "paper_a5": false,
+    "paper_portrait": true,
+    "paper_landscape": false,
+    "paper_both": false,
+    "margin_left": 10.0,
+    "margin_top": 10.0,
+    "margin_right": 10.0,
+    "margin_bottom": 10.0,
+    "header_left": "Université Lyon 1",
+    "header_middle": "Licence Informatique - S3",
+    "header_right": "15/12/2024",
+    "footer_left": "Module ALGO - Évaluation PARTIEL",
+    "footer_middle": "",
+    "footer_right": "Variante {VARIANT_ID}",
+    "identification_dir_left": true,
+    "identification_dir_top": false,
+    "identification_dir_both": false,
+    "exercise_dir_left": false,
+    "exercise_dir_top": false,
+    "exercise_dir_both": true,
+    "question_dir_left": false,
+    "question_dir_top": false,
+    "question_dir_both": true,
+    "choice_dir_left": false,
+    "choice_dir_top": false,
+    "choice_dir_both": true,
+    "choice_joker_always": true,
+    "choice_joker_never": false,
+    "exercise_new_never": false,
+    "exercise_new_always": true,
+    "exercise_new_sometimes": false,
+    "exercise_new_exercises": 1,
+    "exercise_new_questions": 1,
+    "exercise_new_choices": 4,
+    "exercise_new_exercises_name": "Exercice",
+    "exercise_new_questions_name": "Question",
+    "exercise_new_choices_name": "X",
+    "question_new_never": false,
+    "question_new_always": true,
+    "question_new_sometimes": false,
+    "question_new_questions": 1,
+    "question_new_choices": 4,
+    "question_new_questions_name": "Question",
+    "question_new_choices_name": "X",
+    "choice_new_never": false,
+    "choice_new_always": true,
+    "choice_new_sometimes": false,
+    "choice_new_choices_name": "X",
+    "choice_new_choices": 1,
+    "choice_checked_never": false,
+    "choice_checked_always": true,
+    "choice_checked_sometimes": false,
+    "exercise_order_never": true,
+    "exercise_order_always": false,
+    "exercise_order_sometimes": false,
+    "question_order_never": true,
+    "question_order_always": false,
+    "question_order_sometimes": false,
+    "choice_order_never": true,
+    "choice_order_always": false,
+    "choice_order_sometimes": false,
+    "generate_students": 1,
+    "generate_count": 5,
+    "generate_variants": "",
+    "generate_retry": true,
+    "generate_stop": false,
+    "generate_per_variant": true,
+    "generate_per_student": false,
+    "modified": false
+  },
+  "variants": {},
+  "structure": [
+    {
+      "index": 0,
+      "name": "Exercice 1 : Logique",
+      "header": "",
+      "sum": true,
+      "sum_bias": false,
+      "validation": false,
+      "bias": 0.0,
+      "threshold": 0.0,
+      "gain": 0.0,
+      "min0": true,
+      "nomin": true,
+      "noscale": true,
+      "scale": false,
+      "max": 0.0,
+      "questions": [
+        {
+          "index": 0,
+          "name": "Tables de vérité",
+          "gain": 2,
+          "penalty": 1,
+          "manual": false,
+          "width": 0.0,
+          "height": 0.0,
+          "dessin": false,
+          "dessin_nom": "",
+          "check": true,
+          "single": true,
+          "multiple_exact": false,
+          "multiple_progressive": false,
+          "choices": [
+            {
+              "index": 0,
+              "name": "A",
+              "correct": true,
+              "neutral": false,
+              "penalty": false
+            },
+            {
+              "index": 1,
+              "name": "B",
+              "correct": false,
+              "neutral": false,
+              "penalty": true
+            },
+            {
+              "index": 2,
+              "name": "C",
+              "correct": false,
+              "neutral": true,
+              "penalty": false
+            },
+            {
+              "index": 3,
+              "name": "D",
+              "correct": false,
+              "neutral": true,
+              "penalty": false
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "name": "Implication",
+          "gain": 2,
+          "penalty": 1,
+          "manual": false,
+          "width": 0.0,
+          "height": 0.0,
+          "dessin": false,
+          "dessin_nom": "",
+          "check": true,
+          "single": true,
+          "multiple_exact": false,
+          "multiple_progressive": false,
+          "choices": [
+            {
+              "index": 0,
+              "name": "A",
+              "correct": false,
+              "neutral": false,
+              "penalty": true
+            },
+            {
+              "index": 1,
+              "name": "B",
+              "correct": true,
+              "neutral": false,
+              "penalty": false
+            },
+            {
+              "index": 2,
+              "name": "C",
+              "correct": false,
+              "neutral": true,
+              "penalty": false
+            },
+            {
+              "index": 3,
+              "name": "D",
+              "correct": false,
+              "neutral": true,
+              "penalty": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "index": 1,
+      "name": "Exercice 2 : Complexité",
+      "header": "",
+      "sum": true,
+      "sum_bias": false,
+      "validation": false,
+      "bias": 0.0,
+      "threshold": 0.0,
+      "gain": 0.0,
+      "min0": true,
+      "nomin": true,
+      "noscale": true,
+      "scale": false,
+      "max": 0.0,
+      "questions": [
+        {
+          "index": 0,
+          "name": "Cochez les complexités O(n log n)",
+          "gain": 3,
+          "penalty": 1,
+          "manual": false,
+          "width": 0.0,
+          "height": 0.0,
+          "dessin": false,
+          "dessin_nom": "",
+          "check": true,
+          "single": false,
+          "multiple_exact": true,
+          "multiple_progressive": false,
+          "choices": [
+            {
+              "index": 0,
+              "name": "Tri fusion",
+              "correct": true,
+              "neutral": false,
+              "penalty": false
+            },
+            {
+              "index": 1,
+              "name": "Tri rapide",
+              "correct": false,
+              "neutral": false,
+              "penalty": true
+            },
+            {
+              "index": 2,
+              "name": "Tri par tas",
+              "correct": true,
+              "neutral": false,
+              "penalty": false
+            },
+            {
+              "index": 3,
+              "name": "Tri bulle",
+              "correct": false,
+              "neutral": false,
+              "penalty": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "students": {}
+}
