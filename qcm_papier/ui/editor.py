@@ -259,16 +259,18 @@ class StructureEditor(Gtk.Box):
         # Gtk.Popover (et non PopoverMenu) : on insère du contenu personnalisé
         # (menus déroulants + bouton), PopoverMenu est réservé aux GMenuModel et
         # déclenche des Gtk-CRITICAL (stack/viewport internes) avec set_child().
-        self.current_popover = Gtk.Popover()
-        self.current_popover.set_parent(treeview)
-        self.current_popover.set_autohide(True)
+        # On construit tout le contenu AVANT set_parent() pour éviter le
+        # Gtk-CRITICAL gtk_css_node_insert_after (nœuds CSS construits avant
+        # l'attachement à un parent réalisé).
+        popover = Gtk.Popover()
+        popover.set_autohide(True)
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         box.set_margin_top(6)
         box.set_margin_bottom(6)
         box.set_margin_start(6)
         box.set_margin_end(6)
-        self.current_popover.set_child(box)
+        popover.set_child(box)
 
         dropdowns: list[Gtk.DropDown] = []
         for choice in question.choices:
@@ -298,9 +300,13 @@ class StructureEditor(Gtk.Box):
             rect.y = cell_area.y + cell_area.height
             rect.width = 1
             rect.height = 1
-            self.current_popover.set_pointing_to(rect)
+            popover.set_pointing_to(rect)
 
-        GLib.idle_add(lambda: self.current_popover.popup())
+        # set_parent() en dernier, puis popup() immédiat (sans idle) une fois le
+        # popover rattaché à un parent réalisé.
+        popover.set_parent(treeview)
+        self.current_popover = popover
+        popover.popup()
 
     def _on_dropdown_in_popover_changed(self, dropdown, _pspec, dropdowns, question):
         """Synchronise les menus déroulants sans toucher au modèle.
