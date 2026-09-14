@@ -1837,7 +1837,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                     if info:
                         info["n_err"] += 1
                     self.results_store.append([fname, "", "", "",
-                                               "Non trouvé dans la sauvegarde",
+                                               "Non trouvée dans la sauvegarde",
                                                len(self.marked_pages)])
                     continue
                 n_ok += 1

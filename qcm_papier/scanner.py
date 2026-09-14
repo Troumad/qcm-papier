@@ -1481,6 +1481,8 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
     # même PDF lors du rechargement).
     _file_page_idx: dict[str, int] = {}
     for i, (copy_path, page) in enumerate(zip(copy_paths, pages)):
+        page_index = _file_page_idx.get(copy_path, 0)
+        _file_page_idx[copy_path] = page_index + 1
         if page.variant_id is not None or page.student_id is not None or page.marks:
             img_name = None
             if page.img is not None and page.img.img is not None:
@@ -1497,7 +1499,7 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
             entry = {
                 "file": copy_path,
                 "page": _page_to_state(page),
-                "page_index": _file_page_idx.get(copy_path, 0),
+                "page_index": page_index,
             }
             _file_page_idx[copy_path] = _file_page_idx.get(copy_path, 0) + 1
             if img_name:
