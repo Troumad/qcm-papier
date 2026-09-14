@@ -33,3 +33,6 @@ qcm-papier = "qcm_papier.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["qcm_papier*"]
+
+[tool.setuptools.package-data]
+qcm_papier = ["data/scodoc/*.png"]

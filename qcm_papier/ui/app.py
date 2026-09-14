@@ -116,6 +116,42 @@ def _label_font(size: int = 16):
             return ImageFont.load_default()
 
 
+def _student_display(page) -> str:
+    """Texte à afficher dans la colonne Étudiant : nom prénom si la levée
+    d'anonymat a eu lieu, sinon l'identifiant p******* (anonymat)."""
+    name = getattr(page, "student_name", None)
+    firstname = getattr(page, "student_firstname", None)
+    if name or firstname:
+        return f"{name or ''} {firstname or ''}".strip()
+    return getattr(page, "student_id", None) or ""
+
+
+def _scodoc_picture(data_dir: str, name: str, max_width: int = 800):
+    """Crée un Gtk.Picture affichant une capture d'écran Scodoc.
+
+    Les images sont dans ``qcm_papier/data/scodoc/`` et remplaçables par
+    l'utilisateur. Renvoie None si l'image est absente ou vide (placeholder),
+    pour ne pas afficher une zone blanche inutile.
+    """
+    path = os.path.join(data_dir, name)
+    if not os.path.exists(path) or os.path.getsize(path) < 100:
+        return None
+    try:
+        from PIL import Image as PILImage
+        img = PILImage.open(path)
+        if img.width < 2 and img.height < 2:
+            return None  # placeholder 1x1
+        if img.width > max_width:
+            ratio = max_width / img.width
+            img = img.resize((max_width, int(img.height * ratio)),
+                             PILImage.LANCZOS)
+        pic = Gtk.Picture()
+        pic.set_paintable(_img_to_texture(img.convert("RGBA")))
+        return pic
+    except Exception:
+        return None
+
+
 class QcmWindow(Gtk.ApplicationWindow):
     """Fenêtre principale de l'application."""
 
@@ -1265,17 +1301,135 @@ class QcmWindow(Gtk.ApplicationWindow):
         win.present()
 
     def _on_load_students(self, _btn) -> None:
-        path = _file_dialog(self, "Table étudiants Scodoc",
-                            Gtk.FileChooserAction.OPEN,
-                            filters=[("Excel", ["*.xlsx", "*.xls"])])
-        if path is None:
-            return
-        try:
-            self.project.students = scodoc.load_students_table(path)
+        """Ouvre le dialogue de levée d'anonymat Scodoc.
+
+        Affiche les captures d'écran expliquant comment récupérer la table
+        étudiantes depuis Scodoc, puis permet de charger le fichier Excel.
+        Après chargement, les copies déjà corrigées sont mises à jour avec
+        le nom/prénom/EID de l'étudiant (levée d'anonymat) et le tableau des
+        résultats est rafraîchi — comme ``MarkingScodocNamesLoad`` du JS.
+        """
+        self._show_anonymat_dialog()
+
+    def _show_anonymat_dialog(self) -> None:
+        win = Gtk.Window(title="Levée d'anonymat Scodoc",
+                          transient_for=self, modal=True,
+                          default_width=900, default_height=700)
+        main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        main.set_margin_start(10)
+        main.set_margin_end(10)
+        main.set_margin_top(10)
+        main.set_margin_bottom(10)
+        win.set_child(main)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_hexpand(True)
+        main.append(scroll)
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        content.set_halign(Gtk.Align.CENTER)
+        scroll.set_child(content)
+
+        intro = Gtk.Label(
+            label=("Les étudiants ont identifié leurs copies à l'aide de leur "
+                   "numéro « p******* ». Les noms, prénoms et EID des "
+                   "étudiants peuvent être associés grâce à la table des "
+                   "étudiants.\n\n"
+                   "Celle-ci peut être téléchargée depuis Scodoc (ou "
+                   "Scodoc-visu) dans les menus en haut de la page principale "
+                   "du semestre comportant cette évaluation."))
+        intro.set_wrap(True)
+        intro.set_xalign(0.5)
+        content.append(intro)
+
+        # Images d'aide Scodoc (remplaçables dans qcm_papier/data/scodoc/).
+        data_dir = self._scodoc_data_dir()
+        for name in ("Scodoc_student_list.png",):
+            pic = _scodoc_picture(data_dir, name)
+            if pic is not None:
+                content.append(pic)
+
+        content.append(Gtk.Label(
+            label="Charger le fichier Excel obtenu depuis Scodoc :"))
+
+        status = Gtk.Label(label="")
+        status.set_wrap(True)
+        content.append(status)
+
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        btn_box.set_halign(Gtk.Align.CENTER)
+        btn_choose = Gtk.Button(label="Charger le fichier étudiants…")
+        btn_close = Gtk.Button(label="Fermer")
+        btn_box.append(btn_choose)
+        btn_box.append(btn_close)
+        main.append(btn_box)
+
+        def _choose(_b) -> None:
+            path = _file_dialog(
+                win, "Table étudiants Scodoc", Gtk.FileChooserAction.OPEN,
+                filters=[("Excel", ["*.xlsx", "*.xls"])])
+            if path is None:
+                return
+            try:
+                self.project.students = scodoc.load_students_table(path)
+            except Exception as e:
+                status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
+                return
+            n = len(self.project.students)
+            n_matched = self._apply_anonymat()
+            status.set_markup(
+                f"<span color='#080'>{n} étudiant(s) chargé(s), "
+                f"{n_matched} copie(s) identifiée(s).</span>")
+
+        def _close(_b) -> None:
+            win.destroy()
+
+        btn_choose.connect("clicked", _choose)
+        btn_close.connect("clicked", _close)
+        win.present()
+
+    def _apply_anonymat(self) -> int:
+        """Associe nom/prénom/EID aux copies déjà corrigées à partir de la
+        table étudiants chargée, puis rafraîchit le tableau des résultats.
+
+        Reprend la boucle ``updatePage`` de ``MarkingScodocNamesLoad``
+        (index.html ~7525-7540).
+        """
+        n_matched = 0
+        for _label, page in self.marked_pages:
+            if page.student_id is None:
+                continue
+            student = self.project.students.get(page.student_id)
+            if student is None:
+                continue
+            page.student_eid = student.eid
+            page.student_name = student.name
+            page.student_firstname = student.firstname
+            n_matched += 1
+        # Rafraîchit le tableau des résultats (colonne Étudiant).
+        for row in self.results_store:
+            idx = row[5]
+            if not isinstance(idx, int) or not (0 <= idx < len(self.marked_pages)):
+                continue
+            _label, page = self.marked_pages[idx]
+            failed = (page.matrix_inv is None or page.variant_id is None
+                      or page.student_id is None)
+            if not failed:
+                row[2] = _student_display(page)
+        if self.marking_status is not None:
             self.marking_status.set_text(
-                f"{len(self.project.students)} étudiant(s) chargé(s).")
-        except Exception as e:
-            self.marking_status.set_text(f"Erreur : {e}")
+                f"Levée d'anonymat : {n_matched} copie(s) identifiée(s).")
+        return n_matched
+
+    @staticmethod
+    def _scodoc_data_dir() -> str:
+        """Dossier contenant les captures d'écran Scodoc.
+
+        Les images vivent dans ``qcm_papier/data/scodoc/`` ; l'utilisateur
+        peut les remplacer librement (logiciels mis à jour régulièrement).
+        """
+        here = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(here, "data", "scodoc")
 
     def _on_correct(self, _btn) -> None:
         variant_keys = [k for k in self.project.variants if k not in ("p", "l")]
@@ -1332,7 +1486,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                     self.results_store.append([
                         fname,
                         str(page.variant_id or ""),
-                        page.student_id or "",
+                        _student_display(page),
                         f"{note:.2f}",
                         "complète" if page.complete else "incomplète",
                         len(self.marked_pages),
@@ -1427,7 +1581,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             else:
                 self.results_store.append([
                     fname, str(page.variant_id or ""),
-                    page.student_id or "", f"{note:.2f}",
+                    _student_display(page), f"{note:.2f}",
                     "complète" if page.complete else "incomplète", idx,
                 ])
         self._refresh_page_selector()
@@ -1515,7 +1669,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                         reason = "Code-barres non trouvé"
                     row[4] = reason
                 else:
-                    row[2] = page.student_id or ""
+                    row[2] = _student_display(page)
                     row[3] = f"{page.value:.2f}"
                     row[4] = "complète" if page.complete else "incomplète"
                 break
@@ -1610,7 +1764,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                     notes[eid] = note
                 self.results_store.append([
                     fname, str(page.variant_id or ""),
-                    page.student_id or "", f"{note:.2f}",
+                    _student_display(page), f"{note:.2f}",
                     "complète" if page.complete else "incomplète",
                 ])
                 label = f"{fname} v{page.variant_id} {page.student_id or ''}"
