@@ -100,3 +100,34 @@ def test_auto_check_refactore_compatble(tmp_path):
     page.clear_marks()
     assert scanner.auto_check(page, project) is True
     assert page.variant_id is not None
+
+
+def test_align_auto_global_recupere_page_mal_scannee():
+    """La 6e copie de correction3.pdf est mal scannée (fortement
+    décalée/rotée) : l'alignement local échoue mais la recherche globale
+    des 5 repères la récupère et permet la correction.
+
+    Reprend le cas de test réel signalé par l'utilisateur (copie 6 de
+    math/2026/correction3.pdf avec math/2026/OML1_bis.json).
+    """
+    import os
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    pdf = os.path.join(repo, "math", "2026", "correction3.pdf")
+    jsonf = os.path.join(repo, "math", "2026", "OML1_bis.json")
+    if not (os.path.exists(pdf) and os.path.exists(jsonf)):
+        return  # fichiers de test absents : on saute
+    from qcm_papier.project import load_project
+    project = load_project(jsonf)
+    pages = scanner.load_pages_from_file(pdf)
+    assert len(pages) >= 6
+    page = pages[5]  # 6e copie (index 5)
+    # La recherche globale des repères récupère cette page mal scannée
+    # (que l'alignement local seul ne peut pas aligner).
+    assert scanner.align_auto_global(page, project.variants) is True
+    assert page.adjust is not None
+    # auto_check (qui enchaîne align_auto + repli global + correction)
+    # corrige la page : variante lue, note calculée.
+    page.clear_marks()
+    assert scanner.auto_check(page, project) is True
+    assert page.variant_id is not None
+    assert page.value is not None
