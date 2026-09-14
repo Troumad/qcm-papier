@@ -462,7 +462,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.margin_top_spin.set_increments(1, 1)
         self.margin_top_spin.set_value(10)
         self.margin_top_spin.connect("value-changed", 
-            lambda s: setattr(self.project.settings, "margin_top", str(int(s.get_value()))))
+            lambda s: setattr(self.project.settings, "margin_top", float(s.get_value())))
         grid7.attach(self.margin_top_spin, 4, 0, 1, 1)
         
 
@@ -475,7 +475,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.margin_left_spin.set_increments(1, 1)
         self.margin_left_spin.set_value(10)
         self.margin_left_spin.connect("value-changed", 
-            lambda s: setattr(self.project.settings, "margin_left", str(int(s.get_value()))))
+            lambda s: setattr(self.project.settings, "margin_left", float(s.get_value())))
         grid7.attach(self.margin_left_spin, 2, 1, 1, 1)
         
         grid7.attach(Gtk.Label(label="Marge droite"), 5, 1, 1, 1)
@@ -484,7 +484,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.margin_right_spin.set_increments(1, 1)
         self.margin_right_spin.set_value(10)
         self.margin_right_spin.connect("value-changed", 
-            lambda s: setattr(self.project.settings, "margin_right", str(int(s.get_value()))))
+            lambda s: setattr(self.project.settings, "margin_right", float(s.get_value())))
         grid7.attach(self.margin_right_spin, 6, 1, 1, 1)
         
 
@@ -495,7 +495,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.margin_bottom_spin.set_increments(1, 1)
         self.margin_bottom_spin.set_value(10)
         self.margin_bottom_spin.connect("value-changed", 
-            lambda s: setattr(self.project.settings, "margin_bottom", str(int(s.get_value()))))
+            lambda s: setattr(self.project.settings, "margin_bottom", float(s.get_value())))
         grid7.attach(self.margin_bottom_spin, 4, 3, 1, 1)
         
         box.append(grid7)
