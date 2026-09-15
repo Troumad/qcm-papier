@@ -14,7 +14,8 @@ Reproduit les méthodes de la classe ``Page`` du code JavaScript original
 * **Détection des cases cochées** (``autoMarks``).
 * **Calcul de la note** via :mod:`qcm_papier.marking`.
 
-Les accès pixels utilisent Pillow (mode ``RGBA``). La matrice de transformation
+Les accès pixels utilisent Pillow (mode ``RGBA``) ; les calculs sur des zones
+entières (repères, cases, recherche globale) utilisent numpy. La matrice de transformation
 est une matrice affine 2×3 (a, b, c, d, e, f) comme ``DOMMatrix`` du JS.
 """
 
@@ -25,6 +26,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Iterable
 
+import numpy as np
 from PIL import Image
 
 from .code39 import CODE39
@@ -161,6 +163,36 @@ class PixelImage:
                 region.append(self.pixels[xx, yy] if 0 <= xx < self.width and 0 <= yy < self.height else (255, 255, 255, 255))
         return region
 
+    def region(self, left: int, top: int, w: int, h: int) -> np.ndarray:
+        """Pixels RGBA d'une région, tableau float64 de forme (h, w, 4).
+
+        Les pixels hors de l'image valent blanc opaque, comme dans
+        ``get_grey`` et ``get_mark_grey``. Seule la zone demandée est lue :
+        aucune copie de la page entière n'est gardée en mémoire.
+        """
+        out = np.full((max(h, 0), max(w, 0), 4), 255.0)
+        x0, y0 = max(left, 0), max(top, 0)
+        x1, y1 = min(left + w, self.width), min(top + h, self.height)
+        if x1 > x0 and y1 > y0:
+            crop = self.img.crop((x0, y0, x1, y1))
+            out[y0 - top:y1 - top, x0 - left:x1 - left] = np.asarray(crop, dtype=np.float64)
+        return out
+
+    def grey_region(self, left: int, top: int, w: int,
+                    h: int) -> tuple[np.ndarray, np.ndarray]:
+        """(gris, opaque) d'une région, avec la formule de ``get_grey``."""
+        px = self.region(left, top, w, h)
+        r, g, b = px[..., 0], px[..., 1], px[..., 2]
+        return 0.299 * r + 0.587 * g + 0.114 * b, px[..., 3] == 255
+
+    def mark_grey_region(self, left: int, top: int, w: int,
+                         h: int) -> tuple[np.ndarray, np.ndarray]:
+        """(gris, opaque) d'une région, avec la formule de ``get_mark_grey``."""
+        px = self.region(left, top, w, h)
+        r, g, b = px[..., 0], px[..., 1], px[..., 2]
+        grey = 2 * np.minimum(np.minimum(r, g), b) / 3 + (0.299 * r + 0.587 * g + 0.114 * b) / 3
+        return grey, px[..., 3] == 255
+
 
 # ---------------------------------------------------------------------------
 # Page corrigée
@@ -289,16 +321,13 @@ def align_adjust_shape(pimg: PixelImage, matrix: Matrix,
     canvas_left = int(canvas_x - canvas_rect_w / 2)
     canvas_top = int(canvas_y - canvas_rect_h / 2)
 
-    sum_x = 0.0
-    sum_y = 0.0
-    sum_c = 0
-    for yy in range(canvas_top, canvas_top + canvas_rect_h):
-        for xx in range(canvas_left, canvas_left + canvas_rect_w):
-            grey, a = pimg.get_grey(xx, yy)
-            if a == 255 and grey < clair:  # pixel sombre opaque
-                sum_x += xx - canvas_left
-                sum_y += yy - canvas_top
-                sum_c += 1
+    grey, opaque = pimg.grey_region(canvas_left, canvas_top,
+                                    canvas_rect_w, canvas_rect_h)
+    # Pixels sombres opaques ; (dy, dx) = décalage depuis le coin haut-gauche.
+    dy, dx = np.nonzero(opaque & (grey < clair))
+    sum_c = int(dx.size)
+    sum_x = float(dx.sum())
+    sum_y = float(dy.sum())
 
     canvas_radius = canvas_rect_w / shape_rect_w * 2 if shape_rect_w else 0
     if sum_c != 0:
@@ -473,16 +502,6 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
     """
     if page.img is None:
         return False
-    try:
-        import numpy as np
-    except ImportError:
-        import warnings
-        warnings.warn(
-            "numpy n'est pas installé : la recherche globale des repères "
-            "(align_auto_global) est désactivée. Installez numpy pour "
-            "corriger les copies mal scannées.",
-            stacklevel=2)
-        return False
 
     layout_p = _layout_of(variants, "p")
     layout_l = _layout_of(variants, "l")
@@ -556,6 +575,60 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
     best = None  # (mean_err, model_pts, blob_idx)
     tol = 18.0  # tolérance de position (px)
     n_blobs = len(blobs)
+
+    def try_match(model, ai, mv, ml, bi, bj):
+        """Teste la paire de blobs (bi, bj) comme image de la paire du modèle
+        d'origine ``model[ai]`` et de vecteur ``mv`` (longueur ``ml``).
+
+        Renvoie (erreur moyenne, appariement) ou None.
+        """
+        dv = blobs[bj] - blobs[bi]
+        dl = math.hypot(float(dv[0]), float(dv[1]))
+        if dl < 5:
+            return None
+        scale = dl / ml
+        if not (scale_ref * 0.4 <= scale <= scale_ref * 2.5):
+            return None
+        ang = math.atan2(float(dv[1]), float(dv[0])) \
+            - math.atan2(float(mv[1]), float(mv[0]))
+        cs, sn = math.cos(ang), math.sin(ang)
+        # similarité : pred = blobs[bi] + scale·R·(model - model[ai])
+        rel = model - model[ai]
+        pred = blobs[bi] + scale * (rel @ np.array([[cs, sn], [-sn, cs]]))
+        # appariement greedy au plus proche
+        used = set()
+        assign = []
+        for k in range(5):
+            d = np.hypot(blobs[:, 0] - pred[k, 0], blobs[:, 1] - pred[k, 1])
+            order = np.argsort(d)
+            found = False
+            for idx in order:
+                idx = int(idx)
+                if idx in used:
+                    continue
+                if d[idx] <= tol:
+                    used.add(idx)
+                    assign.append((k, idx, float(d[idx])))
+                    found = True
+                break
+            if not found:
+                return None
+        return sum(a[2] for a in assign) / 5, assign
+
+    # Pré-filtre vectorisé : pour chaque paire du modèle, on écarte d'un coup
+    # les paires de blobs qui ne peuvent pas réussir (distance trop courte,
+    # échelle hors plage, ou un repère prédit sans aucun blob à moins de
+    # ``tol``). Les candidats restants passent, dans le même ordre, par
+    # ``try_match`` qui refait le calcul d'origine : le résultat est identique
+    # à la boucle complète. La marge ``eps`` couvre les écarts d'arrondi entre
+    # calcul vectorisé et calcul scalaire.
+    eps = 1e-6
+    pair_bi, pair_bj = np.nonzero(~np.eye(n_blobs, dtype=bool))
+    pair_dv = blobs[pair_bj] - blobs[pair_bi]
+    pair_dl = np.hypot(pair_dv[:, 0], pair_dv[:, 1])
+    pair_angle = np.arctan2(pair_dv[:, 1], pair_dv[:, 0])
+    # Taille des lots : tableaux intermédiaires (lot × 5 × n_blobs) bornés.
+    chunk = max(1, 1_000_000 // (5 * n_blobs))
     for model_pts in models:
         model = np.array(model_pts, dtype=float)
         # pour chaque paire (i,j) du modèle comme ancre, on essaie chaque paire
@@ -568,50 +641,27 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
                 ml = math.hypot(float(mv[0]), float(mv[1]))
                 if ml < 1e-3:
                     continue
-                for bi in range(n_blobs):
-                    for bj in range(n_blobs):
-                        if bi == bj:
-                            continue
-                        dv = blobs[bj] - blobs[bi]
-                        dl = math.hypot(float(dv[0]), float(dv[1]))
-                        if dl < 5:
-                            continue
-                        scale = dl / ml
-                        if not (scale_ref * 0.4 <= scale <= scale_ref * 2.5):
-                            continue
-                        ang = math.atan2(float(dv[1]), float(dv[0])) \
-                            - math.atan2(float(mv[1]), float(mv[0]))
-                        cs, sn = math.cos(ang), math.sin(ang)
-                        # similarité : pred = blobs[bi] + scale·R·(model - model[ai])
-                        rel = model - model[ai]
-                        pred = blobs[bi] + scale * (
-                            rel @ np.array([[cs, sn], [-sn, cs]])
-                        )
-                        # appariement greedy au plus proche
-                        used = set()
-                        assign = []
-                        ok = True
-                        for k in range(5):
-                            d = np.hypot(blobs[:, 0] - pred[k, 0],
-                                         blobs[:, 1] - pred[k, 1])
-                            order = np.argsort(d)
-                            found = False
-                            for idx in order:
-                                idx = int(idx)
-                                if idx in used:
-                                    continue
-                                if d[idx] <= tol:
-                                    used.add(idx)
-                                    assign.append((k, idx, float(d[idx])))
-                                    found = True
-                                break
-                            if not found:
-                                ok = False
-                                break
-                        if ok and len(assign) == 5:
-                            err = sum(a[2] for a in assign) / 5
-                            if best is None or err < best[0]:
-                                best = (err, model_pts, assign)
+                pair_scale = pair_dl / ml
+                keep = np.nonzero((pair_dl >= 5 - eps)
+                                  & (pair_scale >= scale_ref * 0.4 - eps)
+                                  & (pair_scale <= scale_ref * 2.5 + eps))[0]
+                rel = model - model[ai]
+                model_angle = math.atan2(float(mv[1]), float(mv[0]))
+                for start in range(0, len(keep), chunk):
+                    cand = keep[start:start + chunk]
+                    ang = pair_angle[cand] - model_angle
+                    cs = np.cos(ang)[:, None]
+                    sn = np.sin(ang)[:, None]
+                    s = pair_scale[cand][:, None]
+                    pred_x = blobs[pair_bi[cand], 0][:, None] + s * (rel[:, 0] * cs - rel[:, 1] * sn)
+                    pred_y = blobs[pair_bi[cand], 1][:, None] + s * (rel[:, 0] * sn + rel[:, 1] * cs)
+                    # Distance de chaque repère prédit au blob le plus proche.
+                    nearest = np.hypot(pred_x[:, :, None] - blobs[:, 0],
+                                       pred_y[:, :, None] - blobs[:, 1]).min(axis=2)
+                    for c in cand[(nearest <= tol + eps).all(axis=1)]:
+                        res = try_match(model, ai, mv, ml, int(pair_bi[c]), int(pair_bj[c]))
+                        if res is not None and (best is None or res[0] < best[0]):
+                            best = (res[0], model_pts, res[1])
     if best is None:
         return False
     _err, model_pts, assign = best
@@ -1071,23 +1121,14 @@ def read_mark(pimg: PixelImage, matrix_inv: Matrix,
     canvas_w = 2 * canvas_radius + 1
     canvas_h = 2 * canvas_radius + 1
 
-    dark = 0
-    medium = 0
-    bright = 0
-    for yy in range(canvas_top, canvas_top + canvas_h):
-        for xx in range(canvas_left, canvas_left + canvas_w):
-            grey, alpha = pimg.get_mark_grey(xx, yy)
-            if alpha == 255:
-                # Seuils du code original : sombre si grey < 2*clair/3,
-                # moyen si grey < clair, sinon clair.
-                if grey < 2 * clair / 3:
-                    dark += 1
-                elif grey < clair:
-                    medium += 1
-                else:
-                    bright += 1
-            else:
-                bright += 1
+    grey, opaque = pimg.mark_grey_region(canvas_left, canvas_top,
+                                         canvas_w, canvas_h)
+    # Seuils du code original : sombre si grey < 2*clair/3, moyen si
+    # grey < clair, sinon clair ; un pixel non opaque compte comme clair.
+    is_dark = grey < 2 * clair / 3
+    dark = int(np.count_nonzero(opaque & is_dark))
+    medium = int(np.count_nonzero(opaque & ~is_dark & (grey < clair)))
+    bright = canvas_w * canvas_h - dark - medium
 
     total = dark + medium + bright
     if total == 0:

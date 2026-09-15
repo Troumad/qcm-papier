@@ -8,8 +8,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install ".[dev]"
@@ -18,8 +18,14 @@ jobs:
       - name: Ruff (règles étendues, informatif)
         run: ruff check qcm_papier tests --select E,W,F,I,B,UP,SIM --statistics --exit-zero
       - name: Formatage (informatif)
-        run: ruff format --check qcm_papier tests
-        continue-on-error: true
+        run: |
+          status=0
+          ruff format --check qcm_papier tests || status=$?
+          if [ "$status" -eq 1 ]; then
+            echo "Des fichiers peuvent être reformatés ; ce contrôle est informatif." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
 
   test:
     runs-on: ubuntu-latest
@@ -28,10 +34,10 @@ jobs:
       matrix:
         python-version: ["3.10", "3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 

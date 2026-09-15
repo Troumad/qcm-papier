@@ -85,21 +85,21 @@ pip install ".[gui]"
 
 ### Pour développeurs (branche de développement)
 
-La branche `travail` contient l'historique de développement. En mode
+La branche `nouvelle_main` contient l'historique de développement. En mode
 editable, les mises à jour se font par un simple `git pull` sans
 réinstaller le paquet :
 
 ```bash
 git clone https://github.com/Troumad/qcm-papier.git
 cd qcm-papier
-git checkout travail
+git checkout nouvelle_main
 pip install -e ".[gui]"
 ```
 
 Mises à jour :
 
 ```bash
-git pull origin travail
+git pull origin nouvelle_main
 ```
 
 (Sans le mode `-e`, refaites `pip install -e ".[gui]"`.)
