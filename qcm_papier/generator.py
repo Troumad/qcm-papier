@@ -670,8 +670,12 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         # Mode "vers le bas" : première colonne commence sous la boîte d'identification
         exercise_x = layout.margin_left
         exercise_y = variant.id_y + variant.id_height
-        x_max = variant.id_x + variant.id_width  # Point droit maximal initial (marge gauche)
-        #y_column_start = variant.id_y + variant.id_height  # Début de colonne (sous la boîte)
+        # Point droit maximal initial : la première colonne démarre à la
+        # marge gauche. On part de la marge gauche (et non de la largeur de la
+        # boîte d'identification) pour que les nouvelles colonnes, créées quand
+        # un exercice déborde en hauteur, démarrent juste après la première
+        # colonne placée et non loin à droite de la boîte d'identification.
+        x_max = layout.margin_left
 
     has_error = False
     exercise_iter = 0
