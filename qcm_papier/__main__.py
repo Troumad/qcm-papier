@@ -13,7 +13,7 @@ def main(argv: list[str] | None = None) -> int:
     # Si des arguments de sous-commande sont passés, on utilise la CLI.
     argv = argv if argv is not None else sys.argv[1:]
     if argv and argv[0] in ("open", "variants", "pdf", "generate",
-                            "correct", "check", "serve", "-h", "--help"):
+                            "correct", "check", "scodoc", "serve", "-h", "--help"):
         from .cli import main as cli_main
         return cli_main(argv)
 

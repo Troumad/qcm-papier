@@ -109,23 +109,43 @@ def _session_avec_pages(tmp_path):
     return session
 
 
-def test_levee_anonymat_par_api_web(scodoc_url, tmp_path):
+@pytest.fixture
+def memory_keyring(tmp_path, monkeypatch):
+    keyring = pytest.importorskip("keyring")
+    from tests.test_scodoc_config import MemoryKeyring
+
+    monkeypatch.setenv("QCM_PAPIER_CONFIG_DIR", str(tmp_path / "config"))
+    backend = MemoryKeyring()
+    previous = keyring.get_keyring()
+    keyring.set_keyring(backend)
+    yield backend
+    keyring.set_keyring(previous)
+
+
+def test_levee_anonymat_par_api_web(scodoc_url, tmp_path, memory_keyring):
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
     from qcm_papier.web.server import create_app
 
     session = _session_avec_pages(tmp_path)
-    client = TestClient(create_app(session))
-    assert client.get("/api/scodoc/api/status").json()["connected"] is False
-    refused = client.post("/api/scodoc/api/login", json={"url": scodoc_url, "username": USER, "password": "faux"})
-    assert refused.status_code == 400
-    assert "refusé" in refused.json()["detail"]
+    client = TestClient(create_app(session), base_url="http://127.0.0.1")
+    status = client.get("/api/scodoc/api/status").json()
+    assert (status["connected"], status["configured"]) == (False, False)
+    assert "Réglages" in client.post("/api/scodoc/api/login").json()["detail"]
 
-    login = client.post("/api/scodoc/api/login", json={"url": scodoc_url, "username": USER, "password": PASSWORD}).json()
+    # Réglages : compte dédié, mot de passe dans le trousseau, jamais renvoyé
+    saved = client.put("/api/settings/scodoc", json={"url": scodoc_url, "username": USER, "password": "faux"}).json()
+    assert saved["complete"] is True and "password" not in saved
+    assert client.post("/api/settings/scodoc/test").status_code == 400  # mauvais mot de passe
+    client.put("/api/settings/scodoc", json={"url": scodoc_url, "username": USER, "password": PASSWORD})
+    assert client.post("/api/settings/scodoc/test").json()["message"].startswith("Connexion réussie")
+    assert PASSWORD not in client.get("/api/settings/scodoc").text
+
+    login = client.post("/api/scodoc/api/login").json()
     assert login["connected"] is True
     assert login["departements"][0]["acronym"] == "GEII"
-    assert "secret" not in str(vars(session.scodoc_client))  # le mot de passe n'est pas gardé
+    assert PASSWORD not in str(vars(session.scodoc_client))  # seul le jeton est gardé
     sems = client.get("/api/scodoc/api/formsemestres", params={"departement": "GEII"}).json()
     data = client.post("/api/scodoc/api/students", json={"formsemestre_id": sems[0]["id"]}).json()
     assert data["message"] == "2 étudiant(s) chargé(s) depuis ScoDoc, 1 copie(s) identifiée(s)."
@@ -136,6 +156,24 @@ def test_levee_anonymat_par_api_web(scodoc_url, tmp_path):
 
     assert client.post("/api/scodoc/api/logout").json()["connected"] is False
     assert client.get("/api/scodoc/api/formsemestres", params={"departement": "GEII"}).status_code == 400
+    assert client.delete("/api/settings/scodoc").json()["complete"] is False
+    assert memory_keyring.store == {}
+
+
+def test_commande_scodoc_dump(scodoc_url, tmp_path, memory_keyring, capsys):
+    import json as _json
+
+    from qcm_papier import cli, scodoc_config
+
+    scodoc_config.save_account(scodoc_url, USER, PASSWORD)
+    out = tmp_path / "dump"
+    assert cli.main(["scodoc", "dump", "-o", str(out), "-d", "GEII"]) == 0
+    assert sorted(p.name for p in out.iterdir()) == [
+        "departements.json", "formsemestre_7_etudiants.json", "formsemestres_courants_GEII.json",
+    ]  # fmt: skip
+    assert _json.loads((out / "formsemestre_7_etudiants.json").read_text())[0]["code_nip"] == "12504873"
+    printed = capsys.readouterr().out
+    assert "données personnelles" in printed and PASSWORD not in printed
 
 
 def test_students_from_api_meme_regle_que_excel(scodoc_url):

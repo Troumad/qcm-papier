@@ -16,6 +16,7 @@
     <button data-tab="structure" role="tab" class="active">Structure</button>
     <button data-tab="generate" role="tab">Génération</button>
     <button data-tab="correct" role="tab">Correction</button>
+    <button data-tab="settings" role="tab">Réglages</button>
     <button data-tab="help" role="tab">Aide</button>
   </nav>
 </header>
@@ -156,6 +157,29 @@
     <div class="preview"><img id="page-preview" alt="Page corrigée" hidden></div>
   </section>
 
+  <!-- Réglages -->
+  <section id="tab-settings" class="tab" hidden>
+    <h2>Réglages</h2>
+    <form id="scodoc-settings" class="panel">
+      <h3>Compte ScoDoc dédié</h3>
+      <p class="muted">Compte utilisé pour la levée d'anonymat (le même que celui de l'application des stages).
+        Le mot de passe est rangé dans le trousseau du système (<span id="keyring-name"></span>) : il n'est jamais
+        écrit dans un fichier ni réaffiché. Le serveur ScoDoc n'est joignable que depuis le réseau de l'IUT ou le VPN.</p>
+      <div class="grid-form">
+        <label>Adresse du serveur <input name="url" type="url" placeholder="https://scodoc.exemple.fr/ScoDoc" required></label>
+        <label>Identifiant <input name="username" autocomplete="off" required></label>
+        <label>Mot de passe <input name="password" type="password" autocomplete="new-password"></label>
+      </div>
+      <p id="scodoc-password-state" class="muted"></p>
+      <div class="row wrap">
+        <button type="submit">Enregistrer</button>
+        <button type="button" id="scodoc-test">Tester la connexion</button>
+        <button type="button" id="scodoc-delete">Supprimer le compte</button>
+      </div>
+      <p id="scodoc-settings-status" class="status"></p>
+    </form>
+  </section>
+
   <!-- Aide -->
   <section id="tab-help" class="tab" hidden>
     <article id="help-text" class="help"></article>
@@ -177,14 +201,10 @@
   <p id="students-status" class="status"></p>
 
   <h3>Depuis le serveur ScoDoc</h3>
-  <p class="muted">Connexion avec votre compte ScoDoc. Le mot de passe sert uniquement à obtenir un jeton
-    d'accès : il n'est pas enregistré.</p>
-  <form id="scodoc-login" class="grid-form">
-    <label>Adresse <input name="url" type="url" placeholder="https://scodoc.exemple.fr/ScoDoc" required></label>
-    <label>Identifiant <input name="username" autocomplete="username" required></label>
-    <label>Mot de passe <input name="password" type="password" autocomplete="current-password" required></label>
-    <div class="row"><button type="submit">Se connecter</button></div>
-  </form>
+  <p id="scodoc-account" class="muted"></p>
+  <div id="scodoc-disconnected" class="row">
+    <button id="scodoc-connect" type="button">Se connecter à ScoDoc</button>
+  </div>
   <div id="scodoc-connected" hidden>
     <div class="row wrap">
       <label>Département <select id="scodoc-dept"></select></label>
@@ -260,5 +280,6 @@
 <script src="/static/markdown.js"></script>
 <script src="/static/app.js"></script>
 <script src="/static/correction.js"></script>
+<script src="/static/settings.js"></script>
 </body>
 </html>

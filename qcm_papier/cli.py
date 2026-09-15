@@ -235,6 +235,55 @@ def cmd_correct(args: argparse.Namespace) -> int:
 cmd_check = cmd_open  # alias rétro-compatible (l'ancienne commande 'check')
 
 
+def cmd_scodoc(args: argparse.Namespace) -> int:
+    """Compte ScoDoc dédié : état, test de connexion, copie des réponses de l'API."""
+    import json
+
+    try:
+        from . import scodoc_config
+        from .scodoc_api import ScoDocError
+    except ImportError as e:
+        raise SystemExit(f"Module indisponible ({e}).") from e
+    try:
+        if args.action == "status":
+            account = scodoc_config.load_account()
+            print(f"Adresse : {account.url or '—'}")
+            print(f"Identifiant : {account.username or '—'}")
+            print(f"Mot de passe dans le trousseau : {'oui' if account.has_password else 'non'}")
+            print(f"Trousseau : {scodoc_config.keyring_name()}")
+            return 0
+        client = scodoc_config.connect()
+        departements = client.departements()
+        if args.action == "test":
+            print(f"Connexion réussie : {len(departements)} département(s) visible(s).")
+            return 0
+        # dump : réponses brutes de l'API, pour vérifier leur forme exacte.
+        os.makedirs(args.output, exist_ok=True)
+
+        def write(name: str, data) -> None:
+            path = os.path.join(args.output, name)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            size = len(data) if isinstance(data, list) else 1
+            print(f"  {path} ({size} élément(s))")
+
+        print("Réponses de l'API ScoDoc :")
+        write("departements.json", departements)
+        semestres = client.formsemestres_courants(args.departement)
+        write(f"formsemestres_courants_{args.departement}.json", semestres)
+        sem_id = args.formsemestre
+        if sem_id is None and semestres:
+            first = semestres[0]
+            sem_id = first.get("id") or first.get("formsemestre_id")
+        if sem_id is not None:
+            write(f"formsemestre_{sem_id}_etudiants.json", client.formsemestre_etudiants(int(sem_id)))
+        print("⚠ Ces fichiers contiennent des données personnelles d'étudiants : "
+              "ne les versionnez pas et supprimez-les après usage.")
+        return 0
+    except ScoDocError as e:
+        raise SystemExit(f"ScoDoc : {e}") from e
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     """Lance l'interface web locale (FastAPI) dans le navigateur."""
     try:
@@ -342,6 +391,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_chk = sub.add_parser("check", help="Valider un projet")
     p_chk.add_argument("--project", "-p", required=True)
     p_chk.set_defaults(func=cmd_check)
+
+    # scodoc : compte ScoDoc dédié (réglé dans l'interface web, onglet Réglages)
+    p_sco = sub.add_parser("scodoc", help="Compte ScoDoc dédié : état, test, copie des réponses de l'API")
+    sco_sub = p_sco.add_subparsers(dest="action", required=True)
+    sco_sub.add_parser("status", help="Afficher le compte enregistré (sans le mot de passe)")
+    sco_sub.add_parser("test", help="Tester la connexion avec le compte enregistré")
+    p_dump = sco_sub.add_parser("dump", help="Enregistrer les réponses brutes de l'API dans des fichiers JSON")
+    p_dump.add_argument("--output", "-o", required=True,
+                        help="Dossier de sortie (hors dépôt Git : données personnelles)")
+    p_dump.add_argument("--departement", "-d", default="GEII", help="Acronyme du département (défaut GEII)")
+    p_dump.add_argument("--formsemestre", "-s", type=int,
+                        help="Id du semestre (défaut : premier semestre en cours)")
+    p_sco.set_defaults(func=cmd_scodoc)
 
     # serve : interface web locale
     p_srv = sub.add_parser("serve", help="Lancer l'interface web locale dans le navigateur")
