@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "qcm-papier"
 version = "0.1.0"
-description = "Générateur/Correcteur de QCM papier — portage Python/GTK3 depuis le code HTML+JS de l'Université Lyon 1"
+description = "Générateur/Correcteur de QCM papier — portage Python/GTK 4 depuis le code HTML+JS de l'Université Lyon 1"
 readme = "README_python.md"
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-or-later" }
@@ -27,6 +27,11 @@ gui = [
 test = [
     "pytest>=7.0",
 ]
+dev = [
+    "pytest>=7.0",
+    "ruff==0.6.9",
+    "pre-commit>=3.5",
+]
 
 [project.scripts]
 qcm-papier = "qcm_papier.cli:main"
@@ -37,3 +42,16 @@ include = ["qcm_papier*"]
 
 [tool.setuptools.package-data]
 qcm_papier = ["data/scodoc/*.png"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+# Étape 1 : seules les vraies erreurs bloquent (syntaxe, noms non définis,
+# comparaisons invalides). Les autres règles sont signalées par la CI sans
+# bloquer, en attendant un commit de nettoyage dédié.
+select = ["E9", "F63", "F7", "F82"]
