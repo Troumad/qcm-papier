@@ -1405,6 +1405,8 @@ def load_pages_from_file(path: str, dpi: int = 150) -> list[ScannedPage]:
                 "poppler-utils (``urpmi python3-pdf2image poppler``).")
     else:
         img = Image.open(path)
+        img.load()  # Forcer la lecture en mémoire (sinon Pillow est paresseux
+                    # et peut relire un fichier modifié trop tard).
         pages.append(ScannedPage(img=PixelImage(img)))
     return pages
 
