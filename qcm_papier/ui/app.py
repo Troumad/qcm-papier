@@ -1195,6 +1195,11 @@ class QcmWindow(Gtk.ApplicationWindow):
     def _do_save_json(self, json_path: str) -> None:
         try:
             project_mod.save_project(self.project, json_path)
+            # Le projet est maintenant synchronisé avec le disque : on
+            # mémorise la sauvegarde pour ne pas redemander à la fermeture.
+            self._dirty = False
+            if self.project_path != json_path:
+                self.project_path = json_path
             self.generate_status.set_text(
                 f"PDF généré. Projet enregistré : {json_path}")
         except Exception as e:
