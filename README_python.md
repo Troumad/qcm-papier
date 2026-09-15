@@ -1,4 +1,4 @@
-# qcm-papier — Générateur/Correcteur de QCM papier (Python + GTK 4)
+# qcm-papier — Repères techniques (Python, GTK 4 et interface web)
 
 Le guide principal d'installation et d'utilisation est dans [README.md](README.md).
 
@@ -35,12 +35,15 @@ qcm_papier/
 ├── scodoc.py         # Import table étudiants + export notes Scodoc
 ├── project.py        # Persistance JSON du projet
 ├── cli.py            # Interface en ligne de commande
+├── editing.py        # Règles d'édition utilisées par l'interface web
+├── web/
+│   ├── server.py     # API FastAPI locale et fichiers statiques
+│   ├── session.py    # Projet, correction en arrière-plan et sauvegardes ZIP
+│   └── static/       # HTML, CSS et JavaScript, sans compilation
 └── ui/
     ├── __init__.py
     ├── app.py        # Fenêtre principale GTK 4
-    ├── editor.py     # Éditeur de structure
-    ├── generate.py   # Onglet génération
-    └── marking_ui.py # Onglet correction
+    └── editor.py     # Éditeur de structure
 ```
 
 ## Dépendances
@@ -51,6 +54,7 @@ qcm_papier/
 - Pillow (images scannées)
 - PyMuPDF (lecture des PDF scannés)
 - numpy (calculs sur les images scannées : repères, cases, recherche globale)
+- FastAPI, Uvicorn et python-multipart (option `.[web]`)
 - PyGObject + GTK 4 (interface graphique, paquets système
   `gir1.2-gtk-4.0` + `python3-gi`)
 
@@ -65,6 +69,20 @@ pip install -e .
 ```
 
 ## Utilisation
+
+### Interface web locale
+
+```bash
+python -m pip install -e ".[web]"
+python -m qcm_papier serve
+```
+
+Le serveur sert les fichiers de `web/static/` et écoute sur la boucle locale.
+Une instance correspond à une session de travail ; plusieurs onglets du même
+serveur partagent le projet et la correction. Les téléchargements et archives
+permettent de conserver le travail après l'arrêt du serveur.
+
+Le lanceur Rust est décrit dans [src-tauri/README.md](src-tauri/README.md).
 
 ### Interface graphique GTK
 
@@ -85,7 +103,19 @@ qcm-papier correct --project qcm.json --copies scans/ --output notes.xls
 ## Tests
 
 ```bash
+python -m pip install -e ".[dev]"
 pytest -q
+node --test tests/js/*.cjs
+```
+
+Les tests Python couvrent l'édition, l'API, la correction et la sauvegarde.
+Les tests JavaScript utilisent Node.js 24 uniquement pour le développement ;
+Node.js n'est pas nécessaire pour utiliser l'application.
+
+Pour vérifier le lanceur Tauri sans créer d'installateur :
+
+```bash
+cargo check --locked --manifest-path src-tauri/Cargo.toml
 ```
 
 ## Origine

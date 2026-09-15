@@ -1,0 +1,88 @@
+"use strict";
+// Conversion Markdown → HTML, volontairement réduite à ce qu'utilise README.md :
+// titres, paragraphes, listes (avec blocs de code imbriqués), blocs de code,
+// citations, lignes horizontales, gras, italique, code en ligne et liens.
+// Tout le texte est échappé : aucun HTML du fichier n'est interprété.
+
+(() => {
+  const escapeHtml = (text) => text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+  function inline(text) {
+    const codes = [];
+    let html = escapeHtml(text).replace(/`([^`]+)`/g, (_m, code) => {
+      codes.push(`<code>${code}</code>`);
+      return `\u0000${codes.length - 1}\u0000`;
+    });
+    html = html
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    return html.replace(/\u0000(\d+)\u0000/g, (_m, i) => codes[Number(i)]);
+  }
+
+  function render(markdown) {
+    const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+    const out = [];
+    let paragraph = [];
+    let list = null; // { tag, items: [html] }
+
+    const flushParagraph = () => {
+      if (paragraph.length) out.push(`<p>${inline(paragraph.join(" "))}</p>`);
+      paragraph = [];
+    };
+    const flushList = () => {
+      if (list) out.push(`<${list.tag}>${list.items.map((item) => `<li>${item}</li>`).join("")}</${list.tag}>`);
+      list = null;
+    };
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      const fence = line.match(/^(\s*)```(\w*)\s*$/);
+      if (fence) {
+        const code = [];
+        const indent = fence[1].length;
+        for (i += 1; i < lines.length && !/^\s*```\s*$/.test(lines[i]); i += 1) code.push(lines[i].slice(indent));
+        const block = `<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`;
+        flushParagraph();
+        if (list && indent > 0) list.items[list.items.length - 1] += block;
+        else { flushList(); out.push(block); }
+        continue;
+      }
+      const heading = line.match(/^(#{1,6})\s+(.*)$/);
+      const item = line.match(/^(\s*)([-*]|\d+\.)\s+(.*)$/);
+      if (!line.trim()) {
+        flushParagraph();
+        continue;
+      }
+      if (heading) {
+        flushParagraph(); flushList();
+        const level = heading[1].length;
+        out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+      } else if (/^(-{3,}|\*{3,})\s*$/.test(line)) {
+        flushParagraph(); flushList();
+        out.push("<hr>");
+      } else if (line.startsWith(">")) {
+        flushParagraph(); flushList();
+        const quote = [];
+        for (; i < lines.length && lines[i].startsWith(">"); i += 1) quote.push(lines[i].replace(/^>\s?/, ""));
+        i -= 1;
+        out.push(`<blockquote>${inline(quote.join(" "))}</blockquote>`);
+      } else if (item && item[1].length < 2) {
+        flushParagraph();
+        const tag = /\d/.test(item[2]) ? "ol" : "ul";
+        if (!list || list.tag !== tag) { flushList(); list = { tag, items: [] }; }
+        list.items.push(inline(item[3]));
+      } else if (list && /^\s+\S/.test(line)) {
+        list.items[list.items.length - 1] += ` ${inline(line.trim())}`;
+      } else {
+        flushList();
+        paragraph.push(line.trim());
+      }
+    }
+    flushParagraph();
+    flushList();
+    return out.join("\n");
+  }
+
+  window.QCMMarkdown = { render };
+})();
