@@ -127,16 +127,16 @@ def _student_display(page) -> str:
 
 
 def _help_markdown_path() -> str:
-    """Chemin du fichier LISEZMOI.md.
+    """Chemin du fichier README.md.
 
     Recherché à la racine du paquet (qcm_papier/) puis à la racine du dépôt,
     puis à côté de ui/. Renvoie "" si introuvable.
     """
     here = os.path.dirname(os.path.abspath(__file__))
     pkg_dir = os.path.dirname(here)
-    for cand in (os.path.join(pkg_dir, "LISEZMOI.md"),
-                 os.path.join(here, "LISEZMOI.md"),
-                 os.path.join(os.path.dirname(pkg_dir), "LISEZMOI.md")):
+    for cand in (os.path.join(pkg_dir, "README.md"),
+                 os.path.join(here, "README.md"),
+                 os.path.join(os.path.dirname(pkg_dir), "README.md")):
         if os.path.exists(cand):
             return cand
     return ""
@@ -1333,7 +1333,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self._build_help_tab()
 
     def _build_help_tab(self) -> None:
-        """Onglet Aide : affiche le contenu de LISEZMOI.md en texte brut."""
+        """Onglet Aide : affiche le contenu de README.md en texte brut."""
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
         scroll.set_hexpand(True)
@@ -1355,7 +1355,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                 buf.set_text(f"Impossible de charger l'aide ({path}) : {e}")
         else:
             buf.set_text(
-                "Fichier LISEZMOI.md introuvable. "
+                "Fichier README.md introuvable. "
                 "Consultez le dépôt du projet pour le guide d'installation "
                 "et d'utilisation.")
         scroll.set_child(view)
