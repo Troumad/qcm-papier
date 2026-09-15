@@ -86,7 +86,17 @@ tbody tr.selected { background: color-mix(in srgb, var(--accent) 15%, transparen
 td.failed { color: var(--err); }
 .preview { overflow: auto; max-height: 70vh; margin-top: .5rem; }
 .preview img { max-width: 100%; border: 1px solid var(--border); }
-.help { white-space: pre-wrap; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; font: 13px/1.5 ui-monospace, monospace; }
+.help { max-width: 860px; margin: 0 auto; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 2rem; line-height: 1.6; }
+.help h1 { font-size: 1.6rem; margin: .5rem 0 1rem; }
+.help h2 { font-size: 1.3rem; margin: 2rem 0 .6rem; padding-bottom: .3rem; border-bottom: 1px solid var(--border); }
+.help h3 { font-size: 1.1rem; margin: 1.4rem 0 .4rem; }
+.help h4 { font-size: 1rem; margin: 1.1rem 0 .3rem; }
+.help code { font: .9em ui-monospace, monospace; background: var(--bg); padding: .1em .35em; border-radius: 4px; }
+.help pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: .7rem 1rem; overflow-x: auto; }
+.help pre code { background: none; padding: 0; }
+.help blockquote { margin: .8rem 0; padding: .5rem 1rem; border-left: 4px solid var(--accent); background: var(--bg); }
+.help hr { border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+.help li { margin: .2rem 0; }
 
 dialog { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--text);
   max-width: min(920px, 95vw); max-height: 92vh; overflow: auto; padding: 1rem 1.2rem; }
