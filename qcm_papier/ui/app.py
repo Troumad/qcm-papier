@@ -1173,8 +1173,11 @@ class QcmWindow(Gtk.ApplicationWindow):
                 text="Écraser le projet existant ?",
                 secondary_text=(
                     f"Le fichier projet suivant existe déjà :\n{json_path}\n"
-                    "Le remplacer par le projet actuel (avec les informations "
-                    "de correction) ?"))
+                    "Le remplacer par le projet actuel ?\n\n"
+                    "Le fichier JSON à jour est indispensable pour mener "
+                    "à bien la correction automatique : il contient les "
+                    "réponses attendues, les barèmes et les paramètres "
+                    "de chaque variante."))
             dialog.add_buttons(
                 "Écraser", Gtk.ResponseType.YES,
                 "Ne pas enregistrer", Gtk.ResponseType.NO)
