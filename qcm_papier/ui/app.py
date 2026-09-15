@@ -28,27 +28,6 @@ from ..marking import score_page
 from ..model import Project
 from .editor import StructureEditor
 
-class _VariantIdsView:
-    """Wraps a multi-line Gtk.TextView exposing get_text/set_text like Gtk.Entry.
-
-    Used for the variant IDs field so all generated IDs remain visible in a
-    larger, scrollable area instead of a single-line entry.
-    """
-
-    def __init__(self):
-        self.view = Gtk.TextView()
-        self.view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        self.view.set_editable(True)
-        self._buf = self.view.get_buffer()
-
-    def get_text(self) -> str:
-        start, end = self._buf.get_bounds()
-        return self._buf.get_text(start, end, True)
-
-    def set_text(self, text: str) -> None:
-        self._buf.set_text(text if text else "")
-
-
 def _file_dialog(parent, title: str, action, filters=None, initial_name=None):
     """Crée un sélecteur de fichier natif (GTK 4)."""
     dialog = Gtk.FileChooserNative.new(title, parent, action, None, None)
@@ -606,21 +585,14 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.spin_students.set_value(self.project.settings.generate_students)
         self.spin_count = Gtk.SpinButton.new_with_range(1, 4096, 1)
         self.spin_count.set_value(self.project.settings.generate_count)
-        # Zone d'affichage des IDs de variantes : un TextView multi-lignes
-        # dans un ScrolledWindow, plus grand qu'un Entry pour voir tous les IDs
-        # réellement générés dans le PDF.
-        self.entry_variants = _VariantIdsView()
-        variants_scroll = Gtk.ScrolledWindow()
-        variants_scroll.set_child(self.entry_variants.view)
-        variants_scroll.set_min_content_height(80)
-        variants_scroll.set_hexpand(True)
-        variants_scroll.set_vexpand(False)
+        self.entry_variants = Gtk.Entry()
+        self.entry_variants.set_placeholder_text("Ids variantes (séparés par ;)")
         grid.attach(Gtk.Label(label="Nombre d'étudiants :"), 0, 0, 1, 1)
         grid.attach(self.spin_students, 1, 0, 1, 1)
         grid.attach(Gtk.Label(label="Nombre de variantes :"), 2, 0, 1, 1)
         grid.attach(self.spin_count, 3, 0, 1, 1)
         grid.attach(Gtk.Label(label="Ids variantes :"), 4, 0, 1, 1)
-        grid.attach(variants_scroll, 5, 0, 3, 1)
+        grid.attach(self.entry_variants, 5, 0, 3, 1)
         box.append(grid)
 
         # Boutons
@@ -1168,11 +1140,6 @@ class QcmWindow(Gtk.ApplicationWindow):
         try:
             pdf_writer.generate_pdf(self.project, path)
             self.generate_status.set_text(f"PDF généré : {path}")
-            # Ne conserver dans la zone que les IDs des variantes du PDF
-            # (celles réellement présentes dans project.variants).
-            variant_keys = [k for k in self.project.variants if k not in ("p", "l")]
-            self.project.settings.generate_variants = ";".join(variant_keys)
-            self.entry_variants.set_text(self.project.settings.generate_variants)
         except Exception as e:
             self.generate_status.set_text(f"Erreur : {e}")
 
