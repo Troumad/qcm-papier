@@ -2236,6 +2236,10 @@ class QcmWindow(Gtk.ApplicationWindow):
             self.generate_status.set_text(f"Projet chargé : {path}")
             if hasattr(self, "file_status"):
                 self.file_status.set_text(f"Projet chargé : {path}")
+            # Les remplissages de widgets ci-dessus déclenchent des signaux
+            # « changed »/« value-changed » qui marquent le projet comme modifié.
+            # On remet _dirty à False maintenant que le chargement est terminé.
+            self._dirty = False
 
         except Exception as e:
             self.generate_status.set_text(f"Erreur : {e}")
