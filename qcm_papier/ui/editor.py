@@ -41,28 +41,42 @@ class StructureEditor(Gtk.Box):
         toolbar.append(self.label_interval)
 
         # Liste des exercices
-        self.store = Gtk.TreeStore(str, str, object, str, str)  # label, kind, obj, up, down
+        # label, kind, obj, q_up, q_down, ex_up, ex_down
+        self.store = Gtk.TreeStore(str, str, object, str, str, str, str)
         self.tree = Gtk.TreeView(model=self.store)
         self.tree.set_headers_visible(False)
         renderer = Gtk.CellRendererText()
         col = Gtk.TreeViewColumn("Structure", renderer, markup=0)
         col.set_expand(True)
         self.tree.append_column(col)
-        # Colonnes flèches ↑/↓ pour réordonner.
-        up_renderer = Gtk.CellRendererText()
-        up_renderer.set_property("xalign", 1.0)
-        up_renderer.set_property("xpad", 4)
-        self.up_col = Gtk.TreeViewColumn("↑", up_renderer, markup=3)
-        self.up_col.set_clickable(True)
-        self.tree.append_column(self.up_col)
-        down_renderer = Gtk.CellRendererText()
-        down_renderer.set_property("xalign", 1.0)
-        down_renderer.set_property("xpad", 4)
-        self.down_col = Gtk.TreeViewColumn("↓", down_renderer, markup=4)
-        self.down_col.set_clickable(True)
-        self.tree.append_column(self.down_col)
+        # Colonnes flèches ↑/↓ des questions (intérieures).
+        q_up_renderer = Gtk.CellRendererText()
+        q_up_renderer.set_property("xalign", 1.0)
+        q_up_renderer.set_property("xpad", 4)
+        self.q_up_col = Gtk.TreeViewColumn("↑", q_up_renderer, markup=3)
+        self.q_up_col.set_clickable(True)
+        self.tree.append_column(self.q_up_col)
+        q_down_renderer = Gtk.CellRendererText()
+        q_down_renderer.set_property("xalign", 1.0)
+        q_down_renderer.set_property("xpad", 4)
+        self.q_down_col = Gtk.TreeViewColumn("↓", q_down_renderer, markup=4)
+        self.q_down_col.set_clickable(True)
+        self.tree.append_column(self.q_down_col)
+        # Colonnes flèches ↑/↓ des exercices (extérieures, à droite).
+        ex_up_renderer = Gtk.CellRendererText()
+        ex_up_renderer.set_property("xalign", 1.0)
+        ex_up_renderer.set_property("xpad", 4)
+        self.ex_up_col = Gtk.TreeViewColumn("↑", ex_up_renderer, markup=5)
+        self.ex_up_col.set_clickable(True)
+        self.tree.append_column(self.ex_up_col)
+        ex_down_renderer = Gtk.CellRendererText()
+        ex_down_renderer.set_property("xalign", 1.0)
+        ex_down_renderer.set_property("xpad", 4)
+        self.ex_down_col = Gtk.TreeViewColumn("↓", ex_down_renderer, markup=6)
+        self.ex_down_col.set_clickable(True)
+        self.tree.append_column(self.ex_down_col)
         # Petite colonne vide de fin pour réserver de l'espace et éviter
-        # que l'ascenseur ne recouvre la flèche ↓.
+        # que l'ascenseur ne recouvre la dernière flèche.
         spacer_renderer = Gtk.CellRendererText()
         spacer_col = Gtk.TreeViewColumn("", spacer_renderer)
         spacer_col.set_fixed_width(10)
@@ -165,7 +179,7 @@ class StructureEditor(Gtk.Box):
                 ex_up = '<span size="larger"><b>↑</b></span>' if i > 0 else ""
                 ex_down = '<span size="larger"><b>↓</b></span>' if i < n_ex - 1 else ""
                 ex_iter = self.store.append(
-                    None, [ex_label, "exercise", exercise, ex_up, ex_down])
+                    None, [ex_label, "exercise", exercise, "", "", ex_up, ex_down])
 
                 if selected_obj is exercise:
                     selected_iter = ex_iter
@@ -177,7 +191,7 @@ class StructureEditor(Gtk.Box):
                     q_iter = self.store.append(
                         ex_iter,
                         [self._question_label(j, question), "question",
-                         question, q_up, q_down])
+                         question, q_up, q_down, "", ""])
 
                     if selected_obj is question:
                         selected_iter = q_iter
@@ -423,6 +437,31 @@ class StructureEditor(Gtk.Box):
             ex.index = i
         self._schedule_update()
 
+    def _move_from_column(self, column, kind, obj):
+        """Déplace un élément selon la colonne flèche cliquée.
+
+        Les colonnes de questions (q_up_col/q_down_col) ne contiennent des
+        flèches que sur les lignes de questions ; celles des exercices
+        (ex_up_col/ex_down_col) que sur les lignes d'exercices.
+        """
+        if column is self.q_up_col:
+            ex_of_q = self._exercise_of_question(obj)
+            if ex_of_q is not None:
+                self._move_question(ex_of_q, obj, -1)
+            return True
+        if column is self.q_down_col:
+            ex_of_q = self._exercise_of_question(obj)
+            if ex_of_q is not None:
+                self._move_question(ex_of_q, obj, +1)
+            return True
+        if column is self.ex_up_col:
+            self._move_exercise(obj, -1)
+            return True
+        if column is self.ex_down_col:
+            self._move_exercise(obj, +1)
+            return True
+        return False
+
     def _on_tree_clicked(self, gesture, n_press, x, y):
         """Clic simple : déplace l'élément si on clique sur une flèche.
 
@@ -435,28 +474,19 @@ class StructureEditor(Gtk.Box):
         if not result:
             return
         path, column, _cx, _cy = result
-        if column is not self.up_col and column is not self.down_col:
-            return
         model = self.store
         treeiter = model.get_iter(path)
         if not treeiter:
             return
         kind = model[treeiter][1]
         obj = model[treeiter][2]
-        delta = -1 if column is self.up_col else +1
-        if kind == "exercise":
-            self._move_exercise(obj, delta)
-        else:
-            ex_of_q = self._exercise_of_question(obj)
-            if ex_of_q is not None:
-                self._move_question(ex_of_q, obj, delta)
+        self._move_from_column(column, kind, obj)
 
     def _on_row_activated(self, treeview, path, column):
-        """Gère le clic sur une ligne.
+        """Gère le double-clic sur une ligne.
 
-        Un clic (ou double-clic) sur une colonne flèche (↑/↓) déplace
-        l'exercice ou la question correspondante ; sinon, sur une question,
-        on ouvre le menu des choix.
+        Un double-clic sur une colonne flèche déplace l'élément ; sinon,
+        sur une question, on ouvre le menu des choix.
         """
         model = treeview.get_model()
         treeiter = model.get_iter(path)
@@ -464,21 +494,7 @@ class StructureEditor(Gtk.Box):
             return
         kind = model[treeiter][1]
         obj = model[treeiter][2]
-        if column is self.up_col:
-            if kind == "exercise":
-                self._move_exercise(obj, -1)
-            else:
-                ex_of_q = self._exercise_of_question(obj)
-                if ex_of_q is not None:
-                    self._move_question(ex_of_q, obj, -1)
-            return
-        if column is self.down_col:
-            if kind == "exercise":
-                self._move_exercise(obj, +1)
-            else:
-                ex_of_q = self._exercise_of_question(obj)
-                if ex_of_q is not None:
-                    self._move_question(ex_of_q, obj, +1)
+        if self._move_from_column(column, kind, obj):
             return
         if kind == "question":
             self._show_choice_menu(treeview, path, column, obj)
@@ -756,7 +772,13 @@ class StructureEditor(Gtk.Box):
         line_box.append(gain_label)
         line_box.append(gain)
 
-        penalty_label = Gtk.Label(label="Malus par réponse fausse :")
+        # Le malus est « par réponse fausse » uniquement pour les questions
+        # à gain progressif ; pour les autres types, c'est le malus global de la
+        # question.
+        penalty_text = ("Malus par réponse fausse :"
+                        if question.multiple_progressive
+                        else "Malus de la question :")
+        penalty_label = Gtk.Label(label=penalty_text)
         penalty = Gtk.SpinButton.new_with_range(0, 1000, 0.5)
         penalty.set_value(question.penalty)
         penalty.set_hexpand(True)
