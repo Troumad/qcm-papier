@@ -774,6 +774,18 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             question_iter += 1
 
         # Cadre de l'exercice.
+        # Garantie : le cadre doit contenir le nom et le header (italique)
+        # pour éviter tout débordement de l'introduction hors du cadre.
+        _name_w = _text_width(exercise.get("name", ""))
+        _header_w = _text_width(header) if header else 0.0
+        _min_w = _name_w + 2  # nom à x=2 + marge droite
+        if header:
+            if choice_dir:
+                _min_w = max(_name_w, _header_w) + 2 + 2  # header sous le nom à x=2
+            else:
+                _min_w = 2 + _name_w + 2 + _header_w + 2  # nom + header sur la même ligne
+        if exercise_width < _min_w:
+            exercise_width = _min_w
         questions_rects.append({"x": 0, "y": 0, "w": exercise_width, "h": exercise_height})
 
         # --- PLACEMENT DE L'EXERCICE SELON LE MODE (CORRIGÉ) ---
