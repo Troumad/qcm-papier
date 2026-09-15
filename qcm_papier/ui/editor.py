@@ -218,6 +218,28 @@ class StructureEditor(Gtk.Box):
                 child = self.store.iter_next(child)
             ex_iter = self.store.iter_next(ex_iter)
 
+    def _move_exercise(self, exercise, delta):
+        """Déplace un exercice de `delta` positions (−1 = monter, +1 = descendre)."""
+        struct = self.project.structure
+        i = struct.index(exercise)
+        j = i + delta
+        if 0 <= j < len(struct):
+            struct[i], struct[j] = struct[j], struct[i]
+            for k, ex in enumerate(struct):
+                ex.index = k
+            self._schedule_update()
+
+    def _move_question(self, exercise, question, delta):
+        """Déplace une question de `delta` positions dans son exercice."""
+        qs = exercise.questions
+        i = qs.index(question)
+        j = i + delta
+        if 0 <= j < len(qs):
+            qs[i], qs[j] = qs[j], qs[i]
+            for k, q in enumerate(qs):
+                q.index = k
+            self._schedule_update()
+
     def _schedule_update(self):
         """Planifie une mise à jour différée."""
         if self._update_id is None:
@@ -578,6 +600,19 @@ class StructureEditor(Gtk.Box):
         header_row.append(header_validate_btn)
         self.props_box.append(header_row)
 
+        # Boutons pour réordonner l'exercice (monter/descendre).
+        ex_index = self.project.structure.index(exercise)
+        btn_order_ex = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        btn_up_ex = Gtk.Button(label="↑", tooltip_text="Monter l'exercice")
+        btn_up_ex.set_sensitive(ex_index > 0)
+        btn_up_ex.connect("clicked", lambda _b: self._move_exercise(exercise, -1))
+        btn_order_ex.append(btn_up_ex)
+        btn_down_ex = Gtk.Button(label="↓", tooltip_text="Descendre l'exercice")
+        btn_down_ex.set_sensitive(ex_index < len(self.project.structure) - 1)
+        btn_down_ex.connect("clicked", lambda _b: self._move_exercise(exercise, +1))
+        btn_order_ex.append(btn_down_ex)
+        self.props_box.append(btn_order_ex)
+
         btn_box_q = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         btn_add_q = Gtk.Button(label="Ajouter une question")
         btn_add_q.connect("clicked", lambda _b: self.add_question(exercise))
@@ -632,10 +667,29 @@ class StructureEditor(Gtk.Box):
         row.append(validate_btn)
         self.props_box.append(row)
 
+        # Boutons pour réordonner la question (monter/descendre).
+        ex_of_q = None
+        for ex in self.project.structure:
+            if question in ex.questions:
+                ex_of_q = ex
+                break
+        if ex_of_q is not None:
+            q_index = ex_of_q.questions.index(question)
+            btn_order_q = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            btn_up_q = Gtk.Button(label="↑", tooltip_text="Monter la question")
+            btn_up_q.set_sensitive(q_index > 0)
+            btn_up_q.connect("clicked", lambda _b: self._move_question(ex_of_q, question, -1))
+            btn_order_q.append(btn_up_q)
+            btn_down_q = Gtk.Button(label="↓", tooltip_text="Descendre la question")
+            btn_down_q.set_sensitive(q_index < len(ex_of_q.questions) - 1)
+            btn_down_q.connect("clicked", lambda _b: self._move_question(ex_of_q, question, +1))
+            btn_order_q.append(btn_down_q)
+            self.props_box.append(btn_order_q)
+
         # 🔧 Gain, Malus et boutons sur la même ligne
         line_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
 
-        gain_label = Gtk.Label(label="Gain :")
+        gain_label = Gtk.Label(label="Gain total de la question :")
         gain = Gtk.SpinButton.new_with_range(0, 1000, 0.5)
         gain.set_value(question.gain)
         gain.set_hexpand(True)
@@ -643,7 +697,7 @@ class StructureEditor(Gtk.Box):
         line_box.append(gain_label)
         line_box.append(gain)
 
-        penalty_label = Gtk.Label(label="Malus :")
+        penalty_label = Gtk.Label(label="Malus par réponse fausse :")
         penalty = Gtk.SpinButton.new_with_range(0, 1000, 0.5)
         penalty.set_value(question.penalty)
         penalty.set_hexpand(True)
