@@ -849,7 +849,16 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
 def generate_all(project: Project,
                 retry: bool = True,
                 max_errors: int = 10) -> tuple[list[int], list[int]]:
-    """Génère toutes les variantes demandées par les paramètres."""
+    """Génère les variantes demandées et complète aléatoirement si besoin.
+
+    - Teste les IDs fournis dans ``generate_variants`` ; ne conserve que ceux
+      qui réussissent (les IDs en échec sont écartés).
+    - Si après les IDs initiaux il manque des variantes pour atteindre
+      ``generate_count``, tire de nouveaux IDs aléatoires (``random.randint``)
+      jusqu'à atteindre le compte voulu ou dépasser ``max_errors`` échecs.
+    - ``generate_variants`` est mis à jour avec uniquement les IDs conservés.
+    - Retourne ``(success, failed)`` : IDs réussis et IDs en échec.
+    """
     import random
 
     # Vider les anciennes variantes (sauf layouts 'p' et 'l') avant nouvelle génération
@@ -857,34 +866,49 @@ def generate_all(project: Project,
         if k not in ("p", "l"):
             del project.variants[k]
 
-    if not project.settings.generate_variants:
-        count = project.settings.generate_count
-        ids = [random.randint(0, 4095) for _ in range(count)]
-        project.settings.generate_variants = ";".join(str(i) for i in ids)
+    count = project.settings.generate_count
+    # IDs initiaux : ceux saisis par l'utilisateur (ou tirés si vide).
+    raw = [x for x in project.settings.generate_variants.split(";") if x]
+    if raw:
+        variant_ids = [int(x) for x in raw]
+    else:
+        variant_ids = [random.randint(0, 4095) for _ in range(count)]
 
-    variant_ids = [int(x) for x in project.settings.generate_variants.split(";") if x]
     error_count = 0
     failed: list[int] = []
     success: list[int] = []  # Liste des IDs qui ont réellement réussi
-    page_index = 0
+    seen: set[int] = set()  # IDs déjà tentés (évite les doublons aléatoires)
 
-    while page_index < len(variant_ids):
-        variant_id = variant_ids[page_index]
+    # 1) Tester les IDs initiaux.
+    for variant_id in variant_ids:
+        if variant_id in seen:
+            continue
+        seen.add(variant_id)
         try:
             variant = generate_variant(project, variant_id)
             project.variants[str(variant_id)] = variant
             success.append(variant_id)
-            page_index += 1
         except GenerateError:
             error_count += 1
             failed.append(variant_id)
             if error_count >= max_errors:
                 break
-            if retry:
-                variant_ids[page_index] = random.randint(0, 4095)
-            else:
-                page_index += 1
 
-    # Stocker TOUS les IDs (succès + remplacements) pour la prochaine génération
-    project.settings.generate_variants = ";".join(str(i) for i in variant_ids)
+    # 2) Compléter aléatoirement jusqu'à atteindre le compte souhaité.
+    if retry and error_count < max_errors:
+        while len(success) < count and error_count < max_errors:
+            variant_id = random.randint(0, 4095)
+            if variant_id in seen:
+                continue
+            seen.add(variant_id)
+            try:
+                variant = generate_variant(project, variant_id)
+                project.variants[str(variant_id)] = variant
+                success.append(variant_id)
+            except GenerateError:
+                error_count += 1
+                failed.append(variant_id)
+
+    # Ne conserver que les IDs réussis dans le paramètre.
+    project.settings.generate_variants = ";".join(str(i) for i in success)
     return success, failed

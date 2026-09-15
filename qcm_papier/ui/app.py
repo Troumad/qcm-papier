@@ -1113,9 +1113,8 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         success, failed = generator.generate_all(self.project, retry=True)
 
-        # Stocker TOUS les IDs (succès + échecs + remplacements)
-        all_ids = success + failed
-        self.entry_variants.set_text(";".join(str(i) for i in all_ids))
+        # Ne conserver que les IDs réussis (déjà stockés dans generate_variants).
+        self.entry_variants.set_text(self.project.settings.generate_variants)
 
         # Message
         msg = f"{len(success)} variantes générées."
