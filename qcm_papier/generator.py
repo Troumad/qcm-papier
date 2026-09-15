@@ -388,11 +388,12 @@ def _place_choices(variant, variant_id,
             choice_x -= 3
             if choice_x < 2:
                 choice_x = 2
-        # Le nom de la question est en y=5 (baseline) ; le texte (12pt)
-        # descend encore sous la baseline. Le premier cercle est centré en
-        # y=choice_y+3 ; pour qu'il ne chevauche pas le titre, on démarre les
-        # choix assez bas.
-        choice_y = 12
+        # Le nom de la question est en y=5 (baseline) ; les descendantes du
+        # texte (12pt) vont ~0,9 mm sous la baseline. Le premier cercle (rayon
+        # 2,3 mm) est centré en y=choice_y+3 ; son sommet est à choice_y+0,7.
+        # choice_y=7 donne un sommet à 7,7 mm, soit ~1,8 mm sous les
+        # descendantes : pas de chevauchement, et peu de hauteur ajoutée.
+        choice_y = 7
     else:
         # de gauche à droite.
         choice_x = question_name_width + 4
