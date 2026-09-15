@@ -560,7 +560,9 @@ def _place_choices(variant, variant_id,
     if choice_dir:
         # de haut en bas : la hauteur a augmenté à chaque choix.
         question_height = choice_y + 2  # approximation (5 + 5*nb + 7)
-        question_width = question_name_width
+        # Le nom de la question commence à x=2 : la largeur doit inclure
+        # cet offset et une marge droite pour ne pas déborder du cadre.
+        question_width = question_name_width + 4
         # Le joker duplique les cercles avec delta_x = 6 : la colonne joker
         # s'étend à choice_x + 2 + 6, plus le rayon (2.3) et une marge.
         if settings.choice_joker_always:
