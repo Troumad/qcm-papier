@@ -137,7 +137,7 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant,
     c.setFont("Helvetica", 12)
     for text in variant.texts:
         if text.get("center"):
-            c.setFont("Helvetica", 7)
+            c.setFont("Helvetica", 6)
             # Centrage vertical dans les cercles
             c.drawCentredString(text["x"] * mm, to_pdf_y(text["y"]) - 1 * mm,
                                 text.get("t", ""))
