@@ -667,15 +667,18 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         y_max = variant.id_y + variant.id_height  # Point bas maximal initial (boîte d'identification)
         #x_line_start = variant.id_x + variant.id_width  # Début de ligne (après la boîte)
     else:
-        # Mode "vers le bas" : première colonne commence sous la boîte d'identification
-        exercise_x = layout.margin_left
+        # Mode "vers le bas" : première colonne commence sous la boîte
+        # d'identification, alignée sous celle-ci (x = id_x) pour ne pas
+        # déborder à gauche de l'identification.
+        exercise_x = variant.id_x
         exercise_y = variant.id_y + variant.id_height
-        # Point droit maximal initial : la première colonne démarre à la
-        # marge gauche. On part de la marge gauche (et non de la largeur de la
-        # boîte d'identification) pour que les nouvelles colonnes, créées quand
-        # un exercice déborde en hauteur, démarrent juste après la première
-        # colonne placée et non loin à droite de la boîte d'identification.
-        x_max = layout.margin_left
+        # x_max démarre au point gauche de la première colonne (id_x) et
+        # monte au fur et à mesure que les exercices sont placés. Les
+        # nouvelles colonnes démarrent à x_max : si elles sont à droite de
+        # la boîte d'identification (x_max >= id_x + id_width) elles
+        # commencent au niveau de l'identification, sinon sous elle.
+        x_max = variant.id_x
+        x_line_start = variant.id_x
 
     has_error = False
     exercise_iter = 0
@@ -832,9 +835,14 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             if (place_x + exercise_width <= max_width) and (place_y + exercise_height <= max_height):
                 placed = True
             else:
-                # 2. Si ça ne marche pas, essayer en haut de nouvelle colonne
+                # 2. Si ça ne marche pas, essayer en haut de nouvelle colonne.
+                # Si la nouvelle colonne est à droite de la boîte
+                # d'identification, elle commence au niveau de celle-ci
+                # (y = id_y) pour utiliser l'espace libre à sa droite ;
+                # sinon elle commence sous l'identification.
                 place_x = x_max
-                place_y = y_column_start
+                place_y = (variant.id_y if place_x >= variant.id_x + variant.id_width
+                           else variant.id_y + variant.id_height)
                 if (place_x + exercise_width <= max_width) and (place_y + exercise_height <= max_height):
                     placed = True
                 else:
