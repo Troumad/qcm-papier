@@ -587,22 +587,24 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.spin_count.set_value(self.project.settings.generate_count)
         self.entry_variants = Gtk.Entry()
         self.entry_variants.set_placeholder_text("Ids variantes (séparés par ;)")
+        self.entry_variants.set_hexpand(True)
+        self.entry_variants.set_width_chars(60)
         grid.attach(Gtk.Label(label="Nombre d'étudiants :"), 0, 0, 1, 1)
         grid.attach(self.spin_students, 1, 0, 1, 1)
         grid.attach(Gtk.Label(label="Nombre de variantes :"), 2, 0, 1, 1)
         grid.attach(self.spin_count, 3, 0, 1, 1)
-        grid.attach(Gtk.Label(label="Ids variantes :"), 4, 0, 1, 1)
-        grid.attach(self.entry_variants, 5, 0, 3, 1)
+        grid.attach(Gtk.Label(label="Ids variantes :"), 0, 1, 1, 1)
+        grid.attach(self.entry_variants, 1, 1, 6, 1)
         box.append(grid)
 
         # Boutons
         btn_generate = Gtk.Button(label="Générer les variantes")
         btn_generate.connect("clicked", self._on_generate_variants)
-        grid.attach(btn_generate,1,1,2,1)
+        grid.attach(btn_generate, 1, 2, 2, 1)
 
         btn_pdf = Gtk.Button(label="      Générer le PDF      ")
         btn_pdf.connect("clicked", self._on_generate_pdf)
-        grid.attach(btn_pdf,4,1,3,1)
+        grid.attach(btn_pdf, 4, 2, 3, 1)
 
         self.generate_status = Gtk.Label(label="")
         box.append(self.generate_status)
@@ -1140,6 +1142,11 @@ class QcmWindow(Gtk.ApplicationWindow):
         try:
             pdf_writer.generate_pdf(self.project, path)
             self.generate_status.set_text(f"PDF généré : {path}")
+            # Ne conserver dans la zone que les IDs des variantes du PDF
+            # (celles réellement présentes dans project.variants).
+            variant_keys = [k for k in self.project.variants if k not in ("p", "l")]
+            self.project.settings.generate_variants = ";".join(variant_keys)
+            self.entry_variants.set_text(self.project.settings.generate_variants)
         except Exception as e:
             self.generate_status.set_text(f"Erreur : {e}")
 
