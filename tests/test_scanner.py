@@ -6,6 +6,7 @@ feuille en faisant une transformation affine de la page ».
 """
 
 import pymupdf
+import pytest
 
 from qcm_papier import generator, model, pdf_writer, scanner
 
@@ -115,7 +116,9 @@ def test_align_auto_global_recupere_page_mal_scannee():
     pdf = os.path.join(repo, "math", "2026", "correction3.pdf")
     jsonf = os.path.join(repo, "math", "2026", "OML1_bis.json")
     if not (os.path.exists(pdf) and os.path.exists(jsonf)):
-        return  # fichiers de test absents : on saute
+        # Signalé comme « ignoré » (et non comme réussi) : sans les copies de
+        # test, rien n'est vérifié.
+        pytest.skip("correction3.pdf ou OML1_bis.json absent : données de test indisponibles")
     from qcm_papier.project import load_project
     project = load_project(jsonf)
     pages = scanner.load_pages_from_file(pdf)
