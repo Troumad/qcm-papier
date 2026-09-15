@@ -235,6 +235,20 @@ def cmd_correct(args: argparse.Namespace) -> int:
 cmd_check = cmd_open  # alias rétro-compatible (l'ancienne commande 'check')
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Lance l'interface web locale (FastAPI) dans le navigateur."""
+    try:
+        from .web.server import run
+    except ImportError as e:
+        raise SystemExit(f"Interface web indisponible ({e}). "
+                         "Installez-la avec : pip install -e \".[web]\"") from e
+    if args.project and not os.path.exists(args.project):
+        raise SystemExit(f"Projet introuvable : {args.project}")
+    return run(host=args.host, port=args.port, project_path=args.project,
+               open_browser=not args.no_browser,
+               exit_with_parent=args.exit_with_parent)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="qcm-papier",
@@ -328,6 +342,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_chk = sub.add_parser("check", help="Valider un projet")
     p_chk.add_argument("--project", "-p", required=True)
     p_chk.set_defaults(func=cmd_check)
+
+    # serve : interface web locale
+    p_srv = sub.add_parser("serve", help="Lancer l'interface web locale dans le navigateur")
+    p_srv.add_argument("--project", "-p", help="Projet JSON à ouvrir au démarrage")
+    p_srv.add_argument("--host", default="127.0.0.1",
+                       help="Adresse d'écoute (défaut 127.0.0.1 : cette machine uniquement)")
+    p_srv.add_argument("--port", type=int, default=8060, help="Port (défaut 8060)")
+    p_srv.add_argument("--no-browser", action="store_true",
+                       help="Ne pas ouvrir le navigateur (utilisé par l'application Tauri)")
+    p_srv.add_argument("--exit-with-parent", action="store_true",
+                       help="S'arrêter quand le processus parent disparaît (utilisé par l'application Tauri)")
+    p_srv.set_defaults(func=cmd_serve)
 
     return parser
 

@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QCM-Papier</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>QCM-Papier</h1>
+  <span id="project-name" class="muted">Nouveau projet</span>
+  <nav class="tabs" role="tablist">
+    <button data-tab="file" role="tab">Fichier</button>
+    <button data-tab="info" role="tab">Informations</button>
+    <button data-tab="structure" role="tab" class="active">Structure</button>
+    <button data-tab="generate" role="tab">Génération</button>
+    <button data-tab="correct" role="tab">Correction</button>
+    <button data-tab="help" role="tab">Aide</button>
+  </nav>
+</header>
+
+<main>
+  <!-- Fichier -->
+  <section id="tab-file" class="tab" hidden>
+    <h2>Fichier</h2>
+    <div class="row">
+      <button id="btn-new">Nouveau</button>
+      <button id="btn-open">Ouvrir…</button>
+      <button id="btn-save" hidden>Enregistrer</button>
+      <button id="btn-download">Télécharger le projet</button>
+      <input id="input-project" type="file" accept=".json,application/json" hidden>
+    </div>
+    <p id="file-status" class="muted"></p>
+  </section>
+
+  <!-- Informations -->
+  <section id="tab-info" class="tab" hidden>
+    <h2>Informations</h2>
+    <form id="info-form" class="grid-form">
+      <label>Établissement <input name="establishment" placeholder="Université Lyon 1"></label>
+      <label>Institut <input name="institute" placeholder="IUT LYON 1"></label>
+      <label>Formation <input name="formation" placeholder="Département GEii"></label>
+      <label>Année <input name="year" placeholder="2026"></label>
+      <label>Semestre <input name="semester" placeholder="S1"></label>
+      <label>Unité d'enseignement <input name="teaching_unit" placeholder="UE3"></label>
+      <label>Module complet <input name="module_full" placeholder="Mathématiques"></label>
+      <label>Module abrégé <input name="module_short" placeholder="OML1"></label>
+      <label>Évaluation complète <input name="evaluation_full" placeholder="QCM Mathématiques"></label>
+      <label>Évaluation abrégée <input name="evaluation_short" placeholder="OML1"></label>
+      <label>Enseignants <input name="teachers" placeholder="BS"></label>
+      <label>Date <input name="date" placeholder="09/10/2026"></label>
+      <label>Durée <input name="duration" placeholder="1h"></label>
+      <label>Format de papier
+        <select name="paper_format"><option value="a3">A3</option><option value="a4">A4</option><option value="a5">A5</option></select>
+      </label>
+      <label>Orientation
+        <select name="paper_orientation">
+          <option value="portrait">Portrait</option><option value="landscape">Paysage</option>
+          <option value="both">Les deux (aléatoire)</option>
+        </select>
+      </label>
+      <fieldset class="margins">
+        <legend>Marges en mm</legend>
+        <label>Haute <input name="margin_top" type="number" min="5" max="25" step="1"></label>
+        <label>Gauche <input name="margin_left" type="number" min="5" max="25" step="1"></label>
+        <label>Droite <input name="margin_right" type="number" min="5" max="25" step="1"></label>
+        <label>Basse <input name="margin_bottom" type="number" min="5" max="25" step="1"></label>
+      </fieldset>
+    </form>
+  </section>
+
+  <!-- Structure -->
+  <section id="tab-structure" class="tab">
+    <div class="row">
+      <button id="btn-add-exercise">Nouvel exercice</button>
+      <span id="interval" class="muted"></span>
+    </div>
+    <div class="split">
+      <ul id="tree" class="tree" aria-label="Structure du QCM"></ul>
+      <div id="props" class="panel"><p class="muted">Sélectionnez un exercice ou une question.</p></div>
+    </div>
+  </section>
+
+  <!-- Génération -->
+  <section id="tab-generate" class="tab" hidden>
+    <form id="gen-form">
+      <div class="row wrap">
+        <label>Nombre d'étudiants <input name="generate_students" type="number" min="1" max="1000"></label>
+        <label>Nombre de variantes <input name="generate_count" type="number" min="1" max="4096"></label>
+        <label class="grow">Ids variantes <input name="generate_variants" placeholder="Ids variantes (séparés par ;)"></label>
+      </div>
+      <div class="row">
+        <button type="button" id="btn-gen-variants">Générer les variantes</button>
+        <button type="button" id="btn-gen-pdf">Générer le PDF</button>
+        <span id="generate-status" class="muted"></span>
+      </div>
+      <div class="columns">
+        <div>
+          <fieldset>
+            <legend>Sens de lecture</legend>
+            <div class="grid-form" id="dir-fields"></div>
+          </fieldset>
+          <fieldset>
+            <legend>Autres options</legend>
+            <label class="check"><input type="checkbox" name="choice_joker_always"> Choix « seconde chance »</label>
+          </fieldset>
+          <fieldset>
+            <legend>Ordre aléatoire</legend>
+            <div class="grid-form" id="order-fields"></div>
+          </fieldset>
+        </div>
+        <fieldset>
+          <legend>Les fantômes</legend>
+          <div class="grid-form" id="phantom-fields"></div>
+        </fieldset>
+      </div>
+    </form>
+  </section>
+
+  <!-- Correction -->
+  <section id="tab-correct" class="tab" hidden>
+    <div class="row wrap">
+      <button id="btn-add-copies">Charger des copies…</button>
+      <button id="btn-run">Lancer la correction</button>
+      <button id="btn-students">Table étudiants (Scodoc)…</button>
+      <button id="btn-export">Exporter les notes Scodoc…</button>
+      <button id="btn-remove">Supprimer…</button>
+      <button id="btn-save-state">Sauvegarder…</button>
+      <button id="btn-load-state">Recharger…</button>
+      <input id="input-copies" type="file" accept=".pdf,.png,.jpg,.jpeg" multiple hidden>
+      <input id="input-state" type="file" accept=".zip" hidden>
+    </div>
+    <div class="row wrap">
+      <span class="muted">Cocher un fichier pour le corriger.</span>
+      <label>Seuil de détection <input id="clair" type="number" min="50" max="255" step="5"></label>
+      <span class="muted">(↑ pour des scans plus sombres)</span>
+    </div>
+    <ul id="copies" class="copies"></ul>
+    <p id="marking-status" class="status"></p>
+    <div class="table-wrap">
+      <table id="results">
+        <thead><tr>
+          <th data-sort="file">Fichier</th><th data-sort="variant">Variante</th>
+          <th data-sort="student">Étudiant</th><th data-sort="note">Note</th><th data-sort="status">Statut</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="row">
+      <select id="page-select" aria-label="Page corrigée"></select>
+      <button id="btn-prev">Précédent</button>
+      <button id="btn-next">Suivant</button>
+      <button id="btn-enlarge">Agrandir</button>
+    </div>
+    <div class="preview"><img id="page-preview" alt="Page corrigée" hidden></div>
+  </section>
+
+  <!-- Aide -->
+  <section id="tab-help" class="tab" hidden>
+    <pre id="help-text" class="help"></pre>
+  </section>
+</main>
+
+<div id="toast" class="toast" role="status" hidden></div>
+
+<!-- Levée d'anonymat -->
+<dialog id="dlg-students">
+  <h2>Levée d'anonymat Scodoc</h2>
+  <p>Les étudiants ont identifié leurs copies à l'aide de leur numéro « p******* ». Les noms, prénoms et EID
+    peuvent être associés grâce à la table des étudiants, téléchargeable depuis Scodoc (ou Scodoc-visu) dans
+    les menus en haut de la page principale du semestre comportant cette évaluation.</p>
+  <img class="scodoc" data-src="Scodoc_student_list.png" alt="Téléchargement de la table des étudiants dans Scodoc">
+  <p>Charger le fichier Excel obtenu depuis Scodoc :</p>
+  <input id="input-students" type="file" accept=".xlsx,.xls">
+  <p id="students-status" class="status"></p>
+  <div class="row end"><button data-close>Fermer</button></div>
+</dialog>
+
+<!-- Export Scodoc -->
+<dialog id="dlg-export">
+  <h2>Exportation des notes Scodoc</h2>
+  <p>Les fichiers de notes Scodoc peuvent être téléchargés depuis la page de saisie des notes pour l'évaluation :</p>
+  <img class="scodoc" data-src="Scodoc_eval_get1.png" alt="Page de saisie des notes dans Scodoc">
+  <img class="scodoc" data-src="Scodoc_eval_get2.png" alt="Téléchargement de la feuille de notes">
+  <p>Charger le fichier tableur obtenu, puis cliquer sur « Exporter ».</p>
+  <label class="check"><input type="checkbox" id="export-min0"> Monter les notes négatives à 0</label>
+  <input id="input-export" type="file" accept=".xlsx,.xls">
+  <p>Le fichier exporté peut ensuite être chargé dans Scodoc dans l'encadré suivant :</p>
+  <img class="scodoc" data-src="Scodoc_eval_send.png" alt="Envoi du fichier de notes dans Scodoc">
+  <p id="export-status" class="status"></p>
+  <div class="row end"><button id="btn-do-export">Exporter</button><button data-close>Fermer</button></div>
+</dialog>
+
+<!-- Suppression de copies -->
+<dialog id="dlg-remove">
+  <h2>Supprimer des fichiers de correction</h2>
+  <p>Cochez les fichiers à supprimer :</p>
+  <ul id="remove-list" class="copies"></ul>
+  <div class="row end"><button data-close>Annuler</button><button id="btn-do-remove">Supprimer</button></div>
+</dialog>
+
+<!-- Page agrandie -->
+<dialog id="dlg-viewer" class="viewer">
+  <div class="viewer-main">
+    <div class="row">
+      <button id="zoom-out" aria-label="Zoom arrière">−</button>
+      <button id="zoom-in" aria-label="Zoom avant">+</button>
+      <input id="zoom" type="range" min="0.25" max="4" step="0.25" value="1" aria-label="Zoom">
+      <span id="zoom-label">100 %</span>
+    </div>
+    <div id="viewer-scroll" class="viewer-scroll">
+      <div id="viewer-stage" class="stage">
+        <img id="viewer-img" alt="Page corrigée">
+        <canvas id="viewer-canvas"></canvas>
+      </div>
+    </div>
+  </div>
+  <aside class="viewer-side">
+    <strong id="v-index"></strong>
+    <span id="v-variant"></span>
+    <span id="v-student"></span>
+    <strong id="v-note"></strong>
+    <span id="v-status"></span>
+    <hr>
+    <label>N° étudiant <input id="v-student-id" maxlength="8" placeholder="p0000000"></label>
+    <button id="v-apply-student">Appliquer</button>
+    <hr>
+    <button id="v-align" aria-pressed="false">Alignement manuel</button>
+    <p id="v-align-label" class="status"></p>
+    <button id="v-align-reset">Reprendre les 5 repères</button>
+    <hr>
+    <div class="row"><button id="v-prev">‹ Précédent</button><button id="v-next">Suivant ›</button></div>
+    <button data-close>Fermer</button>
+  </aside>
+</dialog>
+
+<script src="/static/app.js"></script>
+<script src="/static/correction.js"></script>
+</body>
+</html>

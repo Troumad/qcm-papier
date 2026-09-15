@@ -264,6 +264,33 @@ L'interface est organisée en onglets :
    corrigées, lever l'anonymat (Scodoc) et exporter les notes.
 6. **Aide** — ce guide.
 
+### Interface web (sans GTK)
+
+La même interface existe dans le navigateur. Elle ne demande pas GTK : Python
+suffit, sur Linux, macOS et Windows.
+
+```bash
+pip install -e ".[web]"
+qcm-papier serve                              # ouvre le navigateur
+qcm-papier serve -p math/2026/OML1_bis.json   # avec un projet ouvert
+```
+
+- Le serveur écoute uniquement sur `127.0.0.1` (port 8060 par défaut,
+  `--port` pour le changer) : les copies et les notes restent sur la machine.
+- Les fichiers (projet, copies, tables Scodoc) sont choisis dans la page et
+  les résultats (projet, PDF, notes, sauvegarde) sont téléchargés.
+- La sauvegarde de correction est une archive `.zip` qui contient l'état, les
+  copies corrigées en images **et les fichiers de copies** : on peut la
+  recharger plus tard, même sur une autre machine.
+- Dans le tableau des résultats, un clic affiche la page, un double-clic
+  l'ouvre en grand (zoom, n° étudiant, alignement manuel).
+
+### Application de bureau (Tauri)
+
+Le dossier `src-tauri/` fait de l'interface web une application à
+double-cliquer : elle lance le serveur Python et ouvre une fenêtre dessus.
+Voir `src-tauri/LISEZMOI.md`.
+
 #### Levée d'anonymat (Scodoc)
 
 Après la correction, les copies sont identifiées par un numéro « p******* ».
