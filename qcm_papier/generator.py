@@ -769,14 +769,6 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
                 # cadre ni après la dernière question).
                 if question_y > question_y_first:
                     question_y += QUESTION_GAP
-                    # Ligne pointillée de séparation dans l'espace du gap.
-                    _line_w = exercise_width - 2
-                    if question_x > 0:
-                        _line_w = exercise_width - question_x - 2
-                    if _line_w > 0:
-                        questions_lines.append({
-                            "x": question_x + 1, "y": question_y,
-                            "w": _line_w, "dash": True})
                 if question_y + qh > layout.barcode_top - exercise_y:
                     question_x = exercise_width
                     question_y = question_y_first
