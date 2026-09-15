@@ -24,7 +24,7 @@ def client(tmp_path):
 
 def test_page_et_fichiers_statiques(client):
     assert "QCM-Papier" in client.get("/").text
-    for name in ("app.js", "correction.js", "style.css"):
+    for name in ("app.js", "correction.js", "markdown.js", "style.css"):
         assert client.get(f"/static/{name}").status_code == 200
     assert "QCM-Papier" in client.get("/api/help").text
 

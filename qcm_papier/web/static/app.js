@@ -317,9 +317,9 @@ $("#btn-gen-pdf").addEventListener("click", () => guard(async () => {
 // Aide
 // ---------------------------------------------------------------------------
 onTab("help", () => guard(async () => {
-  if ($("#help-text").textContent) return;
+  if ($("#help-text").childElementCount) return;
   const response = await api("GET", "/api/help");
-  $("#help-text").textContent = await response.text();
+  $("#help-text").innerHTML = window.QCMMarkdown.render(await response.text());
 }));
 
 // ---------------------------------------------------------------------------
