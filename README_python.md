@@ -48,6 +48,7 @@ qcm_papier/
 - openpyxl (fichiers Excel Scodoc)
 - Pillow (images scannées)
 - PyMuPDF (lecture des PDF scannés)
+- numpy (calculs sur les images scannées : repères, cases, recherche globale)
 - PyGObject + GTK 4 (interface graphique, paquets système
   `gir1.2-gtk-4.0` + `python3-gi`)
 
