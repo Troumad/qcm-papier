@@ -1378,7 +1378,11 @@ def load_pages_from_file(path: str, dpi: int = 150) -> list[ScannedPage]:
         # 1) PyMuPDF (préférable : pas de dépendance système).
         try:
             import pymupdf
-            doc = pymupdf.open(path)
+            # Lire le fichier en bytes pour éviter tout cache de PyMuPDF ou
+            # de l'OS : un PDF modifié entre deux corrections est bien relu.
+            with open(path, "rb") as _f:
+                pdf_bytes = _f.read()
+            doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
             for pdf_page in doc:
                 pix = pdf_page.get_pixmap(dpi=dpi)
                 img = Image.frombytes("RGB" if pix.alpha == 0 else "RGBA",
