@@ -782,8 +782,14 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
                     question_y = question_y_first
             else:
                 if question_x + qw > max_width - exercise_x:
+                    # Retour à la ligne : espacement vertical + ligne pointillée.
+                    _line_w = exercise_width - 2
+                    if _line_w > 0:
+                        questions_lines.append({
+                            "x": 1, "y": exercise_height + QUESTION_GAP,
+                            "w": _line_w, "dash": True})
                     question_x = 0
-                    question_y = exercise_height
+                    question_y = exercise_height + QUESTION_GAP
 
             _merge_arrays(questions_texts, qt, question_x, question_y)
             _merge_arrays(questions_rects, qr, question_x, question_y)
