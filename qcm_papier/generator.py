@@ -388,7 +388,11 @@ def _place_choices(variant, variant_id,
             choice_x -= 3
             if choice_x < 2:
                 choice_x = 2
-        choice_y = 5
+        # Le nom de la question est en y=5 (baseline) ; le texte (12pt)
+        # descend encore sous la baseline. Le premier cercle est centré en
+        # y=choice_y+3 ; pour qu'il ne chevauche pas le titre, on démarre les
+        # choix assez bas.
+        choice_y = 12
     else:
         # de gauche à droite.
         choice_x = question_name_width + 4
@@ -893,8 +897,10 @@ def generate_all(project: Project,
     success: list[int] = []  # Liste des IDs qui ont réellement réussi
     seen: set[int] = set()  # IDs déjà tentés (évite les doublons aléatoires)
 
-    # 1) Tester les IDs initiaux.
+    # 1) Tester les IDs initiaux (sans dépasser le compte souhaité).
     for variant_id in variant_ids:
+        if len(success) >= count:
+            break
         if variant_id in seen:
             continue
         seen.add(variant_id)
