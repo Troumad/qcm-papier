@@ -1,5 +1,7 @@
 # qcm-papier — Générateur/Correcteur de QCM papier (Python + GTK 4)
 
+Le guide principal d'installation et d'utilisation est dans [README.md](README.md).
+
 Portage en Python du générateur/correcteur de QCM papier originellement écrit en
 HTML5 + JavaScript (Université Lyon 1, auteur original : Florent Ouchet).
 
@@ -48,6 +50,7 @@ qcm_papier/
 - openpyxl (fichiers Excel Scodoc)
 - Pillow (images scannées)
 - PyMuPDF (lecture des PDF scannés)
+- numpy (calculs sur les images scannées : repères, cases, recherche globale)
 - PyGObject + GTK 4 (interface graphique, paquets système
   `gir1.2-gtk-4.0` + `python3-gi`)
 
