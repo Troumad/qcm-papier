@@ -1129,10 +1129,15 @@ class QcmWindow(Gtk.ApplicationWindow):
         if not variant_keys:
             self.generate_status.set_text("Aucune variante : générez d'abord les variantes.")
             return
-        name = self.project.settings.evaluation_short or "sujet"
+        # Nom par défaut : dérivé du nom du projet (sans extension) si un
+        # chemin de projet est connu, sinon evaluation_short.
+        if self.project_path:
+            base = os.path.splitext(os.path.basename(self.project_path))[0]
+        else:
+            base = self.project.settings.evaluation_short or "sujet"
         path = _file_dialog(self, "Enregistrer le PDF",
                             Gtk.FileChooserAction.SAVE,
-                            initial_name=f"{name}.pdf",
+                            initial_name=f"{base}.pdf",
                             filters=[("Fichiers PDF", ["*.pdf"])])
         # Forcer l'extension .pdf si absente
         if path and not path.endswith('.pdf'):
@@ -1147,6 +1152,15 @@ class QcmWindow(Gtk.ApplicationWindow):
             variant_keys = [k for k in self.project.variants if k not in ("p", "l")]
             self.project.settings.generate_variants = ";".join(variant_keys)
             self.entry_variants.set_text(self.project.settings.generate_variants)
+            # Sauvegarder le JSON à côté du PDF (même nom, extension .json)
+            # pour conserver les informations de correction.
+            json_path = os.path.splitext(path)[0] + ".json"
+            try:
+                project_mod.save_project(self.project, json_path)
+                self.generate_status.set_text(
+                    f"PDF généré : {path} — Projet : {json_path}")
+            except Exception as e:
+                self.generate_status.set_text(f"PDF généré : {path} — Erreur JSON : {e}")
         except Exception as e:
             self.generate_status.set_text(f"Erreur : {e}")
 
