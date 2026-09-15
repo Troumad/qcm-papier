@@ -138,8 +138,10 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant,
     for text in variant.texts:
         if text.get("center"):
             c.setFont("Helvetica", 6)
-            # Centrage vertical dans les cercles
-            c.drawCentredString(text["x"] * mm, to_pdf_y(text["y"]) - 1 * mm,
+            # Centrage vertical dans les cercles. Police plus petite que
+            # les labels d'identification : on remonte légèrement la baseline
+            # pour compenser l'espace sous la baseline (centre optique).
+            c.drawCentredString(text["x"] * mm, to_pdf_y(text["y"]) - 0.6 * mm,
                                 text.get("t", ""))
             c.setFont("Helvetica", 12)
         elif text.get("i"):
