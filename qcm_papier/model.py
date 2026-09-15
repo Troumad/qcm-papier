@@ -326,6 +326,7 @@ class Variant:
     rects: list[dict] = field(default_factory=list)
     circles: list[dict] = field(default_factory=list)
     marks: list[dict] = field(default_factory=list)
+    lines: list[dict] = field(default_factory=list)
     # Boîte d'identification étudiant.
     id_x: float = 0.0
     id_y: float = 0.0
