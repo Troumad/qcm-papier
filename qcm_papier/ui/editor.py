@@ -162,8 +162,8 @@ class StructureEditor(Gtk.Box):
             for i, exercise in enumerate(self.project.structure):
                 ex_min, ex_max = exercise.get_mark_range()
                 ex_label = f"Exercice {i+1} : {exercise.name} {ex_min:.1f} 🡕 {ex_max:.1f}"
-                ex_up = "↑" if i > 0 else ""
-                ex_down = "↓" if i < n_ex - 1 else ""
+                ex_up = '<span size="larger"><b>↑</b></span>' if i > 0 else ""
+                ex_down = '<span size="larger"><b>↓</b></span>' if i < n_ex - 1 else ""
                 ex_iter = self.store.append(
                     None, [ex_label, "exercise", exercise, ex_up, ex_down])
 
