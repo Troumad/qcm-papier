@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "qcm-papier"
 version = "0.1.0"
 description = "Générateur/Correcteur de QCM papier — portage Python/GTK 4 depuis le code HTML+JS de l'Université Lyon 1"
-readme = "README_python.md"
+readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-or-later" }
 authors = [

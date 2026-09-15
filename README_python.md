@@ -1,5 +1,7 @@
 # qcm-papier — Générateur/Correcteur de QCM papier (Python + GTK 4)
 
+Le guide principal d'installation et d'utilisation est dans [README.md](README.md).
+
 Portage en Python du générateur/correcteur de QCM papier originellement écrit en
 HTML5 + JavaScript (Université Lyon 1, auteur original : Florent Ouchet).
 
