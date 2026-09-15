@@ -19,6 +19,8 @@
   }
 }
 * { box-sizing: border-box; }
+/* L'attribut hidden doit gagner sur les display des classes (.grid-form, .row…). */
+[hidden] { display: none !important; }
 body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
 h1 { font-size: 1.1rem; margin: 0; }
 h2 { font-size: 1.05rem; margin: 0 0 .75rem; }
