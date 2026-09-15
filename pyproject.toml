@@ -24,8 +24,17 @@ dependencies = [
 gui = [
     "PyGObject>=3.42",
 ]
+web = [
+    "fastapi>=0.141",
+    "uvicorn>=0.53",
+    "python-multipart>=0.0.32",
+]
 test = [
     "pytest>=7.0",
+    "httpx>=0.28",
+    "fastapi>=0.141",
+    "uvicorn>=0.53",
+    "python-multipart>=0.0.32",
 ]
 dev = [
     "pytest>=7.0",
@@ -41,7 +50,7 @@ where = ["."]
 include = ["qcm_papier*"]
 
 [tool.setuptools.package-data]
-qcm_papier = ["data/scodoc/*.png"]
+qcm_papier = ["data/scodoc/*.png", "web/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
