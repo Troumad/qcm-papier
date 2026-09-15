@@ -80,6 +80,9 @@ BIT_EXERCISE_ORDER = 8
 BIT_QUESTION_ORDER = 10
 BIT_CHOICE_ORDER = 11
 
+# Espacement vertical ajouté entre deux questions empilées (mm).
+QUESTION_GAP = 1.0
+
 # ---------------------------------------------------------------------------
 # Helpers de boutons à 3 états (depuis les ProjectSettings)
 # ---------------------------------------------------------------------------
@@ -760,6 +763,11 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
 
             # Gestion du retour à la ligne/colonne selon la direction.
             if question_dir:
+                # Espacement vertical avant la question, sauf la première de
+                # sa colonne (pour ne pas ajouter d'espace inutile en haut du
+                # cadre ni après la dernière question).
+                if question_y > question_y_first:
+                    question_y += QUESTION_GAP
                 if question_y + qh > layout.barcode_top - exercise_y:
                     question_x = exercise_width
                     question_y = question_y_first
