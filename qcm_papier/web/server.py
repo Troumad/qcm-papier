@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Res
 from fastapi.staticfiles import StaticFiles
 
 from .. import editing
+from ..scodoc_api import ScoDocError
 from .session import Session
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -66,6 +67,7 @@ def create_app(session: Session | None = None) -> FastAPI:
             return JSONResponse(status_code=403, content={"detail": "Accès réservé à cette application locale."})
         return await call_next(request)
 
+    @app.exception_handler(ScoDocError)
     @app.exception_handler(ValueError)
     @app.exception_handler(RuntimeError)
     async def _bad_request(_request: Request, exc: Exception) -> JSONResponse:
@@ -276,6 +278,34 @@ def create_app(session: Session | None = None) -> FastAPI:
     async def scodoc_students(file: UploadFile = File(...)) -> dict[str, Any]:
         count, matched = s().load_students(await _save_upload(file))
         return {**correction_state(), "message": f"{count} étudiant(s) chargé(s), {matched} copie(s) identifiée(s)."}
+
+    @app.get("/api/scodoc/api/status")
+    def scodoc_api_status() -> dict[str, Any]:
+        client = s().scodoc_client
+        return {
+            "connected": client is not None,
+            "url": client.base_url if client else os.environ.get("QCM_PAPIER_SCODOC_URL", ""),
+        }
+
+    @app.post("/api/scodoc/api/login")
+    def scodoc_api_login(data: dict[str, str] = Body(...)) -> dict[str, Any]:
+        departements = s().scodoc_login(data.get("url", ""), data.get("username", ""), data.get("password", ""))
+        return {**scodoc_api_status(), "departements": departements}
+
+    @app.post("/api/scodoc/api/logout")
+    def scodoc_api_logout() -> dict[str, Any]:
+        s().scodoc_logout()
+        return scodoc_api_status()
+
+    @app.get("/api/scodoc/api/formsemestres")
+    def scodoc_api_formsemestres(departement: str) -> list[dict[str, Any]]:
+        return s().scodoc_formsemestres(departement)
+
+    @app.post("/api/scodoc/api/students")
+    def scodoc_api_students(data: dict[str, int] = Body(...)) -> dict[str, Any]:
+        count, matched = s().scodoc_load_students(int(data["formsemestre_id"]))
+        message = f"{count} étudiant(s) chargé(s) depuis ScoDoc, {matched} copie(s) identifiée(s)."
+        return {**correction_state(), "message": message}
 
     @app.post("/api/scodoc/export")
     async def scodoc_export(file: UploadFile = File(...), min0: bool = Form(False)) -> Response:

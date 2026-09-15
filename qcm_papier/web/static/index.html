@@ -171,9 +171,31 @@
     peuvent être associés grâce à la table des étudiants, téléchargeable depuis Scodoc (ou Scodoc-visu) dans
     les menus en haut de la page principale du semestre comportant cette évaluation.</p>
   <img class="scodoc" data-src="Scodoc_student_list.png" alt="Téléchargement de la table des étudiants dans Scodoc">
+  <h3>Depuis un fichier Excel</h3>
   <p>Charger le fichier Excel obtenu depuis Scodoc :</p>
   <input id="input-students" type="file" accept=".xlsx,.xls">
   <p id="students-status" class="status"></p>
+
+  <h3>Depuis le serveur ScoDoc</h3>
+  <p class="muted">Connexion avec votre compte ScoDoc. Le mot de passe sert uniquement à obtenir un jeton
+    d'accès : il n'est pas enregistré.</p>
+  <form id="scodoc-login" class="grid-form">
+    <label>Adresse <input name="url" type="url" placeholder="https://scodoc.exemple.fr/ScoDoc" required></label>
+    <label>Identifiant <input name="username" autocomplete="username" required></label>
+    <label>Mot de passe <input name="password" type="password" autocomplete="current-password" required></label>
+    <div class="row"><button type="submit">Se connecter</button></div>
+  </form>
+  <div id="scodoc-connected" hidden>
+    <div class="row wrap">
+      <label>Département <select id="scodoc-dept"></select></label>
+      <label class="grow">Semestre <select id="scodoc-sem"></select></label>
+    </div>
+    <div class="row">
+      <button id="scodoc-load">Charger les étudiants du semestre</button>
+      <button id="scodoc-logout" type="button">Se déconnecter</button>
+    </div>
+  </div>
+  <p id="scodoc-status" class="status"></p>
   <div class="row end"><button data-close>Fermer</button></div>
 </dialog>
 
