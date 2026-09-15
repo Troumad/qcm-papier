@@ -5,6 +5,21 @@ on:
   pull_request:
 
 jobs:
+  javascript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - name: Syntaxe JavaScript
+        run: |
+          for script in qcm_papier/web/static/*.js; do
+            node --check "$script"
+          done
+      - name: Tests du rendu de l'aide
+        run: node --test tests/js/*.cjs
+
   lint:
     runs-on: ubuntu-latest
     steps:
