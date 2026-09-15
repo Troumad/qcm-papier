@@ -1,11 +1,21 @@
 # QCM-Papier — Guide d'installation et d'utilisation
 
 QCM-Papier est un générateur et correcteur de QCM sur papier. Il s'agit d'un
-portage en Python/GTK 4 du code HTML+JS de l'Université Lyon 1.
+portage en Python du code HTML+JS de l'Université Lyon 1, avec une interface
+GTK 4 et une interface web locale (FastAPI, HTML, CSS et JavaScript).
 
 Le principe : on crée un sujet (plusieurs variantes d'un même QCM), on l'imprime,
 les étudiants le remplissent, on scanne les copies, puis le logiciel corrige
 automatiquement et exporte les notes vers Scodoc.
+
+### Choisir son interface
+
+- **Navigateur** : Python et l'installation `.[web]` suffisent. Lancez
+  `qcm-papier serve` depuis un terminal ; GTK et Rust ne sont pas nécessaires.
+- **GTK 4** : installez les dépendances système ci-dessous puis `.[gui]`.
+- **Fenêtre Tauri** : utilise l'interface web dans une fenêtre de bureau.
+  Cette première version exige encore Python et `.[web]` sur la machine.
+  Voir [le guide Tauri](src-tauri/README.md) pour la compilation.
 
 ---
 
@@ -23,8 +33,8 @@ python3 --version
 
 ### Dépendances système
 
-Le logiciel utilise GTK 4 pour l'interface graphique. Cette bibliothèque doit
-être installée séparément (Python seul ne suffit pas).
+Ces dépendances concernent l'interface GTK 4. Pour l'interface dans le
+navigateur, passez directement à l'installation web ci-dessous.
 
 #### Linux (Fedora / RHEL)
 
@@ -65,6 +75,22 @@ est d'utiliser [MSYS2](https://www.msys2.org/) :
 ---
 
 ## 2. Installation de qcm-papier
+
+### Interface web locale
+
+Depuis la racine d'une version contenant la commande `serve` :
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install ".[web]"
+python -m qcm_papier serve
+```
+
+Sous Windows PowerShell, utilisez `py -m venv .venv`, puis
+`.venv\Scripts\Activate.ps1` pour activer l'environnement.
+Le navigateur s'ouvre sur `http://127.0.0.1:8060`. Gardez le terminal ouvert ;
+`Ctrl+C` arrête le serveur. Aucune compilation des fichiers HTML/JS n'est nécessaire.
 
 ### Installation simple (utilisation)
 
@@ -266,8 +292,10 @@ L'interface est organisée en onglets :
 
 ### Interface web (sans GTK)
 
-La même interface existe dans le navigateur. Elle ne demande pas GTK : Python
-suffit, sur Linux, macOS et Windows.
+Une interface complémentaire existe dans le navigateur : édition, génération,
+correction et sauvegarde. Elle utilise Python avec `.[web]`, sans GTK.
+Cette première version ne reprend pas encore toutes les commandes de l'éditeur GTK,
+notamment la suppression et le déplacement des exercices et des questions.
 
 ```bash
 pip install -e ".[web]"
@@ -280,7 +308,7 @@ qcm-papier serve -p math/2026/OML1_bis.json   # avec un projet ouvert
 - Les fichiers (projet, copies, tables Scodoc) sont choisis dans la page et
   les résultats (projet, PDF, notes, sauvegarde) sont téléchargés.
 - La sauvegarde de correction est une archive `.zip` qui contient l'état, les
-  copies corrigées en images **et les fichiers de copies** : on peut la
+  copies corrigées en images, **le projet et les fichiers de copies** : on peut la
   recharger plus tard, même sur une autre machine.
 - Dans le tableau des résultats, un clic affiche la page, un double-clic
   l'ouvre en grand (zoom, n° étudiant, alignement manuel).
@@ -289,7 +317,8 @@ qcm-papier serve -p math/2026/OML1_bis.json   # avec un projet ouvert
 
 Le dossier `src-tauri/` fait de l'interface web une application à
 double-cliquer : elle lance le serveur Python et ouvre une fenêtre dessus.
-Voir `src-tauri/LISEZMOI.md`.
+Python avec `.[web]` doit encore être installé sur la machine.
+Voir [le guide Tauri](src-tauri/README.md).
 
 #### Levée d'anonymat (Scodoc)
 

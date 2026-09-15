@@ -11,9 +11,6 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PDF = os.path.join(REPO, "math", "2026", "correction3.pdf")
 PROJECT = os.path.join(REPO, "math", "2026", "OML1_bis.json")
 
-pytestmark = pytest.mark.skipif(not (os.path.exists(PDF) and os.path.exists(PROJECT)), reason="fichiers absents")
-
-
 def _wait(session: Session, timeout: float = 120.0) -> None:
     start = time.monotonic()
     while session.job.running:
@@ -24,6 +21,8 @@ def _wait(session: Session, timeout: float = 120.0) -> None:
 
 @pytest.fixture
 def corrected(tmp_path):
+    if not (os.path.exists(PDF) and os.path.exists(PROJECT)):
+        pytest.skip("fichiers absents")
     session = Session(work_dir=str(tmp_path))
     session.load_project(PROJECT)
     with open(PDF, "rb") as f:
@@ -49,9 +48,9 @@ def test_sauvegarde_puis_reprise_identique(corrected, tmp_path):
     archive = corrected.save_state_zip()
     other = Session(work_dir=str(tmp_path / "autre"))
     os.makedirs(other.work_dir)
-    other.load_project(PROJECT)
     other.start_load_state_zip(archive)
     _wait(other)
+    assert other.variant_ids() == corrected.variant_ids()
     after = other.results()
     keys = ("variant", "student_id", "note", "status")
     assert [{k: r[k] for k in keys} for r in after] == [{k: r[k] for k in keys} for r in before]

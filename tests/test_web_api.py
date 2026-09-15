@@ -19,7 +19,27 @@ PROJECT = os.path.join(REPO, "math", "2026", "OML1_bis.json")
 
 @pytest.fixture
 def client(tmp_path):
-    return TestClient(create_app(Session(work_dir=str(tmp_path))))
+    return TestClient(create_app(Session(work_dir=str(tmp_path))), base_url="http://127.0.0.1:8060")
+
+
+def test_commandes_reservees_a_application_locale(client):
+    assert client.get("/api/project").status_code == 200
+    assert client.get("/api/project", headers={"host": "evil.example"}).status_code == 403
+    for origin in ("https://evil.example", "null", "http://127.0.0.1:9999"):
+        assert client.post("/api/project/new", headers={"origin": origin}).status_code == 403
+    assert client.post("/api/project/new", headers={"origin": "http://127.0.0.1:8060"}).status_code == 200
+    assert client.post("/api/project/new", headers={"sec-fetch-site": "cross-site"}).status_code == 403
+
+
+def test_aide_du_paquet_installe(client, monkeypatch):
+    from email.message import Message
+    from qcm_papier.web import server
+
+    installed_metadata = Message()
+    installed_metadata.set_payload("# QCM-Papier — guide installé")
+    monkeypatch.setattr(server, "_help_path", lambda: "")
+    monkeypatch.setattr(server, "metadata", lambda _name: installed_metadata)
+    assert "guide installé" in client.get("/api/help").text
 
 
 def test_page_et_fichiers_statiques(client):

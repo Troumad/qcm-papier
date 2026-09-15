@@ -367,6 +367,7 @@ class Session:
             scanner.save_correction_state(pages, [p.copy_path or "" for p in pages], state_path)
             buf = io.BytesIO()
             with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr("project.json", self.project_json())
                 zf.write(state_path, "correction.json")
                 images = os.path.join(tmp, "correction_images")
                 for name in sorted(os.listdir(images)):
@@ -377,6 +378,8 @@ class Session:
         return buf.getvalue()
 
     def start_load_state_zip(self, data: bytes) -> None:
+        if self.job.running:
+            raise RuntimeError("Une tâche est déjà en cours.")
         folder = tempfile.mkdtemp(prefix="reprise-", dir=self.work_dir)
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             for member in zf.namelist():
@@ -395,6 +398,10 @@ class Session:
             json.dump(state, f, ensure_ascii=False, indent=2)
         names = sorted(os.listdir(copies_dir)) if os.path.isdir(copies_dir) else []
         with self.lock:
+            project_path = os.path.join(folder, "project.json")
+            if os.path.exists(project_path):
+                self.project = project_mod.load_project(project_path)
+                self.project_path = None
             self.copies = [CopyFile(path=os.path.join(copies_dir, n), name=n, checked=False) for n in names]
         self._start_job("reprise", len(self.copies), lambda: self._load_state(state_path))
 

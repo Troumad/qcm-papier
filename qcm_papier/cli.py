@@ -346,7 +346,7 @@ def build_parser() -> argparse.ArgumentParser:
     # serve : interface web locale
     p_srv = sub.add_parser("serve", help="Lancer l'interface web locale dans le navigateur")
     p_srv.add_argument("--project", "-p", help="Projet JSON à ouvrir au démarrage")
-    p_srv.add_argument("--host", default="127.0.0.1",
+    p_srv.add_argument("--host", default="127.0.0.1", choices=("127.0.0.1", "localhost", "::1"),
                        help="Adresse d'écoute (défaut 127.0.0.1 : cette machine uniquement)")
     p_srv.add_argument("--port", type=int, default=8060, help="Port (défaut 8060)")
     p_srv.add_argument("--no-browser", action="store_true",

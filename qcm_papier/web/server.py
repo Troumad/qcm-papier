@@ -12,7 +12,9 @@ import tempfile
 import threading
 import time
 import webbrowser
+from importlib.metadata import PackageNotFoundError, metadata
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
@@ -26,11 +28,12 @@ STATIC_DIR = os.path.join(HERE, "static")
 SCODOC_DIR = os.path.join(os.path.dirname(HERE), "data", "scodoc")
 SCODOC_IMAGES = {"Scodoc_student_list.png", "Scodoc_eval_get1.png", "Scodoc_eval_get2.png", "Scodoc_eval_send.png"}
 DEFAULT_PORT = 8060
+LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 
 def _help_path() -> str:
     pkg = os.path.dirname(HERE)
-    for candidate in (os.path.join(pkg, "LISEZMOI.md"), os.path.join(os.path.dirname(pkg), "LISEZMOI.md")):
+    for candidate in (os.path.join(pkg, "README.md"), os.path.join(os.path.dirname(pkg), "README.md")):
         if os.path.exists(candidate):
             return candidate
     return ""
@@ -48,6 +51,20 @@ def create_app(session: Session | None = None) -> FastAPI:
 
     def s() -> Session:
         return app.state.session
+
+    @app.middleware("http")
+    async def local_only(request: Request, call_next):
+        """Le navigateur local ne doit pas recevoir de commandes d'un autre site."""
+        try:
+            host = urlsplit(f"//{request.headers.get('host', '')}").hostname
+        except ValueError:
+            host = None
+        origin = request.headers.get("origin")
+        if (host not in LOCAL_HOSTS
+                or (origin is not None and origin != str(request.base_url).rstrip("/"))
+                or request.headers.get("sec-fetch-site") == "cross-site"):
+            return JSONResponse(status_code=403, content={"detail": "Accès réservé à cette application locale."})
+        return await call_next(request)
 
     @app.exception_handler(ValueError)
     @app.exception_handler(RuntimeError)
@@ -76,7 +93,12 @@ def create_app(session: Session | None = None) -> FastAPI:
     def help_text() -> str:
         path = _help_path()
         if not path:
-            return "Fichier LISEZMOI.md introuvable."
+            # Le README est aussi la description du paquet, disponible après
+            # installation d'une wheel hors du dépôt des sources.
+            try:
+                return metadata("qcm-papier").get_payload() or "Guide README.md indisponible."
+            except PackageNotFoundError:
+                return "Guide README.md indisponible."
         with open(path, encoding="utf-8") as f:
             return f.read()
 
@@ -290,13 +312,16 @@ def run(host: str = "127.0.0.1", port: int = DEFAULT_PORT, project_path: str | N
         open_browser: bool = True, exit_with_parent: bool = False) -> int:  # fmt: skip
     import uvicorn
 
+    if host not in LOCAL_HOSTS:
+        raise ValueError("Le serveur doit écouter sur une adresse locale (127.0.0.1, localhost ou ::1).")
     if exit_with_parent:
         _exit_when_parent_dies()
     session = Session()
     if project_path:
         session.load_project(project_path)
     app = create_app(session)
-    url = f"http://{host}:{port}/"
+    url_host = f"[{host}]" if ":" in host else host
+    url = f"http://{url_host}:{port}/"
     print(f"Interface web : {url} (Ctrl+C pour arrêter)")
     if open_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
