@@ -170,10 +170,7 @@
     guard(scodocInit);
   });
 
-  // Levée d'anonymat via l'API ScoDoc -----------------------------------
-  const STORE_KEY = "qcm-papier.scodoc";
-  const scodocForm = $("#scodoc-login");
-
+  // Levée d'anonymat via l'API ScoDoc (compte dédié, onglet Réglages) ----
   function scodocMessage(text, cls = "status") {
     const status = $("#scodoc-status");
     status.className = cls;
@@ -181,7 +178,7 @@
   }
 
   function showConnected(connected) {
-    scodocForm.hidden = connected;
+    $("#scodoc-disconnected").hidden = connected;
     $("#scodoc-connected").hidden = !connected;
   }
 
@@ -191,10 +188,10 @@
 
   async function scodocInit() {
     const status = await api("GET", "/api/scodoc/api/status");
-    let saved = {};
-    try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || "{}"); } catch { /* stockage indisponible */ }
-    scodocForm.elements.url.value ||= saved.url || status.url || "";
-    scodocForm.elements.username.value ||= saved.username || "";
+    $("#scodoc-account").textContent = status.configured
+      ? `Compte ${status.username} sur ${status.url} (réseau de l'IUT ou VPN).`
+      : "Aucun compte ScoDoc configuré : renseignez-le dans l'onglet Réglages.";
+    $("#scodoc-connect").disabled = !status.configured;
     // Connecté côté serveur mais liste des départements perdue (page rechargée) : on repart de zéro.
     if (status.connected && !$("#scodoc-dept").options.length) {
       await api("POST", "/api/scodoc/api/logout");
@@ -212,26 +209,19 @@
     scodocMessage(semesters.length ? "" : "Aucun semestre en cours dans ce département.", semesters.length ? "status" : "status error");
   }
 
-  scodocForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    guard(async () => {
-      const { url, username, password } = scodocForm.elements;
-      scodocMessage("Connexion à ScoDoc…");
-      try {
-        const data = await api("POST", "/api/scodoc/api/login", { url: url.value, username: username.value, password: password.value });
-        try { localStorage.setItem(STORE_KEY, JSON.stringify({ url: data.url, username: username.value })); } catch { /* stockage indisponible */ }
-        fillSelect($("#scodoc-dept"), data.departements, "acronym", "label");
-        const geii = data.departements.find((d) => d.acronym.toUpperCase() === "GEII");
-        if (geii) $("#scodoc-dept").value = geii.acronym;
-        showConnected(true);
-        await loadSemesters();
-      } catch (error) {
-        scodocMessage(error.message, "status error");
-      } finally {
-        password.value = "";
-      }
-    });
-  });
+  $("#scodoc-connect").addEventListener("click", () => guard(async () => {
+    scodocMessage("Connexion à ScoDoc…");
+    try {
+      const data = await api("POST", "/api/scodoc/api/login");
+      fillSelect($("#scodoc-dept"), data.departements, "acronym", "label");
+      const geii = data.departements.find((d) => d.acronym.toUpperCase() === "GEII");
+      if (geii) $("#scodoc-dept").value = geii.acronym;
+      showConnected(true);
+      await loadSemesters();
+    } catch (error) {
+      scodocMessage(error.message, "status error");
+    }
+  }));
 
   $("#scodoc-dept").addEventListener("change", () => guard(loadSemesters));
   $("#scodoc-load").addEventListener("click", () => guard(async () => {

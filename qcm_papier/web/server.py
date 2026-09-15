@@ -20,9 +20,10 @@ from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFil
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from .. import editing
+from .. import editing, scodoc_config
 from ..scodoc_api import ScoDocError
 from .session import Session
+
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(HERE, "static")
@@ -279,17 +280,51 @@ def create_app(session: Session | None = None) -> FastAPI:
         count, matched = s().load_students(await _save_upload(file))
         return {**correction_state(), "message": f"{count} étudiant(s) chargé(s), {matched} copie(s) identifiée(s)."}
 
+    # -- Réglages du compte ScoDoc dédié (mot de passe dans le trousseau) --
+    def _account_view() -> dict[str, Any]:
+        account = scodoc_config.load_account()
+        return {
+            "url": account.url,
+            "username": account.username,
+            "has_password": account.has_password,
+            "complete": account.complete,
+            "keyring": scodoc_config.keyring_name(),
+        }
+
+    @app.get("/api/settings/scodoc")
+    def scodoc_settings() -> dict[str, Any]:
+        return _account_view()
+
+    @app.put("/api/settings/scodoc")
+    def scodoc_settings_save(data: dict[str, str] = Body(...)) -> dict[str, Any]:
+        scodoc_config.save_account(data.get("url", ""), data.get("username", ""), data.get("password") or None)
+        return _account_view()
+
+    @app.delete("/api/settings/scodoc")
+    def scodoc_settings_delete() -> dict[str, Any]:
+        s().scodoc_logout()
+        scodoc_config.delete_account()
+        return _account_view()
+
+    @app.post("/api/settings/scodoc/test")
+    def scodoc_settings_test() -> dict[str, Any]:
+        departements = scodoc_config.connect().departements()
+        return {"message": f"Connexion réussie : {len(departements)} département(s) visible(s)."}
+
+    # -- Levée d'anonymat via l'API ScoDoc ------------------------------
     @app.get("/api/scodoc/api/status")
     def scodoc_api_status() -> dict[str, Any]:
-        client = s().scodoc_client
+        account = scodoc_config.load_account()
         return {
-            "connected": client is not None,
-            "url": client.base_url if client else os.environ.get("QCM_PAPIER_SCODOC_URL", ""),
+            "connected": s().scodoc_client is not None,
+            "configured": account.complete,
+            "url": account.url,
+            "username": account.username,
         }
 
     @app.post("/api/scodoc/api/login")
-    def scodoc_api_login(data: dict[str, str] = Body(...)) -> dict[str, Any]:
-        departements = s().scodoc_login(data.get("url", ""), data.get("username", ""), data.get("password", ""))
+    def scodoc_api_login() -> dict[str, Any]:
+        departements = s().scodoc_login()
         return {**scodoc_api_status(), "departements": departements}
 
     @app.post("/api/scodoc/api/logout")

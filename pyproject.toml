@@ -28,6 +28,7 @@ web = [
     "fastapi>=0.141",
     "uvicorn>=0.53",
     "python-multipart>=0.0.32",
+    "keyring>=25",
 ]
 test = [
     "pytest>=7.0",
@@ -35,6 +36,7 @@ test = [
     "fastapi>=0.141",
     "uvicorn>=0.53",
     "python-multipart>=0.0.32",
+    "keyring>=25",
 ]
 dev = [
     "qcm-papier[test]",

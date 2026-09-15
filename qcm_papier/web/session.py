@@ -20,7 +20,7 @@ from typing import Any, Callable
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .. import editing, generator, pdf_writer, scanner, scodoc, scodoc_api
+from .. import editing, generator, pdf_writer, scanner, scodoc, scodoc_api, scodoc_config
 from .. import project as project_mod
 from ..marking import score_page
 from ..model import Project
@@ -268,10 +268,9 @@ class Session:
         """Levée d'anonymat depuis la table étudiants Excel de ScoDoc."""
         return self.apply_students(scodoc.load_students_table(path))
 
-    def scodoc_login(self, url: str, username: str, password: str) -> list[dict[str, str]]:
-        """Connexion à l'API ScoDoc ; seul le jeton est gardé, en mémoire."""
-        client = scodoc_api.ScoDocClient(url)
-        client.authenticate(username, password)
+    def scodoc_login(self) -> list[dict[str, str]]:
+        """Connexion à l'API ScoDoc avec le compte dédié enregistré (voir scodoc_config)."""
+        client = scodoc_config.connect()
         departements = [scodoc_api.departement_view(d) for d in client.departements()]
         with self.lock:
             self.scodoc_client = client
