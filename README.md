@@ -330,6 +330,20 @@ Pour associer les noms et prénoms :
 2. Onglet **Correction** → bouton **Levée d'anonymat Scodoc…**
 3. Chargez le fichier Excel obtenu.
 
+**Dans l'interface web**, la même boîte de dialogue permet aussi de se
+connecter directement au serveur ScoDoc, sans passer par le fichier Excel :
+
+1. Saisissez l'adresse de ScoDoc (par exemple `https://scodoc.exemple.fr/ScoDoc`),
+   votre identifiant et votre mot de passe ScoDoc, puis **Se connecter**.
+2. Choisissez le département et le semestre en cours.
+3. Cliquez sur **Charger les étudiants du semestre**.
+
+Le mot de passe sert uniquement à obtenir un jeton d'accès auprès de ScoDoc :
+il n'est ni conservé ni enregistré. Seules les adresses en `https://` sont
+acceptées. Votre compte ScoDoc doit avoir accès à l'API (à voir avec
+l'administrateur ScoDoc de l'établissement). L'adresse proposée par défaut
+peut être fixée avec la variable d'environnement `QCM_PAPIER_SCODOC_URL`.
+
 L'identifiant lu sur la copie est `p` + le NIP Scodoc sans son premier chiffre
 (ex. NIP `12504873` → `p2504873`).
 
