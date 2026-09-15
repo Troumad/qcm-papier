@@ -476,6 +476,12 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
     try:
         import numpy as np
     except ImportError:
+        import warnings
+        warnings.warn(
+            "numpy n'est pas installé : la recherche globale des repères "
+            "(align_auto_global) est désactivée. Installez numpy pour "
+            "corriger les copies mal scannées.",
+            stacklevel=2)
         return False
 
     layout_p = _layout_of(variants, "p")
@@ -1378,7 +1384,11 @@ def load_pages_from_file(path: str, dpi: int = 150) -> list[ScannedPage]:
         # 1) PyMuPDF (préférable : pas de dépendance système).
         try:
             import pymupdf
-            doc = pymupdf.open(path)
+            # Lire le fichier en bytes pour éviter tout cache de PyMuPDF ou
+            # de l'OS : un PDF modifié entre deux corrections est bien relu.
+            with open(path, "rb") as _f:
+                pdf_bytes = _f.read()
+            doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
             for pdf_page in doc:
                 pix = pdf_page.get_pixmap(dpi=dpi)
                 img = Image.frombytes("RGB" if pix.alpha == 0 else "RGBA",
@@ -1405,6 +1415,8 @@ def load_pages_from_file(path: str, dpi: int = 150) -> list[ScannedPage]:
                 "poppler-utils (``urpmi python3-pdf2image poppler``).")
     else:
         img = Image.open(path)
+        img.load()  # Forcer la lecture en mémoire (sinon Pillow est paresseux
+                    # et peut relire un fichier modifié trop tard).
         pages.append(ScannedPage(img=PixelImage(img)))
     return pages
 
@@ -1489,11 +1501,20 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
         img_name = None
         if page.img is not None and page.img.img is not None:
             base_name = os.path.splitext(os.path.basename(copy_path))[0]
-            # Numérotation à partir de 1 pour lisibilité.
-            img_name = f"{base_name}_{page_index + 1}.png"
+            # Nommer l'image avec l'ID étudiant et le nom du fichier source
+            # (paquet) pour distinguer deux étudiants de paquets différents
+            # qui auraient le même numéro (ex: p8789999_sujet_6.png).
+            # Sans ID étudiant, numérotation simple à partir de 1.
+            if page.student_id:
+                img_name = f"{page.student_id}_{base_name}_{page_index + 1}.png"
+            else:
+                img_name = f"{base_name}_{page_index + 1}.png"
             n = 1
             while img_name in used_names:
-                img_name = f"{base_name}_{page_index + 1}_{n}.png"
+                if page.student_id:
+                    img_name = f"{page.student_id}_{base_name}_{page_index + 1}_{n}.png"
+                else:
+                    img_name = f"{base_name}_{page_index + 1}_{n}.png"
                 n += 1
             used_names.add(img_name)
             rendered = render_marked_page(page)
