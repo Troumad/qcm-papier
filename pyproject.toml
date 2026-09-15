@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "qcm-papier"
 version = "0.1.0"
 description = "Générateur/Correcteur de QCM papier — portage Python/GTK3 depuis le code HTML+JS de l'Université Lyon 1"
-readme = "README.md"
+readme = "README_python.md"
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-or-later" }
 authors = [
@@ -17,6 +17,7 @@ dependencies = [
     "openpyxl>=3.0",
     "Pillow>=10.0",
     "PyMuPDF>=1.23",
+    "numpy>=1.20",
 ]
 
 [project.optional-dependencies]

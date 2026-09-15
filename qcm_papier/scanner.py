@@ -476,6 +476,12 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
     try:
         import numpy as np
     except ImportError:
+        import warnings
+        warnings.warn(
+            "numpy n'est pas installé : la recherche globale des repères "
+            "(align_auto_global) est désactivée. Installez numpy pour "
+            "corriger les copies mal scannées.",
+            stacklevel=2)
         return False
 
     layout_p = _layout_of(variants, "p")
