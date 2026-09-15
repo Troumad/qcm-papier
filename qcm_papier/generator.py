@@ -80,6 +80,9 @@ BIT_EXERCISE_ORDER = 8
 BIT_QUESTION_ORDER = 10
 BIT_CHOICE_ORDER = 11
 
+# Espacement vertical ajouté entre deux questions empilées (mm).
+QUESTION_GAP = 1.0
+
 # ---------------------------------------------------------------------------
 # Helpers de boutons à 3 états (depuis les ProjectSettings)
 # ---------------------------------------------------------------------------
@@ -375,8 +378,8 @@ def _place_choices(variant, variant_id,
                 additional = 0
         if exercise.get("index", -1) >= 0 and question.get("index", -1) >= 0:
             rg.insert_choices(variant_id + question_iter, choice_list, additional,
-                              new_choices_name=settings.question_new_choices_name,
-                              new_choices_count=settings.question_new_choices
+                              new_choices_name=settings.choice_new_choices_name,
+                              new_choices_count=settings.choice_new_choices
                               if exercise.get("index", -1) >= 0 else 1)
 
     choice_x = 0.0
@@ -388,7 +391,12 @@ def _place_choices(variant, variant_id,
             choice_x -= 3
             if choice_x < 2:
                 choice_x = 2
-        choice_y = 5
+        # Le nom de la question est en y=5 (baseline) ; les descendantes du
+        # texte (12pt) vont ~0,9 mm sous la baseline. Le premier cercle (rayon
+        # 2,3 mm) est centré en y=choice_y+3 ; son sommet est à choice_y+0,7.
+        # choice_y=7 donne un sommet à 7,7 mm, soit ~1,8 mm sous les
+        # descendantes : pas de chevauchement, et peu de hauteur ajoutée.
+        choice_y = 7
     else:
         # de gauche à droite.
         choice_x = question_name_width + 4
@@ -560,7 +568,9 @@ def _place_choices(variant, variant_id,
     if choice_dir:
         # de haut en bas : la hauteur a augmenté à chaque choix.
         question_height = choice_y + 2  # approximation (5 + 5*nb + 7)
-        question_width = question_name_width
+        # Le nom de la question commence à x=2 : la largeur doit inclure
+        # cet offset et une marge droite pour ne pas déborder du cadre.
+        question_width = question_name_width + 4
         # Le joker duplique les cercles avec delta_x = 6 : la colonne joker
         # s'étend à choice_x + 2 + 6, plus le rayon (2.3) et une marge.
         if settings.choice_joker_always:
@@ -660,11 +670,18 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         y_max = variant.id_y + variant.id_height  # Point bas maximal initial (boîte d'identification)
         #x_line_start = variant.id_x + variant.id_width  # Début de ligne (après la boîte)
     else:
-        # Mode "vers le bas" : première colonne commence sous la boîte d'identification
-        exercise_x = layout.margin_left
+        # Mode "vers le bas" : première colonne commence sous la boîte
+        # d'identification, alignée sous celle-ci (x = id_x) pour ne pas
+        # déborder à gauche de l'identification.
+        exercise_x = variant.id_x
         exercise_y = variant.id_y + variant.id_height
-        x_max = variant.id_x + variant.id_width  # Point droit maximal initial (marge gauche)
-        #y_column_start = variant.id_y + variant.id_height  # Début de colonne (sous la boîte)
+        # x_max démarre au point gauche de la première colonne (id_x) et
+        # monte au fur et à mesure que les exercices sont placés. Les
+        # nouvelles colonnes démarrent à x_max : si elles sont à droite de
+        # la boîte d'identification (x_max >= id_x + id_width) elles
+        # commencent au niveau de l'identification, sinon sous elle.
+        x_max = variant.id_x
+        x_line_start = variant.id_x
 
     has_error = False
     exercise_iter = 0
@@ -681,14 +698,24 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         questions_rects: list[dict] = []
         questions_circles: list[dict] = []
         questions_marks: list[dict] = []
+        questions_lines: list[dict] = []
 
         # Nom de l'exercice.
         questions_texts.append({"x": 2, "y": 5, "t": exercise.get("name", "")})
-        # Introduction (header) en italique après le nom
+        # Introduction (header) en italique.
         header = exercise.get("header", "")
+        choice_dir = rg.pseudo_random(variant_id, variant_id, BIT_CHOICE_DIR,
+                                       _tri(settings, "choice_dir_left", "choice_dir_top", "choice_dir_both"))
         if header:
-            questions_texts.append({"x": 2 + _text_width(exercise.get("name", "")) + 2, "y": 5, "t": header, "i": True})
-        exercise_name_width = _text_width(exercise.get("name", "")) + (2 + _text_width(header)) if header else _text_width(exercise.get("name", ""))
+            if choice_dir:
+                # Choix verticaux : l'introduction passe sous le nom.
+                questions_texts.append({"x": 2, "y": 11, "t": header, "i": True})
+                exercise_name_width = max(_text_width(exercise.get("name", "")), _text_width(header))
+            else:
+                questions_texts.append({"x": 2 + _text_width(exercise.get("name", "")) + 2, "y": 5, "t": header, "i": True})
+                exercise_name_width = _text_width(exercise.get("name", "")) + (2 + _text_width(header))
+        else:
+            exercise_name_width = _text_width(exercise.get("name", ""))
 
         question_dir = rg.pseudo_random(variant_id, variant_id, BIT_QUESTION_DIR,
                                          _tri(settings, "question_dir_left", "question_dir_top", "question_dir_both"))
@@ -715,10 +742,10 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
                 question_name_width_max = qw
 
         question_x = 0.0
-        question_y = 6.0 # if (exercise.get("header", "") == "") else 12.0
+        question_y = 12.0 if (header and choice_dir) else 6.0
         question_y_first = question_y
+        exercise_height = 12.0 if (header and choice_dir) else 6.0
         exercise_width = exercise_name_width + 4
-        exercise_height = 6.0
 
         question_iter = 0
         while question_list:
@@ -737,13 +764,24 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
 
             # Gestion du retour à la ligne/colonne selon la direction.
             if question_dir:
+                # Espacement vertical avant la question, sauf la première de
+                # sa colonne (pour ne pas ajouter d'espace inutile en haut du
+                # cadre ni après la dernière question).
+                if question_y > question_y_first:
+                    question_y += QUESTION_GAP
                 if question_y + qh > layout.barcode_top - exercise_y:
                     question_x = exercise_width
                     question_y = question_y_first
             else:
                 if question_x + qw > max_width - exercise_x:
+                    # Retour à la ligne : espacement vertical + ligne pointillée.
+                    _line_w = exercise_width - 2
+                    if _line_w > 0:
+                        questions_lines.append({
+                            "x": 1, "y": exercise_height + QUESTION_GAP,
+                            "w": _line_w, "dash": True})
                     question_x = 0
-                    question_y = exercise_height
+                    question_y = exercise_height + QUESTION_GAP
 
             _merge_arrays(questions_texts, qt, question_x, question_y)
             _merge_arrays(questions_rects, qr, question_x, question_y)
@@ -765,6 +803,18 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             question_iter += 1
 
         # Cadre de l'exercice.
+        # Garantie : le cadre doit contenir le nom et le header (italique)
+        # pour éviter tout débordement de l'introduction hors du cadre.
+        _name_w = _text_width(exercise.get("name", ""))
+        _header_w = _text_width(header) if header else 0.0
+        _min_w = _name_w + 2  # nom à x=2 + marge droite
+        if header:
+            if choice_dir:
+                _min_w = max(_name_w, _header_w) + 2 + 2  # header sous le nom à x=2
+            else:
+                _min_w = 2 + _name_w + 2 + _header_w + 2  # nom + header sur la même ligne
+        if exercise_width < _min_w:
+            exercise_width = _min_w
         questions_rects.append({"x": 0, "y": 0, "w": exercise_width, "h": exercise_height})
 
         # --- PLACEMENT DE L'EXERCICE SELON LE MODE (CORRIGÉ) ---
@@ -800,9 +850,14 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             if (place_x + exercise_width <= max_width) and (place_y + exercise_height <= max_height):
                 placed = True
             else:
-                # 2. Si ça ne marche pas, essayer en haut de nouvelle colonne
+                # 2. Si ça ne marche pas, essayer en haut de nouvelle colonne.
+                # Si la nouvelle colonne est à droite de la boîte
+                # d'identification, elle commence au niveau de celle-ci
+                # (y = id_y) pour utiliser l'espace libre à sa droite ;
+                # sinon elle commence sous l'identification.
                 place_x = x_max
-                place_y = y_column_start
+                place_y = (variant.id_y if place_x >= variant.id_x + variant.id_width
+                           else variant.id_y + variant.id_height)
                 if (place_x + exercise_width <= max_width) and (place_y + exercise_height <= max_height):
                     placed = True
                 else:
@@ -823,6 +878,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             _merge_arrays(variant.rects, questions_rects, place_x, place_y)
             _merge_arrays(variant.circles, questions_circles, place_x, place_y)
             _merge_arrays(variant.marks, questions_marks, place_x, place_y)
+            _merge_arrays(variant.lines, questions_lines, place_x, place_y)
 
         exercise_iter += 1
 
@@ -840,7 +896,16 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
 def generate_all(project: Project,
                 retry: bool = True,
                 max_errors: int = 10) -> tuple[list[int], list[int]]:
-    """Génère toutes les variantes demandées par les paramètres."""
+    """Génère les variantes demandées et complète aléatoirement si besoin.
+
+    - Teste les IDs fournis dans ``generate_variants`` ; ne conserve que ceux
+      qui réussissent (les IDs en échec sont écartés).
+    - Si après les IDs initiaux il manque des variantes pour atteindre
+      ``generate_count``, tire de nouveaux IDs aléatoires (``random.randint``)
+      jusqu'à atteindre le compte voulu ou dépasser ``max_errors`` échecs.
+    - ``generate_variants`` est mis à jour avec uniquement les IDs conservés.
+    - Retourne ``(success, failed)`` : IDs réussis et IDs en échec.
+    """
     import random
 
     # Vider les anciennes variantes (sauf layouts 'p' et 'l') avant nouvelle génération
@@ -848,34 +913,51 @@ def generate_all(project: Project,
         if k not in ("p", "l"):
             del project.variants[k]
 
-    if not project.settings.generate_variants:
-        count = project.settings.generate_count
-        ids = [random.randint(0, 4095) for _ in range(count)]
-        project.settings.generate_variants = ";".join(str(i) for i in ids)
+    count = project.settings.generate_count
+    # IDs initiaux : ceux saisis par l'utilisateur (ou tirés si vide).
+    raw = [x for x in project.settings.generate_variants.split(";") if x]
+    if raw:
+        variant_ids = [int(x) for x in raw]
+    else:
+        variant_ids = [random.randint(0, 4095) for _ in range(count)]
 
-    variant_ids = [int(x) for x in project.settings.generate_variants.split(";") if x]
     error_count = 0
     failed: list[int] = []
     success: list[int] = []  # Liste des IDs qui ont réellement réussi
-    page_index = 0
+    seen: set[int] = set()  # IDs déjà tentés (évite les doublons aléatoires)
 
-    while page_index < len(variant_ids):
-        variant_id = variant_ids[page_index]
+    # 1) Tester les IDs initiaux (sans dépasser le compte souhaité).
+    for variant_id in variant_ids:
+        if len(success) >= count:
+            break
+        if variant_id in seen:
+            continue
+        seen.add(variant_id)
         try:
             variant = generate_variant(project, variant_id)
             project.variants[str(variant_id)] = variant
             success.append(variant_id)
-            page_index += 1
         except GenerateError:
             error_count += 1
             failed.append(variant_id)
             if error_count >= max_errors:
                 break
-            if retry:
-                variant_ids[page_index] = random.randint(0, 4095)
-            else:
-                page_index += 1
 
-    # Stocker TOUS les IDs (succès + remplacements) pour la prochaine génération
-    project.settings.generate_variants = ";".join(str(i) for i in variant_ids)
+    # 2) Compléter aléatoirement jusqu'à atteindre le compte souhaité.
+    if retry and error_count < max_errors:
+        while len(success) < count and error_count < max_errors:
+            variant_id = random.randint(0, 4095)
+            if variant_id in seen:
+                continue
+            seen.add(variant_id)
+            try:
+                variant = generate_variant(project, variant_id)
+                project.variants[str(variant_id)] = variant
+                success.append(variant_id)
+            except GenerateError:
+                error_count += 1
+                failed.append(variant_id)
+
+    # Ne conserver que les IDs réussis dans le paramètre.
+    project.settings.generate_variants = ";".join(str(i) for i in success)
     return success, failed

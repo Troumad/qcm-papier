@@ -137,9 +137,11 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant,
     c.setFont("Helvetica", 12)
     for text in variant.texts:
         if text.get("center"):
-            c.setFont("Helvetica", 7)
-            # Centrage vertical dans les cercles
-            c.drawCentredString(text["x"] * mm, to_pdf_y(text["y"]) - 1 * mm,
+            c.setFont("Helvetica", 6)
+            # Centrage vertical dans les cercles. Police plus petite que
+            # les labels d'identification : on remonte légèrement la baseline
+            # pour compenser l'espace sous la baseline (centre optique).
+            c.drawCentredString(text["x"] * mm, to_pdf_y(text["y"]) - 0.6 * mm,
                                 text.get("t", ""))
             c.setFont("Helvetica", 12)
         elif text.get("i"):
@@ -176,6 +178,16 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant,
         y = to_pdf_y(rect.get("y", 0))  # Coin haut-gauche pour encadrer correctement
         c.rect(x, y, rect.get("w", 0) * mm, -rect.get("h", 0) * mm,
                stroke=1, fill=0)
+
+    # Lignes de séparation pointillées (entre questions empilées).
+    c.setLineWidth(0.2)
+    for line in variant.lines:
+        x = line.get("x", 0) * mm
+        y = to_pdf_y(line.get("y", 0))
+        w = line.get("w", 0) * mm
+        c.setDash(0.5, 0.5)
+        c.line(x, y, x + w, y)
+    c.setDash()
         
 def generate_pdf(project: Project, output: str | IO[bytes] | None = None,
                  per_student: bool = False) -> bytes:

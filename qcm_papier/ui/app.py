@@ -587,22 +587,24 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.spin_count.set_value(self.project.settings.generate_count)
         self.entry_variants = Gtk.Entry()
         self.entry_variants.set_placeholder_text("Ids variantes (séparés par ;)")
+        self.entry_variants.set_hexpand(True)
+        self.entry_variants.set_width_chars(60)
         grid.attach(Gtk.Label(label="Nombre d'étudiants :"), 0, 0, 1, 1)
         grid.attach(self.spin_students, 1, 0, 1, 1)
         grid.attach(Gtk.Label(label="Nombre de variantes :"), 2, 0, 1, 1)
         grid.attach(self.spin_count, 3, 0, 1, 1)
-        grid.attach(Gtk.Label(label="Ids variantes :"), 4, 0, 1, 1)
-        grid.attach(self.entry_variants, 5, 0, 3, 1)
+        grid.attach(Gtk.Label(label="Ids variantes :"), 0, 1, 1, 1)
+        grid.attach(self.entry_variants, 1, 1, 6, 1)
         box.append(grid)
 
         # Boutons
         btn_generate = Gtk.Button(label="Générer les variantes")
         btn_generate.connect("clicked", self._on_generate_variants)
-        grid.attach(btn_generate,1,1,2,1)
+        grid.attach(btn_generate, 1, 2, 2, 1)
 
         btn_pdf = Gtk.Button(label="      Générer le PDF      ")
         btn_pdf.connect("clicked", self._on_generate_pdf)
-        grid.attach(btn_pdf,4,1,3,1)
+        grid.attach(btn_pdf, 4, 2, 3, 1)
 
         self.generate_status = Gtk.Label(label="")
         box.append(self.generate_status)
@@ -1113,9 +1115,8 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         success, failed = generator.generate_all(self.project, retry=True)
 
-        # Stocker TOUS les IDs (succès + échecs + remplacements)
-        all_ids = success + failed
-        self.entry_variants.set_text(";".join(str(i) for i in all_ids))
+        # Ne conserver que les IDs réussis (déjà stockés dans generate_variants).
+        self.entry_variants.set_text(self.project.settings.generate_variants)
 
         # Message
         msg = f"{len(success)} variantes générées."
@@ -1128,10 +1129,15 @@ class QcmWindow(Gtk.ApplicationWindow):
         if not variant_keys:
             self.generate_status.set_text("Aucune variante : générez d'abord les variantes.")
             return
-        name = self.project.settings.evaluation_short or "sujet"
+        # Nom par défaut : dérivé du nom du projet (sans extension) si un
+        # chemin de projet est connu, sinon evaluation_short.
+        if self.project_path:
+            base = os.path.splitext(os.path.basename(self.project_path))[0]
+        else:
+            base = self.project.settings.evaluation_short or "sujet"
         path = _file_dialog(self, "Enregistrer le PDF",
                             Gtk.FileChooserAction.SAVE,
-                            initial_name=f"{name}.pdf",
+                            initial_name=f"{base}.pdf",
                             filters=[("Fichiers PDF", ["*.pdf"])])
         # Forcer l'extension .pdf si absente
         if path and not path.endswith('.pdf'):
@@ -1141,8 +1147,67 @@ class QcmWindow(Gtk.ApplicationWindow):
         try:
             pdf_writer.generate_pdf(self.project, path)
             self.generate_status.set_text(f"PDF généré : {path}")
+            # Ne conserver dans la zone que les IDs des variantes du PDF
+            # (celles réellement présentes dans project.variants).
+            variant_keys = [k for k in self.project.variants if k not in ("p", "l")]
+            self.project.settings.generate_variants = ";".join(variant_keys)
+            self.entry_variants.set_text(self.project.settings.generate_variants)
+            # Sauvegarder le JSON à côté du PDF (même nom, extension .json)
+            # pour conserver les informations de correction. Demander
+            # confirmation si le fichier existe déjà pour éviter un écrasement
+            # involontaire d'un projet antérieur.
+            json_path = os.path.splitext(path)[0] + ".json"
+            self._save_json_after_pdf(json_path)
         except Exception as e:
             self.generate_status.set_text(f"Erreur : {e}")
+
+    def _save_json_after_pdf(self, json_path: str) -> None:
+        """Sauvegarde le projet JSON à côté du PDF, avec confirmation si le
+        fichier existe déjà (GTK 4 asynchrone)."""
+        if os.path.exists(json_path):
+            dialog = Gtk.MessageDialog(
+                transient_for=self,
+                modal=True,
+                message_type=Gtk.MessageType.QUESTION,
+                buttons=Gtk.ButtonsType.NONE,
+                text="Écraser le projet existant ?",
+                secondary_text=(
+                    f"Le fichier projet suivant existe déjà :\n{json_path}\n"
+                    "Le remplacer par le projet actuel ?\n\n"
+                    "Le fichier JSON à jour est indispensable pour mener "
+                    "à bien la correction automatique : il contient les "
+                    "réponses attendues, les barèmes et les paramètres "
+                    "de chaque variante."))
+            dialog.add_buttons(
+                "Écraser", Gtk.ResponseType.YES,
+                "Ne pas enregistrer", Gtk.ResponseType.NO)
+            dialog.set_default_response(Gtk.ResponseType.NO)
+            dialog.connect("response", self._on_save_json_dialog_response, json_path)
+            dialog.present()
+        else:
+            self._do_save_json(json_path)
+
+    def _on_save_json_dialog_response(self, dialog, response, json_path: str) -> None:
+        dialog.destroy()
+        if response == Gtk.ResponseType.YES:
+            self._do_save_json(json_path)
+        else:
+            self.generate_status.set_text(
+                f"PDF généré. JSON non enregistré (annulé).")
+
+    def _do_save_json(self, json_path: str) -> None:
+        try:
+            project_mod.save_project(self.project, json_path)
+            # Le projet est maintenant synchronisé avec le disque : on
+            # mémorise la sauvegarde pour ne pas redemander à la fermeture.
+            self._dirty = False
+            if self.project_path != json_path:
+                self.project_path = json_path
+            self.generate_status.set_text(
+                f"PDF généré. Projet enregistré : {json_path}")
+        except Exception as e:
+            self.generate_status.set_text(
+                f"PDF généré. Erreur enregistrement JSON : {e}")
 
     # ------------------------------------------------------------------
     # Onglet Correction
@@ -2171,6 +2236,10 @@ class QcmWindow(Gtk.ApplicationWindow):
             self.generate_status.set_text(f"Projet chargé : {path}")
             if hasattr(self, "file_status"):
                 self.file_status.set_text(f"Projet chargé : {path}")
+            # Les remplissages de widgets ci-dessus déclenchent des signaux
+            # « changed »/« value-changed » qui marquent le projet comme modifié.
+            # On remet _dirty à False maintenant que le chargement est terminé.
+            self._dirty = False
 
         except Exception as e:
             self.generate_status.set_text(f"Erreur : {e}")
