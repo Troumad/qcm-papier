@@ -1153,16 +1153,53 @@ class QcmWindow(Gtk.ApplicationWindow):
             self.project.settings.generate_variants = ";".join(variant_keys)
             self.entry_variants.set_text(self.project.settings.generate_variants)
             # Sauvegarder le JSON à côté du PDF (même nom, extension .json)
-            # pour conserver les informations de correction.
+            # pour conserver les informations de correction. Demander
+            # confirmation si le fichier existe déjà pour éviter un écrasement
+            # involontaire d'un projet antérieur.
             json_path = os.path.splitext(path)[0] + ".json"
-            try:
-                project_mod.save_project(self.project, json_path)
-                self.generate_status.set_text(
-                    f"PDF généré : {path} — Projet : {json_path}")
-            except Exception as e:
-                self.generate_status.set_text(f"PDF généré : {path} — Erreur JSON : {e}")
+            self._save_json_after_pdf(json_path)
         except Exception as e:
             self.generate_status.set_text(f"Erreur : {e}")
+
+    def _save_json_after_pdf(self, json_path: str) -> None:
+        """Sauvegarde le projet JSON à côté du PDF, avec confirmation si le
+        fichier existe déjà (GTK 4 asynchrone)."""
+        if os.path.exists(json_path):
+            dialog = Gtk.MessageDialog(
+                transient_for=self,
+                modal=True,
+                message_type=Gtk.MessageType.QUESTION,
+                buttons=Gtk.ButtonsType.NONE,
+                text="Écraser le projet existant ?",
+                secondary_text=(
+                    f"Le fichier projet suivant existe déjà :\n{json_path}\n"
+                    "Le remplacer par le projet actuel (avec les informations "
+                    "de correction) ?"))
+            dialog.add_buttons(
+                "Écraser", Gtk.ResponseType.YES,
+                "Ne pas enregistrer", Gtk.ResponseType.NO)
+            dialog.set_default_response(Gtk.ResponseType.NO)
+            dialog.connect("response", self._on_save_json_dialog_response, json_path)
+            dialog.present()
+        else:
+            self._do_save_json(json_path)
+
+    def _on_save_json_dialog_response(self, dialog, response, json_path: str) -> None:
+        dialog.destroy()
+        if response == Gtk.ResponseType.YES:
+            self._do_save_json(json_path)
+        else:
+            self.generate_status.set_text(
+                f"PDF généré. JSON non enregistré (annulé).")
+
+    def _do_save_json(self, json_path: str) -> None:
+        try:
+            project_mod.save_project(self.project, json_path)
+            self.generate_status.set_text(
+                f"PDF généré. Projet enregistré : {json_path}")
+        except Exception as e:
+            self.generate_status.set_text(
+                f"PDF généré. Erreur enregistrement JSON : {e}")
 
     # ------------------------------------------------------------------
     # Onglet Correction
