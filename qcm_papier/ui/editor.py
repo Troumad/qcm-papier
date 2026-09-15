@@ -41,12 +41,24 @@ class StructureEditor(Gtk.Box):
         toolbar.append(self.label_interval)
 
         # Liste des exercices
-        self.store = Gtk.TreeStore(str, str, object)
+        self.store = Gtk.TreeStore(str, str, object, str, str)  # label, kind, obj, up, down
         self.tree = Gtk.TreeView(model=self.store)
         self.tree.set_headers_visible(False)
         renderer = Gtk.CellRendererText()
         col = Gtk.TreeViewColumn("Structure", renderer, markup=0)
+        col.set_expand(True)
         self.tree.append_column(col)
+        # Colonnes flèches ↑/↓ pour réordonner.
+        up_renderer = Gtk.CellRendererText()
+        up_renderer.set_property("xalign", 1.0)
+        up_col = Gtk.TreeViewColumn("↑", up_renderer, markup=3)
+        up_col.set_clickable(True)
+        self.tree.append_column(up_col)
+        down_renderer = Gtk.CellRendererText()
+        down_renderer.set_property("xalign", 1.0)
+        down_col = Gtk.TreeViewColumn("↓", down_renderer, markup=4)
+        down_col.set_clickable(True)
+        self.tree.append_column(down_col)
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
         scroll.set_hexpand(True)
@@ -62,6 +74,11 @@ class StructureEditor(Gtk.Box):
         self.selection = self.tree.get_selection()
         self.selection.connect("changed", self._on_selection_changed)
         self.tree.connect("row-activated", self._on_row_activated)
+        # Clic simple sur une flèche ↑/↓ : déplacement immédiat
+        click_gesture = Gtk.GestureClick()
+        click_gesture.set_button(0)  # tous les boutons
+        click_gesture.connect("pressed", self._on_tree_clicked)
+        self.tree.add_controller(click_gesture)
 
         self.current_popover = None
 
@@ -131,19 +148,27 @@ class StructureEditor(Gtk.Box):
             self.store.freeze_notify()
             self.store.clear()
 
+            n_ex = len(self.project.structure)
             selected_iter = None
             for i, exercise in enumerate(self.project.structure):
                 ex_min, ex_max = exercise.get_mark_range()
                 ex_label = f"Exercice {i+1} : {exercise.name} {ex_min:.1f} 🡕 {ex_max:.1f}"
-                ex_iter = self.store.append(None, [ex_label, "exercise", exercise])
+                ex_up = "↑" if i > 0 else ""
+                ex_down = "↓" if i < n_ex - 1 else ""
+                ex_iter = self.store.append(
+                    None, [ex_label, "exercise", exercise, ex_up, ex_down])
 
                 if selected_obj is exercise:
                     selected_iter = ex_iter
 
+                n_q = len(exercise.questions)
                 for j, question in enumerate(exercise.questions):
+                    q_up = "↑" if j > 0 else ""
+                    q_down = "↓" if j < n_q - 1 else ""
                     q_iter = self.store.append(
                         ex_iter,
-                        [self._question_label(j, question), "question", question])
+                        [self._question_label(j, question), "question",
+                         question, q_up, q_down])
 
                     if selected_obj is question:
                         selected_iter = q_iter
@@ -389,15 +414,72 @@ class StructureEditor(Gtk.Box):
             ex.index = i
         self._schedule_update()
 
+    def _on_tree_clicked(self, gesture, n_press, x, y):
+        """Clic simple : déplace l'élément si on clique sur une flèche.
+
+        ``row-activated`` ne se déclenche qu'au double-clic ; on gère donc le
+        clic simple ici pour un réordonnancement immédiat et intuitif.
+        """
+        if self._updating:
+            return
+        result = self.tree.get_path_at_pos(int(x), int(y))
+        if not result:
+            return
+        path, column, _cx, _cy = result
+        if column is not self.up_col and column is not self.down_col:
+            return
+        model = self.store
+        treeiter = model.get_iter(path)
+        if not treeiter:
+            return
+        kind = model[treeiter][1]
+        obj = model[treeiter][2]
+        delta = -1 if column is self.up_col else +1
+        if kind == "exercise":
+            self._move_exercise(obj, delta)
+        else:
+            ex_of_q = self._exercise_of_question(obj)
+            if ex_of_q is not None:
+                self._move_question(ex_of_q, obj, delta)
+
     def _on_row_activated(self, treeview, path, column):
-        """Gère le double-clic sur une ligne."""
+        """Gère le clic sur une ligne.
+
+        Un clic (ou double-clic) sur une colonne flèche (↑/↓) déplace
+        l'exercice ou la question correspondante ; sinon, sur une question,
+        on ouvre le menu des choix.
+        """
         model = treeview.get_model()
         treeiter = model.get_iter(path)
-        if treeiter:
-            kind = model[treeiter][1]
-            obj = model[treeiter][2]
-            if kind == "question":
-                self._show_choice_menu(treeview, path, column, obj)
+        if not treeiter:
+            return
+        kind = model[treeiter][1]
+        obj = model[treeiter][2]
+        if column is self.up_col:
+            if kind == "exercise":
+                self._move_exercise(obj, -1)
+            else:
+                ex_of_q = self._exercise_of_question(obj)
+                if ex_of_q is not None:
+                    self._move_question(ex_of_q, obj, -1)
+            return
+        if column is self.down_col:
+            if kind == "exercise":
+                self._move_exercise(obj, +1)
+            else:
+                ex_of_q = self._exercise_of_question(obj)
+                if ex_of_q is not None:
+                    self._move_question(ex_of_q, obj, +1)
+            return
+        if kind == "question":
+            self._show_choice_menu(treeview, path, column, obj)
+
+    def _exercise_of_question(self, question):
+        """Retrouve l'exercice contenant une question donnée."""
+        for ex in self.project.structure:
+            if question in ex.questions:
+                return ex
+        return None
 
     def _show_choice_menu(self, treeview, path, column, question):
         """Affiche le menu pour modifier les états des choix.
@@ -600,19 +682,6 @@ class StructureEditor(Gtk.Box):
         header_row.append(header_validate_btn)
         self.props_box.append(header_row)
 
-        # Boutons pour réordonner l'exercice (monter/descendre).
-        ex_index = self.project.structure.index(exercise)
-        btn_order_ex = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        btn_up_ex = Gtk.Button(label="↑", tooltip_text="Monter l'exercice")
-        btn_up_ex.set_sensitive(ex_index > 0)
-        btn_up_ex.connect("clicked", lambda _b: self._move_exercise(exercise, -1))
-        btn_order_ex.append(btn_up_ex)
-        btn_down_ex = Gtk.Button(label="↓", tooltip_text="Descendre l'exercice")
-        btn_down_ex.set_sensitive(ex_index < len(self.project.structure) - 1)
-        btn_down_ex.connect("clicked", lambda _b: self._move_exercise(exercise, +1))
-        btn_order_ex.append(btn_down_ex)
-        self.props_box.append(btn_order_ex)
-
         btn_box_q = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         btn_add_q = Gtk.Button(label="Ajouter une question")
         btn_add_q.connect("clicked", lambda _b: self.add_question(exercise))
@@ -666,25 +735,6 @@ class StructureEditor(Gtk.Box):
         row.append(name)
         row.append(validate_btn)
         self.props_box.append(row)
-
-        # Boutons pour réordonner la question (monter/descendre).
-        ex_of_q = None
-        for ex in self.project.structure:
-            if question in ex.questions:
-                ex_of_q = ex
-                break
-        if ex_of_q is not None:
-            q_index = ex_of_q.questions.index(question)
-            btn_order_q = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-            btn_up_q = Gtk.Button(label="↑", tooltip_text="Monter la question")
-            btn_up_q.set_sensitive(q_index > 0)
-            btn_up_q.connect("clicked", lambda _b: self._move_question(ex_of_q, question, -1))
-            btn_order_q.append(btn_up_q)
-            btn_down_q = Gtk.Button(label="↓", tooltip_text="Descendre la question")
-            btn_down_q.set_sensitive(q_index < len(ex_of_q.questions) - 1)
-            btn_down_q.connect("clicked", lambda _b: self._move_question(ex_of_q, question, +1))
-            btn_order_q.append(btn_down_q)
-            self.props_box.append(btn_order_q)
 
         # 🔧 Gain, Malus et boutons sur la même ligne
         line_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
