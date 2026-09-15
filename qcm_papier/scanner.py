@@ -1495,16 +1495,18 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
         img_name = None
         if page.img is not None and page.img.img is not None:
             base_name = os.path.splitext(os.path.basename(copy_path))[0]
-            # Nommer l'image avec l'ID étudiant si disponible (ex: p8789999),
-            # sinon numérotation à partir de 1 pour lisibilité.
+            # Nommer l'image avec l'ID étudiant et le nom du fichier source
+            # (paquet) pour distinguer deux étudiants de paquets différents
+            # qui auraient le même numéro (ex: p8789999_sujet_6.png).
+            # Sans ID étudiant, numérotation simple à partir de 1.
             if page.student_id:
-                img_name = f"{page.student_id}_{page_index + 1}.png"
+                img_name = f"{page.student_id}_{base_name}_{page_index + 1}.png"
             else:
                 img_name = f"{base_name}_{page_index + 1}.png"
             n = 1
             while img_name in used_names:
                 if page.student_id:
-                    img_name = f"{page.student_id}_{page_index + 1}_{n}.png"
+                    img_name = f"{page.student_id}_{base_name}_{page_index + 1}_{n}.png"
                 else:
                     img_name = f"{base_name}_{page_index + 1}_{n}.png"
                 n += 1
