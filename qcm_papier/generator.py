@@ -698,6 +698,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         questions_rects: list[dict] = []
         questions_circles: list[dict] = []
         questions_marks: list[dict] = []
+        questions_lines: list[dict] = []
 
         # Nom de l'exercice.
         questions_texts.append({"x": 2, "y": 5, "t": exercise.get("name", "")})
@@ -768,6 +769,14 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
                 # cadre ni après la dernière question).
                 if question_y > question_y_first:
                     question_y += QUESTION_GAP
+                    # Ligne pointillée de séparation dans l'espace du gap.
+                    _line_w = exercise_width - 2
+                    if question_x > 0:
+                        _line_w = exercise_width - question_x - 2
+                    if _line_w > 0:
+                        questions_lines.append({
+                            "x": question_x + 1, "y": question_y,
+                            "w": _line_w, "dash": True})
                 if question_y + qh > layout.barcode_top - exercise_y:
                     question_x = exercise_width
                     question_y = question_y_first
@@ -871,6 +880,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             _merge_arrays(variant.rects, questions_rects, place_x, place_y)
             _merge_arrays(variant.circles, questions_circles, place_x, place_y)
             _merge_arrays(variant.marks, questions_marks, place_x, place_y)
+            _merge_arrays(variant.lines, questions_lines, place_x, place_y)
 
         exercise_iter += 1
 
