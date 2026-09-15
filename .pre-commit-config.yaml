@@ -1,0 +1,20 @@
+# Vérifications lancées avant chaque commit.
+# Installation : pip install -e ".[dev]" puis pre-commit install
+#
+# ruff-format n'est pas encore activé : il reformaterait des fichiers entiers
+# à chaque modification. Il le sera après le commit de nettoyage global.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-toml
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=2000"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff

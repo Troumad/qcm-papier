@@ -104,6 +104,33 @@ git pull origin travail
 
 (Sans le mode `-e`, refaites `pip install -e ".[gui]"`.)
 
+#### Vérifications avant commit
+
+Les outils de vérification (tests, Ruff, pre-commit) s'installent avec :
+
+```bash
+pip install -e ".[dev]"
+pre-commit install
+```
+
+Chaque `git commit` lance alors les vérifications automatiquement. Pour les
+lancer à la main :
+
+```bash
+pre-commit run --all-files
+pytest -q
+```
+
+GTK n'est pas nécessaire pour ces vérifications. Pour utiliser aussi
+l'interface graphique, installez `.[gui,dev]` avec les prérequis GTK ci-dessus.
+
+Les mêmes vérifications tournent sur GitHub (onglet **Actions**) à chaque push
+et à chaque pull request, avec les tests sur Python 3.10 et 3.12.
+Ruff bloque uniquement certaines erreurs de code (notamment les noms non
+définis) ; les règles étendues et le formatage restent informatifs.
+Le test utilisant `math/2026/correction3.pdf` est signalé comme ignoré si
+les données locales sont absentes, et exécuté normalement lorsqu'elles sont présentes.
+
 ---
 
 ## 3. Lancer le programme depuis l'explorateur de fichiers
