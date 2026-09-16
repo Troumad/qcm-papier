@@ -11,6 +11,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PDF = os.path.join(REPO, "math", "2026", "correction3.pdf")
 PROJECT = os.path.join(REPO, "math", "2026", "OML1_bis.json")
 
+
 def _wait(session: Session, timeout: float = 120.0) -> None:
     start = time.monotonic()
     while session.job.running:

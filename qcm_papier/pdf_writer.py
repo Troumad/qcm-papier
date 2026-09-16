@@ -21,15 +21,18 @@ from .model import Layout, Project, Variant
 # Format ReportLab : 'A3', 'A4', 'A5' en majuscule.
 _REPORTLAB_FORMATS = {"a3": "A3", "a4": "A4", "a5": "A5"}
 
+
 def _page_size(layout: Layout) -> tuple[float, float]:
     """Taille de page ReportLab (largeur, hauteur en points) selon le layout."""
     fmt = _REPORTLAB_FORMATS.get(layout.paper_format, "A4")
     from reportlab.lib.pagesizes import A3, A4, A5, landscape, portrait
+
     sizes = {"A3": A3, "A4": A4, "A5": A5}
     base = sizes[fmt]
     if layout.orientation == "l":
         return landscape(base)
     return portrait(base)
+
 
 def _draw_code39(c: canvaslib.Canvas, variant: Variant, layout: Layout) -> None:
     """Dessine le code-barres Code 39 de la variante."""
@@ -48,10 +51,12 @@ def _draw_code39(c: canvaslib.Canvas, variant: Variant, layout: Layout) -> None:
             bar_left += width
         bar_left += res  # espace inter-caractère
 
+
 def _reverse_lines(text: str) -> str:
     """Inverse l'ordre des lignes (pied de page)."""
     lines = text.split("\n")
     return "\n".join(reversed(lines))
+
 
 def _draw_header_footer(c: canvaslib.Canvas, layout: Layout) -> None:
     """Dessine l'en-tête (en haut) et le pied de page (en bas, lignes inversées)."""
@@ -68,31 +73,29 @@ def _draw_header_footer(c: canvaslib.Canvas, layout: Layout) -> None:
 
     # En-tête (avec décalage vertical pour éviter la superposition)
     if layout.header_left:
-        lines = layout.header_left.split('\n')
+        lines = layout.header_left.split("\n")
         for i, line in enumerate(lines):
             y = (page_h - margin_top - i * line_height_mm) * mm
             c.drawString(margin_left * mm, y, line.strip())
     if layout.header_middle:
-        lines = layout.header_middle.split('\n')
+        lines = layout.header_middle.split("\n")
         for i, line in enumerate(lines):
             y = (page_h - margin_top - i * line_height_mm) * mm
             c.drawCentredString(center * mm, y, line.strip())
     if layout.header_right:
-        lines = layout.header_right.split('\n')
+        lines = layout.header_right.split("\n")
         for i, line in enumerate(lines):
             y = (page_h - margin_top - i * line_height_mm) * mm
             c.drawRightString((page_w - margin_right) * mm, y, line.strip())
 
     # Pied de page (lignes inversées)
     if layout.footer_left:
-        c.drawString(margin_left * mm, margin_bottom * mm,
-                     _reverse_lines(layout.footer_left))
+        c.drawString(margin_left * mm, margin_bottom * mm, _reverse_lines(layout.footer_left))
     if layout.footer_middle:
-        c.drawCentredString(center * mm, margin_bottom * mm,
-                            _reverse_lines(layout.footer_middle))
+        c.drawCentredString(center * mm, margin_bottom * mm, _reverse_lines(layout.footer_middle))
     if layout.footer_right:
-        c.drawRightString((page_w - margin_right) * mm, margin_bottom * mm,
-                          _reverse_lines(layout.footer_right))
+        c.drawRightString((page_w - margin_right) * mm, margin_bottom * mm, _reverse_lines(layout.footer_right))
+
 
 def _draw_shapes(c: canvaslib.Canvas, layout: Layout) -> None:
     """Dessine les 5 repères d'alignement (cercles pleins noirs)."""
@@ -102,9 +105,10 @@ def _draw_shapes(c: canvaslib.Canvas, layout: Layout) -> None:
         r = layout.shapes_r[i] * mm
         c.circle(x, y, r, stroke=0, fill=1)
 
-def _draw_variant(c: canvaslib.Canvas, variant: Variant,
-                  layout: Layout, page_height_mm: float) -> None:
+
+def _draw_variant(c: canvaslib.Canvas, variant: Variant, layout: Layout, page_height_mm: float) -> None:
     """Dessine tous les éléments d'une variante sur la page courante."""
+
     def to_pdf_y(y_mm: float) -> float:
         # Le JS utilise y croissant vers le bas ; PDF y croissant vers le haut.
         return (page_height_mm - y_mm) * mm
@@ -126,8 +130,7 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant,
                 label = chr(47 + i)
             # Centrage vertical dans les cercles
             c.drawCentredString(x * mm, to_pdf_y(y) - 1 * mm, label)
-            if ((j > 0 and len(variant.id_lines) == 11)
-                    or (i > 0 and len(variant.id_columns) == 11)):
+            if (j > 0 and len(variant.id_lines) == 11) or (i > 0 and len(variant.id_columns) == 11):
                 c.setStrokeColorRGB(0, 0, 0)
                 c.setLineWidth(0.2)
                 c.circle(x * mm, to_pdf_y(y), 2.3 * mm, stroke=1, fill=0)
@@ -140,8 +143,7 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant,
             # Centrage vertical dans les cercles. Police plus petite que
             # les labels d'identification : on remonte légèrement la baseline
             # pour compenser l'espace sous la baseline (centre optique).
-            c.drawCentredString(text["x"] * mm, to_pdf_y(text["y"]) - 0.6 * mm,
-                                text.get("t", ""))
+            c.drawCentredString(text["x"] * mm, to_pdf_y(text["y"]) - 0.6 * mm, text.get("t", ""))
             c.setFont("Helvetica", 12)
         elif text.get("i"):
             # Texte en italique (introduction/header)
@@ -172,8 +174,7 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant,
     for rect in variant.rects:
         x = rect.get("x", 0) * mm
         y = to_pdf_y(rect.get("y", 0))  # Coin haut-gauche pour encadrer correctement
-        c.rect(x, y, rect.get("w", 0) * mm, -rect.get("h", 0) * mm,
-               stroke=1, fill=0)
+        c.rect(x, y, rect.get("w", 0) * mm, -rect.get("h", 0) * mm, stroke=1, fill=0)
 
     # Lignes de séparation pointillées (entre questions empilées).
     c.setLineWidth(0.2)
@@ -184,9 +185,9 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant,
         c.setDash(0.5, 0.5)
         c.line(x, y, x + w, y)
     c.setDash()
-        
-def generate_pdf(project: Project, output: str | IO[bytes] | None = None,
-                 per_student: bool = False) -> bytes:
+
+
+def generate_pdf(project: Project, output: str | IO[bytes] | None = None, per_student: bool = False) -> bytes:
     """Génère le PDF sujet pour toutes les variantes du projet."""
     from reportlab.lib.pagesizes import A4, landscape
 
@@ -194,10 +195,9 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None,
     for k in project.variants.keys():
         if k not in ("p", "l"):
             variant_ids.append(k)
-    
+
     if not variant_ids:
-        raise ValueError("Aucune variante à générer : lancez d'abord la "
-                         "génération des variantes.")
+        raise ValueError("Aucune variante à générer : lancez d'abord la " "génération des variantes.")
 
     copy_count = project.settings.generate_students if per_student else len(variant_ids)
 
@@ -226,15 +226,15 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None,
 
         # ✅ NOUVELLE LIGNE : Rotation anti-trigonométrique (90°)
         # c.setPageRotation(90)
-        
+
         # 3. Nommer la page avec numéro de page et ID de variante
         page_number = i + 1
         c.setTitle(f"Page {page_number} - Variante {variant_id}")
-        
+
         # 4. Dessin sur la page courante
         _draw_header_footer(c, layout)
         _draw_variant(c, variant, layout, layout.page_height)
-        
+
         # 5. On valide la page (sauf si c'est la toute dernière, géré par le save)
         if i < copy_count - 1:
             c.showPage()
