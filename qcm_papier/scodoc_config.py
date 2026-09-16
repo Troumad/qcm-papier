@@ -63,7 +63,7 @@ def _keyring():
     backend = keyring.get_keyring()
     candidates = backend.backends if isinstance(backend, chainer.ChainerBackend) else [backend]
     for candidate in candidates:
-        if not isinstance(candidate, (fail.Keyring, null.Keyring)) and not type(candidate).__module__.startswith(
+        if not isinstance(candidate, fail.Keyring | null.Keyring) and not type(candidate).__module__.startswith(
             "keyrings.alt"
         ):
             return candidate

@@ -64,7 +64,7 @@ def test_load_students_table_colonnes_manquantes(tmp_path):
     wb.save(str(path))
     try:
         scodoc.load_students_table(str(path))
-        assert False, "Devrait lever une erreur"
+        raise AssertionError("Devrait lever une erreur")
     except ValueError as e:
         assert "etudid" in str(e)
 

@@ -51,7 +51,7 @@ def normalize_base_url(url: str) -> str:
     url = (url or "").strip().rstrip("/")
     try:
         parts = urllib.parse.urlsplit(url)
-        parts.port  # Valide aussi un éventuel port saisi.
+        _ = parts.port  # Cette propriété valide le port et peut lever ValueError.
     except ValueError as exc:
         raise ScoDocError("Adresse ScoDoc invalide.") from exc
     if parts.scheme not in ("http", "https") or not parts.netloc:

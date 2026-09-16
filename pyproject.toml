@@ -32,6 +32,7 @@ web = [
 ]
 test = [
     "pytest>=7.0",
+    "coverage==7.16.1",
     "httpx>=0.28",
     "fastapi>=0.141",
     "uvicorn>=0.53",
@@ -41,6 +42,7 @@ test = [
 dev = [
     "qcm-papier[test]",
     "ruff==0.6.9",
+    "bandit[toml]==1.9.4",
     "pre-commit>=3.5",
 ]
 
@@ -62,5 +64,28 @@ target-version = "py310"
 line-length = 120
 
 [tool.ruff.lint]
-# Erreurs bloquantes et détection des imports, redéfinitions et variables inutilisés.
-select = ["E9", "F63", "F7", "F82", "F401", "F811", "F841"]
+select = ["E", "W", "F", "I", "B", "UP", "SIM"]
+ignore = [
+    "E501",    # Le formateur gère les retours à la ligne au mieux.
+    "SIM105",  # Les blocs try/except explicites restent lisibles.
+    "SIM108",  # Les if/else explicites sont acceptés.
+]
+
+[tool.ruff.lint.per-file-ignores]
+# GTK exige gi.require_version avant les imports de gi.repository.
+"qcm_papier/ui/*.py" = ["E402"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Marqueurs FastAPI déclaratifs, évalués lors de la définition des routes.
+extend-immutable-calls = ["fastapi.File", "fastapi.Form", "fastapi.Body"]
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["qcm_papier"]
+
+[tool.coverage.report]
+precision = 1
+show_missing = true

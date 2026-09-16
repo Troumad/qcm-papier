@@ -33,6 +33,7 @@ def test_commandes_reservees_a_application_locale(client):
 
 def test_aide_du_paquet_installe(client, monkeypatch):
     from email.message import Message
+
     from qcm_papier.web import server
 
     installed_metadata = Message()

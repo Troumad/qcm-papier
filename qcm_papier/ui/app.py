@@ -22,9 +22,10 @@ import os
 import gi
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gtk, Gdk, GLib
+from gi.repository import Gdk, GLib, Gtk
 
-from .. import generator, pdf_writer, project as project_mod, scanner, scodoc
+from .. import generator, pdf_writer, scanner, scodoc
+from .. import project as project_mod
 from ..marking import score_page
 from ..model import Project
 from .editor import StructureEditor
@@ -532,11 +533,9 @@ class QcmWindow(Gtk.ApplicationWindow):
             self.margin_bottom_spin,
         ]
         for w in info_widgets:
-            if isinstance(w, (Gtk.Entry,)):
+            if isinstance(w, Gtk.Entry | Gtk.ComboBoxText):
                 w.connect("changed", self._mark_dirty)
-            elif isinstance(w, (Gtk.ComboBoxText,)):
-                w.connect("changed", self._mark_dirty)
-            elif isinstance(w, (Gtk.SpinButton,)):
+            elif isinstance(w, Gtk.SpinButton):
                 w.connect("value-changed", self._mark_dirty)
 
     # ------------------------------------------------------------------
@@ -883,7 +882,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             ("question_dir", self.question_dir_combo, "question_dir_left", "question_dir_top", "question_dir_both"),
             ("choice_dir", self.choice_dir_combo, "choice_dir_left", "choice_dir_top", "choice_dir_both"),
         ]
-        for group, combo, left_attr, top_attr, both_attr in dir_groups:
+        for _group, combo, left_attr, top_attr, both_attr in dir_groups:
             # Vérifier que TOUS les attributs existent
             for attr in (left_attr, top_attr, both_attr):
                 if not hasattr(settings, attr):
@@ -924,7 +923,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             ),
             ("choice_new", self.choice_new_combo, "choice_new_never", "choice_new_always", "choice_new_sometimes"),
         ]
-        for group, combo, never_attr, always_attr, sometimes_attr in new_groups:
+        for _group, combo, never_attr, always_attr, sometimes_attr in new_groups:
             for attr in (never_attr, always_attr, sometimes_attr):
                 if not hasattr(settings, attr):
                     raise AttributeError(
@@ -1028,7 +1027,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                 "choice_order_sometimes",
             ),
         ]
-        for group, combo, never_attr, always_attr, sometimes_attr in order_groups:
+        for _group, combo, never_attr, always_attr, sometimes_attr in order_groups:
             for attr in (never_attr, always_attr, sometimes_attr):
                 if not hasattr(settings, attr):
                     raise AttributeError(
@@ -1065,7 +1064,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             ("question_dir", self.question_dir_combo, "question_dir_left", "question_dir_top", "question_dir_both"),
             ("choice_dir", self.choice_dir_combo, "choice_dir_left", "choice_dir_top", "choice_dir_both"),
         ]
-        for group, combo, left_attr, top_attr, both_attr in dir_groups:
+        for _group, combo, left_attr, top_attr, both_attr in dir_groups:
             active = combo.get_active()
             # Réinitialiser tous les booléens à False
             setattr(settings, left_attr, False)
@@ -1097,7 +1096,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             ),
             ("choice_new", self.choice_new_combo, "choice_new_never", "choice_new_always", "choice_new_sometimes"),
         ]
-        for group, combo, never_attr, always_attr, sometimes_attr in new_groups:
+        for _group, combo, never_attr, always_attr, sometimes_attr in new_groups:
             active = combo.get_active()
             setattr(settings, never_attr, False)
             setattr(settings, always_attr, False)
@@ -1183,7 +1182,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                 "choice_order_sometimes",
             ),
         ]
-        for group, combo, never_attr, always_attr, sometimes_attr in order_groups:
+        for _group, combo, never_attr, always_attr, sometimes_attr in order_groups:
             active = combo.get_active()
             setattr(settings, never_attr, False)
             setattr(settings, always_attr, False)
@@ -1283,7 +1282,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         if response == Gtk.ResponseType.YES:
             self._do_save_json(json_path)
         else:
-            self.generate_status.set_text(f"PDF généré. JSON non enregistré (annulé).")
+            self.generate_status.set_text("PDF généré. JSON non enregistré (annulé).")
 
     def _do_save_json(self, json_path: str) -> None:
         try:
@@ -1437,7 +1436,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         path = _help_markdown_path()
         if path:
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     buf.set_text(f.read())
             except Exception as e:
                 buf.set_text(f"Impossible de charger l'aide ({path}) : {e}")
@@ -1469,9 +1468,9 @@ class QcmWindow(Gtk.ApplicationWindow):
         lbl_ok = Gtk.Label(label="")
         lbl_err = Gtk.Label(label="")
         lbl_rest = Gtk.Label(label="")
-        for l, css in [(lbl_ok, "prog_ok"), (lbl_err, "prog_err"), (lbl_rest, "prog_rest")]:
-            l.get_style_context().add_class(css)
-            bar.append(l)
+        for label, css in [(lbl_ok, "prog_ok"), (lbl_err, "prog_err"), (lbl_rest, "prog_rest")]:
+            label.get_style_context().add_class(css)
+            bar.append(label)
         row.append(bar)
         list_row = Gtk.ListBoxRow()
         list_row.set_child(row)
@@ -1832,9 +1831,10 @@ class QcmWindow(Gtk.ApplicationWindow):
             return
         # grab_focus() fait défiler le ScrolledWindow parent pour rendre la
         # ligne visible (compatible toutes versions GTK 4).
+        # Un échec du focus facultatif ne doit pas interrompre la correction.
         try:
             row.grab_focus()
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
     def _ui_flush(self) -> None:
@@ -1894,7 +1894,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             kept.append((label, page))
         self.marked_pages = kept
         self.results_store.clear()
-        for idx, (label, page) in enumerate(self.marked_pages):
+        for idx, (_label, page) in enumerate(self.marked_pages):
             fname = os.path.basename(getattr(page, "copy_path", "") or "")
             note = page.value if page.value is not None else 0.0
             failed = page.matrix_inv is None or page.variant_id is None or page.student_id is None
@@ -2178,7 +2178,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             import json as _json
 
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     _data = _json.load(f)
             except Exception as e:
                 self.marking_status.set_text(f"Erreur lecture sauvegarde : {e}")
@@ -2675,7 +2675,7 @@ class MarkedPageWindow(Gtk.Window):
             self.lbl_variant.set_text(f"Variante : {page.variant_id or '—'}")
             self.lbl_student.set_markup(f"<span color='#F00'><b>⚠ {reason}</b></span>")
             self.lbl_note.set_markup("<b><span size='large'>Note : —</span></b>")
-            self.lbl_status.set_markup(f"<span color='#F00'>Non corrigée</span>")
+            self.lbl_status.set_markup("<span color='#F00'>Non corrigée</span>")
         else:
             self.lbl_variant.set_text(f"Variante : {page.variant_id}")
             sid = page.student_id or "—"
@@ -2738,7 +2738,8 @@ class MarkedPageWindow(Gtk.Window):
         self._update_image()
 
     def _update_image(self):
-        from PIL import Image as PILImage, ImageDraw
+        from PIL import Image as PILImage
+        from PIL import ImageDraw
 
         # En mode alignement manuel, on part de l'image brute et on dessine
         # les points cliqués par-dessus pour guider l'utilisateur.
@@ -2867,9 +2868,10 @@ class MarkedPageWindow(Gtk.Window):
             return
         clair = 140
         if hasattr(self, "_parent_window") and self._parent_window is not None:
+            # Si le widget est indisponible, conserver le seuil par défaut.
             try:
                 clair = int(self._parent_window.clair_spin.get_value())
-            except Exception:
+            except Exception:  # nosec B110
                 pass
         ok = scanner.correct_with_manual_align(page, self._project, list(self._align_points), clair=clair)
         if ok:

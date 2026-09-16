@@ -1,12 +1,15 @@
 """Éditeur de structure du QCM (exercices/questions/choix) en GTK 4."""
 
 from __future__ import annotations
-from typing import Callable
+
+from collections.abc import Callable
+
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
-from gi.repository import Gtk, Gdk, GLib
+from gi.repository import Gdk, GLib, Gtk
+
 from ..model import Choice, Exercise, Project, Question
 
 
@@ -235,7 +238,7 @@ class StructureEditor(Gtk.Box):
             return
         # Retrouver l'exercice et l'index de la question.
         q_index = None
-        for i, exercise in enumerate(self.project.structure):
+        for _i, exercise in enumerate(self.project.structure):
             if question in exercise.questions:
                 q_index = exercise.questions.index(question)
                 break
@@ -244,7 +247,7 @@ class StructureEditor(Gtk.Box):
         # Reconstruire le label à partir des états courants des menus déroulants.
         q_min, q_max = question.get_mark_range()
         parts = []
-        for d, c in zip(dropdowns, question.choices):
+        for d, c in zip(dropdowns, question.choices, strict=False):
             color = self._choice_label_color(d.get_selected())
             parts.append(f'<span foreground="{color}">({c.name})</span>')
         choices_str = " ".join(parts)

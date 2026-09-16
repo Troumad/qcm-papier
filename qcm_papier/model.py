@@ -24,8 +24,8 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass, field
 from typing import Any
-from . import config
 
+from . import config
 
 # ---------------------------------------------------------------------------
 # Choix
@@ -52,7 +52,7 @@ class Choice:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "ProjectSettings":
+    def from_dict(cls, d: dict[str, Any]) -> ProjectSettings:
         """Charge les paramètres depuis un dictionnaire.
         Gère les clés avec ou sans préfixe 'pos_'."""
         final_dict = {}
@@ -108,7 +108,7 @@ class Question:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Question":
+    def from_dict(cls, d: dict[str, Any]) -> Question:
         return cls(
             index=int(d.get("index", 0)),
             name=str(d.get("name", "")),
@@ -247,7 +247,7 @@ class Exercise:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Exercise":
+    def from_dict(cls, d: dict[str, Any]) -> Exercise:
         return cls(
             index=int(d.get("index", 0)),
             name=str(d.get("name", "")),
@@ -308,7 +308,7 @@ class Layout:
         return copy.deepcopy(self.__dict__)
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Layout":
+    def from_dict(cls, d: dict[str, Any]) -> Layout:
         # On accepte un dict incomplet (layouts stockés dans variants).
         kwargs = {k: copy.deepcopy(v) for k, v in d.items()}
         # On ne garde que les champs connus.
@@ -344,7 +344,7 @@ class Variant:
         return copy.deepcopy(self.__dict__)
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Variant":
+    def from_dict(cls, d: dict[str, Any]) -> Variant:
         kwargs = {k: copy.deepcopy(v) for k, v in d.items()}
         known = {f.name for f in cls.__dataclass_fields__.values()}
         kwargs = {k: v for k, v in kwargs.items() if k in known}
@@ -377,14 +377,14 @@ class VariantStore(dict):
     def to_plain_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {}
         for key, value in self.items():
-            if isinstance(value, (Layout, Variant)):
+            if isinstance(value, Layout | Variant):
                 out[key] = value.to_dict()
             else:
                 out[key] = copy.deepcopy(value)
         return out
 
     @classmethod
-    def from_plain_dict(cls, d: dict[str, Any]) -> "VariantStore":
+    def from_plain_dict(cls, d: dict[str, Any]) -> VariantStore:
         store = cls()
         for key, value in d.items():
             if key in ("p", "l"):
@@ -550,7 +550,7 @@ class ProjectSettings:
         return result
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "ProjectSettings":
+    def from_dict(cls, d: dict[str, Any]) -> ProjectSettings:
         s = cls()
         known = s.__dict__
 
@@ -648,7 +648,7 @@ class Student:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Student":
+    def from_dict(cls, d: dict[str, Any]) -> Student:
         return cls(
             id=str(d.get("id", "")),
             eid=str(d.get("eid", "")),
@@ -681,12 +681,12 @@ class Project:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Project":
+    def from_dict(cls, d: dict[str, Any]) -> Project:
         # Gérer les anciens JSON où les champs sont à la racine
         settings_dict = d.get("settings", {})
 
         # Si pas de "settings" mais des champs info_* à la racine → ancien format
-        if not settings_dict and any(k.startswith("info_") for k in d.keys()):
+        if not settings_dict and any(k.startswith("info_") for k in d):
             # Extraire tous les champs connus + info_* pour le mapping
             known_fields = {f.name for f in ProjectSettings.__dataclass_fields__.values()}
             settings_dict = {k: v for k, v in d.items() if k.startswith("info_") or k in known_fields}

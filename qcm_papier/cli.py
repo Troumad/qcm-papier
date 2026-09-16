@@ -14,7 +14,8 @@ import os
 import sys
 from pathlib import Path
 
-from . import generator, pdf_writer, project as project_mod, scanner, scodoc
+from . import generator, pdf_writer, scanner, scodoc
+from . import project as project_mod
 
 
 def _load_project(path: str):

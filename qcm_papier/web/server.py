@@ -24,7 +24,6 @@ from .. import editing, scodoc_config
 from ..scodoc_api import ScoDocError
 from .session import Session
 
-
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(HERE, "static")
 SCODOC_DIR = os.path.join(os.path.dirname(HERE), "data", "scodoc")
