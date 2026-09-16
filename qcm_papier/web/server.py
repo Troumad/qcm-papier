@@ -166,10 +166,30 @@ def create_app(session: Session | None = None) -> FastAPI:
         editing.update_exercise(s().project.structure[e], data)
         return project_state()
 
+    @app.delete("/api/structure/exercises/{e}")
+    def exercise_remove(e: int) -> dict[str, Any]:
+        accepted = editing.remove_exercise(s().project, e)
+        return {**project_state(), "accepted": accepted}
+
+    @app.post("/api/structure/exercises/{e}/move")
+    def exercise_move(e: int, data: dict[str, int] = Body(...)) -> dict[str, Any]:
+        accepted = editing.move_exercise(s().project, e, int(data.get("delta", 0)))
+        return {**project_state(), "accepted": accepted}
+
     @app.post("/api/structure/exercises/{e}/questions")
     def question_add(e: int) -> dict[str, Any]:
         editing.add_question(s().project.structure[e])
         return project_state()
+
+    @app.delete("/api/structure/exercises/{e}/questions/{q}")
+    def question_remove(e: int, q: int) -> dict[str, Any]:
+        accepted = editing.remove_question(s().project.structure[e], q)
+        return {**project_state(), "accepted": accepted}
+
+    @app.post("/api/structure/exercises/{e}/questions/{q}/move")
+    def question_move(e: int, q: int, data: dict[str, int] = Body(...)) -> dict[str, Any]:
+        accepted = editing.move_question(s().project.structure[e], q, int(data.get("delta", 0)))
+        return {**project_state(), "accepted": accepted}
 
     @app.patch("/api/structure/exercises/{e}/questions/{q}")
     def question_update(e: int, q: int, data: dict[str, Any] = Body(...)) -> dict[str, Any]:

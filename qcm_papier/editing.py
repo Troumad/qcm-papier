@@ -79,6 +79,65 @@ def remove_choice(question: Question) -> bool:
     return True
 
 
+def remove_exercise(project: Project, index: int) -> bool:
+    """Supprime un exercice. Renvoie False s'il est le dernier du projet.
+
+    Comme dans l'éditeur GTK, un projet garde toujours au moins un exercice.
+    """
+    _check_index(project.structure, index)
+    if len(project.structure) <= 1:
+        return False
+    del project.structure[index]
+    _reindex(project.structure)
+    return True
+
+
+def remove_question(exercise: Exercise, index: int) -> bool:
+    """Supprime une question. Renvoie False si elle est la dernière de l'exercice."""
+    _check_index(exercise.questions, index)
+    if len(exercise.questions) <= 1:
+        return False
+    del exercise.questions[index]
+    _reindex(exercise.questions)
+    return True
+
+
+def move_exercise(project: Project, index: int, delta: int) -> bool:
+    """Déplace un exercice d'un cran (−1 = monter, +1 = descendre).
+
+    Renvoie False quand le déplacement sortirait de la liste.
+    """
+    return _move(project.structure, index, delta)
+
+
+def move_question(exercise: Exercise, index: int, delta: int) -> bool:
+    """Déplace une question d'un cran dans son exercice."""
+    return _move(exercise.questions, index, delta)
+
+
+def _check_index(items: list[Any], index: int) -> None:
+    """Refuse un rang hors de la liste, y compris négatif (IndexError : 404 côté web)."""
+    if not 0 <= index < len(items):
+        raise IndexError(f"Rang hors de la liste : {index}")
+
+
+def _reindex(items: list[Any]) -> None:
+    for i, item in enumerate(items):
+        item.index = i
+
+
+def _move(items: list[Any], index: int, delta: int) -> bool:
+    if delta not in (-1, 1):
+        raise ValueError(f"Déplacement d'un seul cran attendu : {delta}")
+    _check_index(items, index)
+    target = index + delta
+    if not 0 <= target < len(items):
+        return False
+    items[index], items[target] = items[target], items[index]
+    _reindex(items)
+    return True
+
+
 def set_choice_state(question: Question, choice_index: int, state: str) -> bool:
     """Change l'état d'un choix. Renvoie False si le changement est refusé.
 
