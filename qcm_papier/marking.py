@@ -22,7 +22,6 @@ from dataclasses import dataclass, field
 
 from .model import Exercise, Project, Question
 
-
 # ---------------------------------------------------------------------------
 # Recherche d'une mark
 # ---------------------------------------------------------------------------
@@ -46,10 +45,9 @@ def find_mark(
             continue
         if joker and mark.get("j"):
             return mark
-        if not joker and mark.get("j") is None and c is not None and mark.get("r") is not None:
+        if not joker and mark.get("j") is None and c is not None and mark.get("r") is not None and mark.get("c") == c:
             # mark de choix (a un rayon r)
-            if mark.get("c") == c:
-                return mark
+            return mark
         if not joker and mark.get("j") is None and c is None:
             # mark de question (pas de rayon r) ou d'exercice.
             if mark.get("r") is None and mark.get("w") is None and mark.get("q") is not None:
@@ -162,9 +160,7 @@ def _question_score(question: Question, marks: list[dict], e: int, q: int) -> tu
             value = progressive - float(question.penalty) * box_penalty
         elif box_penalty > 0:
             value = -float(question.penalty)
-        elif question.single and box_correct > 0:
-            value = float(question.gain)
-        elif question.multiple_exact and box_correct == q_correct:
+        elif question.single and box_correct > 0 or question.multiple_exact and box_correct == q_correct:
             value = float(question.gain)
     else:
         # Cases joker (seconde chance).
@@ -175,9 +171,7 @@ def _question_score(question: Question, marks: list[dict], e: int, q: int) -> tu
             value = progressive - float(question.penalty) * joker_penalty
         elif joker_penalty > 0:
             value = -float(question.penalty)
-        elif question.single and joker_correct > 0:
-            value = float(question.gain)
-        elif question.multiple_exact and joker_correct == q_correct:
+        elif question.single and joker_correct > 0 or question.multiple_exact and joker_correct == q_correct:
             value = float(question.gain)
 
     total = float(question.gain) if q_correct > 0 else 0.0

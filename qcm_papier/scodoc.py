@@ -19,7 +19,6 @@ from openpyxl import load_workbook
 
 from .model import Student
 
-
 # ---------------------------------------------------------------------------
 # Import de la table étudiants
 # ---------------------------------------------------------------------------

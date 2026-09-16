@@ -132,7 +132,7 @@ git pull origin nouvelle_main
 
 #### Vérifications avant commit
 
-Les outils de vérification (tests, Ruff, pre-commit) s'installent avec :
+Les outils de vérification (tests, couverture, Ruff, Bandit, pre-commit) s'installent avec :
 
 ```bash
 pip install -e ".[dev]"
@@ -144,7 +144,10 @@ lancer à la main :
 
 ```bash
 pre-commit run --all-files
-pytest -q
+pre-commit run gitleaks-history --all-files --hook-stage manual
+python -m coverage run -m pytest -q
+python -m coverage report
+python -m coverage report --omit="qcm_papier/ui/*" --fail-under=80
 ```
 
 GTK n'est pas nécessaire pour ces vérifications. Pour utiliser aussi
@@ -152,8 +155,30 @@ l'interface graphique, installez `.[gui,dev]` avec les prérequis GTK ci-dessus.
 
 Les mêmes vérifications tournent sur GitHub (onglet **Actions**) à chaque push
 et à chaque pull request, avec les tests sur Python 3.10 et 3.12.
-Ruff bloque uniquement certaines erreurs de code (notamment les noms non
-définis) ; les règles étendues et le formatage restent informatifs.
+Les contrôles suivants sont bloquants :
+
+- **Ruff** : erreurs Python, imports inutilisés et tri des imports, pièges courants,
+  modernisation et simplifications (`E`, `W`, `F`, `I`, `B`, `UP`, `SIM`).
+  `ruff check --fix qcm_papier tests` applique les corrections sûres, dont le tri.
+- **ruff-format** : mise en forme ; appliquer `ruff format qcm_papier tests`.
+- **Bandit** : analyse de sécurité du code Python de production. Les exceptions
+  sont locales et commentées (tirages non cryptographiques, repli de widgets GTK).
+- **Gitleaks** : secrets dans les changements indexés avant commit, puis historique
+  complet en CI. Les rapports masquent les valeurs détectées. Le premier lancement
+  du hook peut télécharger Go et compiler Gitleaks ; aucun binaire système n'est requis.
+- **Coverage** : mesure des lignes et branches conditionnelles. Le rapport complet
+  inclut GTK ; le seuil de 80 % porte explicitement sur le code hors `ui/`, y compris
+  la CLI et le point d'entrée. La couverture Python ne mesure ni JavaScript ni Rust.
+
+Les versions de Ruff, Bandit et Gitleaks sont fixées. Les seules exceptions Ruff
+sont documentées dans `pyproject.toml` : longueur des lignes gérée par le formateur,
+préférence pour certains blocs explicites, ordre d'initialisation GTK et marqueurs
+FastAPI. Il n'est pas nécessaire d'installer Flake8, isort ou Black en plus.
+
+Le [bilan détaillé des tests](docs/TESTS.md) précise les taux par module et les limites.
+
+Les parcours synthétiques de génération, correction, export et reprise ZIP tournent
+sans données privées. Les tests utilisant les copies réelles restent complémentaires.
 Le test utilisant `math/2026/correction3.pdf` est signalé comme ignoré si
 les données locales sont absentes, et exécuté normalement lorsqu'elles sont présentes.
 

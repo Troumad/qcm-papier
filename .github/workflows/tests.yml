@@ -24,14 +24,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install ".[dev]"
       - name: Vérifications avant commit (dont Ruff bloquant)
         run: pre-commit run --all-files
-      - name: Ruff (règles étendues, informatif)
-        run: ruff check qcm_papier tests --select E,W,F,I,B,UP,SIM --statistics --exit-zero
+      - name: Recherche de secrets dans l’historique
+        run: pre-commit run gitleaks-history --all-files --hook-stage manual
 
   test:
     runs-on: ubuntu-latest
@@ -56,4 +58,8 @@ jobs:
         env:
           QCM_PAPIER_NO_GUI: "1"
         run: |
-          python -m pytest tests/ -v
+          python -m coverage run -m pytest tests/ -v
+      - name: Couverture complète (GTK inclus)
+        run: python -m coverage report
+      - name: Seuil de couverture du code hors GTK
+        run: python -m coverage report --omit="qcm_papier/ui/*" --fail-under=80

@@ -2,7 +2,8 @@
 
 import json
 
-from qcm_papier import model, project as projmod
+from qcm_papier import model
+from qcm_papier import project as projmod
 
 
 def _make_project() -> model.Project:

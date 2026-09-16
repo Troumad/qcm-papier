@@ -1,5 +1,7 @@
 """Tests du calcul des notes / barèmes (score_page)."""
 
+import pytest
+
 from qcm_papier import marking, model
 
 
@@ -202,3 +204,19 @@ def test_scale_note():
     assert marking.scale_note(10.0, 0.0, 20.0) == 0.0
     # note /20 ramenée à /20 : identique.
     assert marking.scale_note(15.0, 20.0, 20.0, 20.0) == 15.0
+
+
+@pytest.mark.parametrize("mode", ["single", "multiple_exact", "multiple_progressive"])
+@pytest.mark.parametrize("selected, expected", [(0, 2.0), (1, -1.0), (2, 0.0)])
+def test_joker_remplace_la_reponse_initiale(mode, selected, expected):
+    p = _make_project_single()
+    question = p.structure[0].questions[0]
+    question.single = mode == "single"
+    question.multiple_exact = mode == "multiple_exact"
+    question.multiple_progressive = mode == "multiple_progressive"
+    # Réponse initiale pénalisante ; la seconde chance doit prendre le relais.
+    marks = _marks([False, True, False, False])
+    marks += [dict(mark, j=True) for mark in _marks([i == selected for i in range(4)])]
+    result = marking.score_page(p, marks, variant_id=1, student_id="p1234567")
+    assert result.value == expected
+    assert result.complete

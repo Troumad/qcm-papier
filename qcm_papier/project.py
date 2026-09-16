@@ -10,7 +10,7 @@ rester compatible avec les fichiers existants.
 from __future__ import annotations
 
 import json
-from typing import Any, IO
+from typing import IO, Any
 
 from .model import Project
 
@@ -60,7 +60,7 @@ def load_project(path: str | IO[str] | dict) -> Project:
     if isinstance(path, dict):
         data = path
     elif isinstance(path, str):
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
     else:
         data = json.load(path)

@@ -71,7 +71,7 @@ class Matrix:
     def apply(self, x: float, y: float) -> tuple[float, float]:
         return (self.a * x + self.c * y + self.e, self.b * x + self.d * y + self.f)
 
-    def inverse(self) -> "Matrix":
+    def inverse(self) -> Matrix:
         det = self.a * self.d - self.b * self.c
         if det == 0:
             return Matrix()
@@ -84,7 +84,7 @@ class Matrix:
         return Matrix(a=ia, b=ib, c=ic, d=id_, e=ie, f=if_)
 
     @staticmethod
-    def compose(cx2: float, cy2: float, scale: float, rotate_deg: float, cx1: float, cy1: float) -> "Matrix":
+    def compose(cx2: float, cy2: float, scale: float, rotate_deg: float, cx1: float, cy1: float) -> Matrix:
         """Construit la matrice translate(cx2,cy2) * scale * rotate *
         translate(-cx1,-cy1) comme ``computeViewport`` du JS."""
         m = Matrix()
@@ -277,9 +277,7 @@ def compute_viewport(page: ScannedPage, variants: dict, dest_x: int, dest_y: int
         value["cx2"] = page.adjust["center_x"]
         value["cy2"] = page.adjust["center_y"]
         rm = page.adjust["rotate_mean"]
-        if 0.25 * math.pi <= rm <= 0.75 * math.pi:
-            value["width"], value["height"] = value["height"], value["width"]
-        elif 1.25 * math.pi <= rm <= 1.75 * math.pi:
+        if 0.25 * math.pi <= rm <= 0.75 * math.pi or 1.25 * math.pi <= rm <= 1.75 * math.pi:
             value["width"], value["height"] = value["height"], value["width"]
     else:
         value["cx1"] = dest_x / 2
@@ -388,7 +386,7 @@ def align_auto(page: ScannedPage, variants: dict) -> bool:
         return False
 
     p = _layout_of(variants, "p")
-    l = _layout_of(variants, "l")
+    landscape = _layout_of(variants, "l")
     if pimg.height > pimg.width:
         for clair in range(0, 220, 10):
             if not success and p is not None:
@@ -397,24 +395,24 @@ def align_auto(page: ScannedPage, variants: dict) -> bool:
                 sx = [p.page_width - x for x in p.shapes_x]
                 sy = [p.page_height - y for y in p.shapes_y]
                 success = test_shapes(sx, sy, clair)
-            if not success and l is not None:
-                sx = list(l.shapes_y)
-                sy = [l.page_width - x for x in l.shapes_x]
+            if not success and landscape is not None:
+                sx = list(landscape.shapes_y)
+                sy = [landscape.page_width - x for x in landscape.shapes_x]
                 success = test_shapes(sx, sy, clair)
-            if not success and l is not None:
-                sx = [l.page_height - y for y in l.shapes_y]
-                sy = list(l.shapes_x)
+            if not success and landscape is not None:
+                sx = [landscape.page_height - y for y in landscape.shapes_y]
+                sy = list(landscape.shapes_x)
                 success = test_shapes(sx, sy, clair)
             if success:
                 clair = 230
                 break
     else:
         for clair in range(0, 220, 10):
-            if not success and l is not None:
-                success = test_shapes(l.shapes_x, l.shapes_y, clair)
-            if not success and l is not None:
-                sx = [p.page_height - x for x in l.shapes_x] if p else [0] * 5
-                sy = [p.page_width - y for y in l.shapes_y] if p else [0] * 5
+            if not success and landscape is not None:
+                success = test_shapes(landscape.shapes_x, landscape.shapes_y, clair)
+            if not success and landscape is not None:
+                sx = [p.page_height - x for x in landscape.shapes_x] if p else [0] * 5
+                sy = [p.page_width - y for y in landscape.shapes_y] if p else [0] * 5
                 success = test_shapes(sx, sy, clair)
             if not success and p is not None:
                 sx = list(p.shapes_y)
@@ -512,17 +510,19 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
     lh = layout_l.page_height if layout_l else 210
     models = []
     if layout_p is not None:
-        models.append(list(zip(layout_p.shapes_x, layout_p.shapes_y)))  # p0°
-        models.append([(pw - x, ph - y) for x, y in zip(layout_p.shapes_x, layout_p.shapes_y)])  # p180°
+        models.append(list(zip(layout_p.shapes_x, layout_p.shapes_y, strict=False)))  # p0°
+        models.append([(pw - x, ph - y) for x, y in zip(layout_p.shapes_x, layout_p.shapes_y, strict=False)])  # p180°
     if layout_l is not None:
-        models.append(list(zip(layout_l.shapes_y, [lw - x for x in layout_l.shapes_x])))  # l90°
-        models.append(list(zip([lh - y for y in layout_l.shapes_y], layout_l.shapes_x)))  # l270°
-        models.append(list(zip(layout_l.shapes_x, layout_l.shapes_y)))  # l0°
+        models.append(list(zip(layout_l.shapes_y, [lw - x for x in layout_l.shapes_x], strict=False)))  # l90°
+        models.append(list(zip([lh - y for y in layout_l.shapes_y], layout_l.shapes_x, strict=False)))  # l270°
+        models.append(list(zip(layout_l.shapes_x, layout_l.shapes_y, strict=False)))  # l0°
     if layout_l is not None and layout_p is not None:
-        models.append(list(zip([ph - x for x in layout_l.shapes_x], [pw - y for y in layout_l.shapes_y])))  # l180°
+        models.append(
+            list(zip([ph - x for x in layout_l.shapes_x], [pw - y for y in layout_l.shapes_y], strict=False))
+        )  # l180°
     if layout_p is not None:
-        models.append(list(zip(layout_p.shapes_y, [pw - x for x in layout_p.shapes_x])))  # p90°
-        models.append(list(zip([ph - y for y in layout_p.shapes_y], layout_p.shapes_x)))  # p270°
+        models.append(list(zip(layout_p.shapes_y, [pw - x for x in layout_p.shapes_x], strict=False)))  # p90°
+        models.append(list(zip([ph - y for y in layout_p.shapes_y], layout_p.shapes_x, strict=False)))  # p270°
     if not models:
         return False
 
@@ -1122,9 +1122,7 @@ def read_mark(pimg: PixelImage, matrix_inv: Matrix, page_x: float, page_y: float
         return False
     if dark >= 0.28 * total:
         return True
-    if (dark + medium) >= 0.31 * total:
-        return True
-    return False
+    return (dark + medium) >= 0.31 * total
 
 
 # ---------------------------------------------------------------------------
@@ -1351,7 +1349,8 @@ def render_marked_page(page: ScannedPage, max_width: int = 0):
     ``max_width`` (si > 0) limite la largeur de l'image renvoyée (pour
     l'affichage dans le GUI) en conservant les proportions.
     """
-    from PIL import ImageDraw, Image as PILImage
+    from PIL import Image as PILImage
+    from PIL import ImageDraw
 
     base = page.img.img if page.img is not None else None
     if base is None:
@@ -1541,7 +1540,7 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str], path:
     # Index de page relatif au fichier (pour distinguer les pages d'un
     # même PDF lors du rechargement).
     _file_page_idx: dict[str, int] = {}
-    for i, (copy_path, page) in enumerate(zip(copy_paths, pages)):
+    for _i, (copy_path, page) in enumerate(zip(copy_paths, pages, strict=False)):
         page_index = _file_page_idx.get(copy_path, 0)
         _file_page_idx[copy_path] = page_index + 1
         corrected = page.variant_id is not None or page.student_id is not None or bool(page.marks)
@@ -1598,7 +1597,7 @@ def load_correction_state(copy_path: str, page: ScannedPage, state_path: str, pa
 
     if not os.path.exists(state_path):
         return False
-    with open(state_path, "r", encoding="utf-8") as f:
+    with open(state_path, encoding="utf-8") as f:
         data = json.load(f)
     img_dir = data.get("image_dir")
     abs_copy = os.path.abspath(copy_path)

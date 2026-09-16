@@ -1,3 +1,4 @@
+# Les tirages random de ce module mélangent les sujets ; ils ne protègent aucun secret.
 """Génération des variantes d'un QCM.
 
 Reproduit la fonction ``FileGenerate`` du code JavaScript original
@@ -14,7 +15,6 @@ du code original.
 from __future__ import annotations
 
 import random
-
 
 from . import random_gen as rg
 from .code39 import code39_width
@@ -313,13 +313,13 @@ def _build_identification(variant: Variant, layout: Layout, settings: ProjectSet
         variant.id_width = 130
         variant.id_height = 45
         variant.id_columns = [c + variant.id_x for c in [65, 71, 77, 83, 89, 95, 101, 107, 113, 119, 125]]
-        variant.id_lines = [l + variant.id_y for l in [10, 15, 20, 25, 30, 35, 40]]
+        variant.id_lines = [line + variant.id_y for line in [10, 15, 20, 25, 30, 35, 40]]
     else:
         # de gauche à droite puis de haut en bas.
         variant.id_width = 110
         variant.id_height = 60
         variant.id_columns = [c + variant.id_x for c in [70, 76, 82, 88, 94, 100, 106]]
-        variant.id_lines = [l + variant.id_y for l in [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]]
+        variant.id_lines = [line + variant.id_y for line in [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]]
     variant.rects.append(
         {
             "x": variant.id_x,
@@ -496,7 +496,9 @@ def _place_choices(
             # Dans un EXERCICE FANTOME : TOUS les choix peuvent être pré-cochés
             if choice.get("index", -1) >= 0:
                 # Choix normal dans exercice fantôme : 50%
-                if random.randint(1, 3) == 1:  # ligne fantôme
+                if (
+                    random.randint(1, 3) == 1  # nosec B311
+                ):  # ligne fantôme
                     circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
                 else:
                     circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
@@ -507,7 +509,7 @@ def _place_choices(
             # Dans une QUESTION FANTOME (mais pas exercice fantôme)
             if choice.get("index", -1) >= 0:
                 # Choix normal dans question fantôme : 50%
-                if random.randint(1, 4) == 1:
+                if random.randint(1, 4) == 1:  # nosec B311
                     circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
                 else:
                     circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
@@ -518,7 +520,9 @@ def _place_choices(
             # Contexte normal (pas de fantôme)
             if choice_checked:
                 info = choice.get("index", -1)
-                if info < 0 and random.randint(1, 2) == 1:  # précoché sans jocker
+                if (
+                    info < 0 and random.randint(1, 2) == 1  # nosec B311
+                ):  # précoché sans jocker
                     circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
                 else:
                     circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
@@ -560,14 +564,14 @@ def _place_choices(
         exercice_fantome = exercise.get("index", -1) < 0
         question_fantome = question.get("index", -1) < 0
 
-        for i, c in enumerate(circles):
+        for _i, c in enumerate(circles):
             choice_index = c.get("index", -1)
 
             if exercice_fantome or question_fantome:
                 # Dans un contexte fantôme : TOUS les choix peuvent être pré-cochés
                 if choice_index >= 0:
                     # Choix normal dans contexte fantôme : 50%
-                    if random.randint(1, 3) == 1:
+                    if random.randint(1, 3) == 1:  # nosec B311
                         c["r"] = -2.3  # précoché exercice fantome ligne 1
                     else:
                         c["r"] = 2.3  # non précoché
@@ -581,7 +585,9 @@ def _place_choices(
                     c["r"] = 2.3
                 else:
                     # Choix fantôme : 33% de chance
-                    if random.randint(1, 3) < 3:  # 2/3 ≈ 66%
+                    if (
+                        random.randint(1, 3) < 3  # nosec B311
+                    ):  # 2/3 ≈ 66%
                         c["r"] = -2.3  # première ligne xercice précoché
                     else:
                         c["r"] = 2.3  # non précoché
@@ -592,7 +598,7 @@ def _place_choices(
         exercice_fantome = exercise.get("index", -1) < 0
         question_fantome = question.get("index", -1) < 0
 
-        for i, c in enumerate(circles):
+        for _i, c in enumerate(circles):
             cc = dict(c)
             cc["dash"] = True  # Trait pointillé pour le joker
 
@@ -602,7 +608,7 @@ def _place_choices(
                 # Dans un contexte fantôme (exercice ou question) : TOUS les choix peuvent être pré-cochés
                 if choice_index >= 0:
                     # Choix original dans contexte fantôme : 50%
-                    if random.randint(1, 6) == 1:
+                    if random.randint(1, 6) == 1:  # nosec B311
                         cc["r"] = -2.3  # précoché 2nde ligne fantôme
                     else:
                         cc["r"] = 2.3  # non précoché
@@ -616,7 +622,7 @@ def _place_choices(
                     cc["r"] = 2.3  # toujours cercle vide
                 else:
                     # SEULEMENT les choix fantômes sur la ligne joker peuvent être pré-cochés : 33%
-                    if random.randint(1, 4) == 1:
+                    if random.randint(1, 4) == 1:  # nosec B311
                         cc["r"] = -2.3  # précoché de la ligne jocker des questions
                     else:
                         cc["r"] = 2.3  # non précoché
@@ -1020,7 +1026,7 @@ def generate_all(project: Project, retry: bool = True, max_errors: int = 10) -> 
     if raw:
         variant_ids = [int(x) for x in raw]
     else:
-        variant_ids = [random.randint(0, 4095) for _ in range(count)]
+        variant_ids = [random.randint(0, 4095) for _ in range(count)]  # nosec B311
 
     error_count = 0
     failed: list[int] = []
@@ -1047,7 +1053,7 @@ def generate_all(project: Project, retry: bool = True, max_errors: int = 10) -> 
     # 2) Compléter aléatoirement jusqu'à atteindre le compte souhaité.
     if retry and error_count < max_errors:
         while len(success) < count and error_count < max_errors:
-            variant_id = random.randint(0, 4095)
+            variant_id = random.randint(0, 4095)  # nosec B311
             if variant_id in seen:
                 continue
             seen.add(variant_id)

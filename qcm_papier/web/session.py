@@ -15,8 +15,9 @@ import shutil
 import tempfile
 import threading
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 

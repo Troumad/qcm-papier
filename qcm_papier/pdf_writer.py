@@ -192,7 +192,7 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None, per_st
     from reportlab.lib.pagesizes import A4, landscape
 
     variant_ids = []
-    for k in project.variants.keys():
+    for k in project.variants:
         if k not in ("p", "l"):
             variant_ids.append(k)
 
