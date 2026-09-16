@@ -48,6 +48,14 @@ Sans cette variable, le lanceur utilise `python3` (`python` sous Windows).
 Sauvegardez ou téléchargez votre travail avant de fermer l'application :
 la fermeture arrête le serveur local.
 
+## Connexion à ScoDoc
+
+L'onglet **Réglages** enregistre le compte ScoDoc avec le même mécanisme que
+l'interface web : le mot de passe est conservé dans le trousseau du système
+via Python et `keyring`, inclus dans `.[web]`. Un trousseau disponible et
+déverrouillé est nécessaire pour enregistrer le compte. Voir le
+[guide ScoDoc](../README.md#levée-danonymat-scodoc) pour le parcours complet.
+
 ## Vérifier et construire
 
 ```bash

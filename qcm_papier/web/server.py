@@ -20,8 +20,10 @@ from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFil
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from .. import editing
+from .. import editing, scodoc_config
+from ..scodoc_api import ScoDocError
 from .session import Session
+
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(HERE, "static")
@@ -66,6 +68,7 @@ def create_app(session: Session | None = None) -> FastAPI:
             return JSONResponse(status_code=403, content={"detail": "Accès réservé à cette application locale."})
         return await call_next(request)
 
+    @app.exception_handler(ScoDocError)
     @app.exception_handler(ValueError)
     @app.exception_handler(RuntimeError)
     async def _bad_request(_request: Request, exc: Exception) -> JSONResponse:
@@ -276,6 +279,69 @@ def create_app(session: Session | None = None) -> FastAPI:
     async def scodoc_students(file: UploadFile = File(...)) -> dict[str, Any]:
         count, matched = s().load_students(await _save_upload(file))
         return {**correction_state(), "message": f"{count} étudiant(s) chargé(s), {matched} copie(s) identifiée(s)."}
+
+    # -- Réglages du compte ScoDoc dédié (mot de passe dans le trousseau) --
+    def _account_view() -> dict[str, Any]:
+        account = scodoc_config.load_account()
+        return {
+            "url": account.url,
+            "username": account.username,
+            "has_password": account.has_password,
+            "complete": account.complete,
+            "keyring": scodoc_config.keyring_name(),
+        }
+
+    @app.get("/api/settings/scodoc")
+    def scodoc_settings() -> dict[str, Any]:
+        return _account_view()
+
+    @app.put("/api/settings/scodoc")
+    def scodoc_settings_save(data: dict[str, str] = Body(...)) -> dict[str, Any]:
+        scodoc_config.save_account(data.get("url", ""), data.get("username", ""), data.get("password") or None)
+        s().scodoc_logout()
+        return _account_view()
+
+    @app.delete("/api/settings/scodoc")
+    def scodoc_settings_delete() -> dict[str, Any]:
+        s().scodoc_logout()
+        scodoc_config.delete_account()
+        return _account_view()
+
+    @app.post("/api/settings/scodoc/test")
+    def scodoc_settings_test() -> dict[str, Any]:
+        departements = scodoc_config.connect().departements()
+        return {"message": f"Connexion réussie : {len(departements)} département(s) visible(s)."}
+
+    # -- Levée d'anonymat via l'API ScoDoc ------------------------------
+    @app.get("/api/scodoc/api/status")
+    def scodoc_api_status() -> dict[str, Any]:
+        account = scodoc_config.load_account()
+        return {
+            "connected": s().scodoc_client is not None and bool(s().scodoc_client.token),
+            "configured": account.complete,
+            "url": account.url,
+            "username": account.username,
+        }
+
+    @app.post("/api/scodoc/api/login")
+    def scodoc_api_login() -> dict[str, Any]:
+        departements = s().scodoc_login()
+        return {**scodoc_api_status(), "departements": departements}
+
+    @app.post("/api/scodoc/api/logout")
+    def scodoc_api_logout() -> dict[str, Any]:
+        s().scodoc_logout()
+        return scodoc_api_status()
+
+    @app.get("/api/scodoc/api/formsemestres")
+    def scodoc_api_formsemestres(departement: str) -> list[dict[str, Any]]:
+        return s().scodoc_formsemestres(departement)
+
+    @app.post("/api/scodoc/api/students")
+    def scodoc_api_students(data: dict[str, int] = Body(...)) -> dict[str, Any]:
+        count, matched = s().scodoc_load_students(int(data["formsemestre_id"]))
+        message = f"{count} étudiant(s) chargé(s) depuis ScoDoc, {matched} copie(s) identifiée(s)."
+        return {**correction_state(), "message": message}
 
     @app.post("/api/scodoc/export")
     async def scodoc_export(file: UploadFile = File(...), min0: bool = Form(False)) -> Response:

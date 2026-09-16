@@ -20,7 +20,7 @@ from typing import Any, Callable
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .. import editing, generator, pdf_writer, scanner, scodoc
+from .. import editing, generator, pdf_writer, scanner, scodoc, scodoc_api, scodoc_config
 from .. import project as project_mod
 from ..marking import score_page
 from ..model import Project
@@ -95,6 +95,7 @@ class Session:
         self.notes: dict[str, float] = {}
         self.clair = CLAIR_DEFAULT
         self.job = Job()
+        self.scodoc_client: scodoc_api.ScoDocClient | None = None
 
     # ------------------------------------------------------------------
     # Projet
@@ -264,7 +265,37 @@ class Session:
     # Scodoc
     # ------------------------------------------------------------------
     def load_students(self, path: str) -> tuple[int, int]:
-        students = scodoc.load_students_table(path)
+        """Levée d'anonymat depuis la table étudiants Excel de ScoDoc."""
+        return self.apply_students(scodoc.load_students_table(path))
+
+    def scodoc_login(self) -> list[dict[str, str]]:
+        """Connexion à l'API ScoDoc avec le compte dédié enregistré (voir scodoc_config)."""
+        self.scodoc_logout()
+        client = scodoc_config.connect()
+        departements = [scodoc_api.departement_view(d) for d in client.departements()]
+        with self.lock:
+            self.scodoc_client = client
+        return departements
+
+    def scodoc_logout(self) -> None:
+        with self.lock:
+            self.scodoc_client = None
+
+    def _scodoc(self) -> scodoc_api.ScoDocClient:
+        if self.scodoc_client is None:
+            raise ValueError("Non connecté à ScoDoc.")
+        return self.scodoc_client
+
+    def scodoc_formsemestres(self, departement: str) -> list[dict[str, Any]]:
+        return [scodoc_api.formsemestre_view(s) for s in self._scodoc().formsemestres_courants(departement)]
+
+    def scodoc_load_students(self, formsemestre_id: int) -> tuple[int, int]:
+        """Levée d'anonymat avec les étudiants d'un semestre lus sur ScoDoc."""
+        etudiants = self._scodoc().formsemestre_etudiants(formsemestre_id)
+        return self.apply_students(scodoc_api.students_from_api(etudiants))
+
+    def apply_students(self, students: dict) -> tuple[int, int]:
+        """Associe nom, prénom et EID aux pages corrigées. Renvoie (étudiants, copies identifiées)."""
         with self.lock:
             self.project.students = students
             matched = 0
@@ -276,6 +307,10 @@ class Session:
                     page.student_name = student.name
                     page.student_firstname = student.firstname
                     matched += 1
+                else:
+                    page.student_eid = None
+                    page.student_name = None
+                    page.student_firstname = None
             self.notes = self._collect_notes()
         return len(students), matched
 
@@ -302,6 +337,10 @@ class Session:
                 page.student_eid = student.eid
                 page.student_name = student.name
                 page.student_firstname = student.firstname
+            else:
+                page.student_eid = None
+                page.student_name = None
+                page.student_firstname = None
             score = score_page(self.project, page.marks, variant_id=page.variant_id, student_id=page.student_id)
             page.value, page.total, page.complete = score.value, score.total, score.complete
             self.notes = self._collect_notes()

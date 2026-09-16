@@ -330,6 +330,45 @@ Pour associer les noms et prénoms :
 2. Onglet **Correction** → bouton **Levée d'anonymat Scodoc…**
 3. Chargez le fichier Excel obtenu.
 
+**Dans l'interface web**, la même boîte de dialogue permet aussi de charger
+les étudiants directement depuis le serveur ScoDoc, sans fichier Excel.
+
+1. Une seule fois, dans l'onglet **Réglages** : adresse du serveur (en
+   `https://`), identifiant et mot de passe du **compte ScoDoc dédié** disposant des droits de lecture
+   des étudiants et semestres concernés, puis **Tester la connexion**.
+2. Dans **Table étudiants (Scodoc)…** : **Se connecter à ScoDoc**, choisir le
+   département et le semestre en cours, puis **Charger les étudiants du
+   semestre**.
+
+Le mot de passe est rangé dans le trousseau sécurisé du système (Trousseau
+macOS, Gestionnaire d'identifiants Windows, Secret Service sous Linux) ; il
+n'est jamais écrit dans un fichier ni réaffiché. Sans trousseau disponible,
+l'enregistrement est refusé. Selon votre établissement, l'accès au serveur
+peut nécessiter le réseau interne ou le VPN. Installez les dépendances avec
+`python -m pip install -e ".[web]"`.
+
+L'adresse et l'identifiant sont conservés dans `scodoc.json`, dans le dossier
+de configuration de l'application ; seul le mot de passe va dans le trousseau.
+Un mot de passe laissé vide conserve celui du compte enregistré uniquement si
+l'adresse et l'identifiant restent identiques. Un changement de serveur ou de
+compte exige de le ressaisir. Après modification des réglages ou expiration du
+jeton, reconnectez-vous depuis la fenêtre de sélection des étudiants.
+
+Utilisez l'adresse HTTPS finale du serveur : les redirections sont refusées.
+L'intégration lit les départements, semestres en cours et étudiants ; elle
+n'envoie aucune note à l'API. L'export des notes reste réalisé par fichier Excel.
+
+En ligne de commande, avec le compte enregistré :
+
+```bash
+qcm-papier scodoc status                          # compte enregistré (sans le mot de passe)
+qcm-papier scodoc test                            # tester la connexion
+qcm-papier scodoc dump -o ~/scodoc_dump -d GEII   # réponses brutes de l'API en JSON
+```
+
+Les fichiers de `dump` contiennent des données personnelles : à garder hors
+du dépôt Git et à supprimer après usage.
+
 L'identifiant lu sur la copie est `p` + le NIP Scodoc sans son premier chiffre
 (ex. NIP `12504873` → `p2504873`).
 

@@ -32,6 +32,30 @@ _HEADER_NAME = "nom"
 _HEADER_FIRSTNAME = "prenom"
 
 
+def make_student(eid: Any, nip: Any, name: Any, firstname: Any) -> Student | None:
+    """Construit un étudiant de la table ``students`` (None si le NIP manque).
+
+    Règle commune à l'import Excel et à l'API ScoDoc.
+    """
+    if nip is None:
+        return None
+    nip_str = str(nip)
+    if not nip_str:
+        return None
+    # L'id étudiant est 'p' + nip sans son premier caractère, comme
+    # le code JS (id = 'p' + nip.substring(1)). Le nip Scodoc est
+    # numérique (ex: 12504873) : on enlève le 1er chiffre puis on ajoute
+    # 'p' -> 'p2504873', qui correspond à l'identifiant lu sur la copie.
+    student_id = "p" + nip_str[1:]
+    return Student(
+        id=student_id,
+        eid=str(eid if eid is not None else ""),
+        nip=nip_str,
+        name=str(name or ""),
+        firstname=str(firstname or ""),
+    )
+
+
 def load_students_table(path: str) -> dict[str, Student]:
     """Charge une table étudiants Scodoc (XLS/XLSX).
 
@@ -65,23 +89,9 @@ def load_students_table(path: str) -> dict[str, Student]:
     for row in rows:
         if col_eid >= len(row) or col_nip >= len(row):
             continue
-        eid = str(row[col_eid] or "")
-        nip = row[col_nip]
-        name = str(row[col_name] or "")
-        firstname = str(row[col_firstname] or "")
-        if nip is None:
-            continue
-        nip_str = str(nip)
-        if not nip_str:
-            continue
-        # L'id étudiant est 'p' + nip sans son premier caractère, comme
-        # le code JS (id = 'p' + nip.substring(1)). Le nip Scodoc est
-        # numérique (ex: 12504873) : on enlève le 1er chiffre puis on ajoute
-        # 'p' -> 'p2504873', qui correspond à l'identifiant lu sur la copie.
-        student_id = "p" + nip_str[1:]
-        students[student_id] = Student(
-            id=student_id, eid=eid, nip=nip_str, name=name, firstname=firstname,
-        )
+        student = make_student(row[col_eid] or "", row[col_nip], row[col_name], row[col_firstname])
+        if student is not None:
+            students[student.id] = student
     wb.close()
     return students
 
