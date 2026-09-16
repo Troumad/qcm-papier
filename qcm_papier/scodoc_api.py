@@ -105,7 +105,9 @@ class ScoDocClient:
     def get(self, endpoint: str) -> Any:
         if not self.token:
             raise ScoDocAuthError("Non connecté à ScoDoc.")
-        request = urllib.request.Request(f"{self.base_url}{endpoint}", headers={"Authorization": f"Bearer {self.token}"})
+        request = urllib.request.Request(
+            f"{self.base_url}{endpoint}", headers={"Authorization": f"Bearer {self.token}"}
+        )
         try:
             result = self._open(request)
         except ScoDocAuthError:

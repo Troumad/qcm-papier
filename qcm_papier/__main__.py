@@ -12,9 +12,20 @@ import sys
 def main(argv: list[str] | None = None) -> int:
     # Si des arguments de sous-commande sont passés, on utilise la CLI.
     argv = argv if argv is not None else sys.argv[1:]
-    if argv and argv[0] in ("open", "variants", "pdf", "generate",
-                            "correct", "check", "scodoc", "serve", "-h", "--help"):
+    if argv and argv[0] in (
+        "open",
+        "variants",
+        "pdf",
+        "generate",
+        "correct",
+        "check",
+        "scodoc",
+        "serve",
+        "-h",
+        "--help",
+    ):
         from .cli import main as cli_main
+
         return cli_main(argv)
 
     # Sinon, on lance l'interface graphique.
@@ -22,9 +33,9 @@ def main(argv: list[str] | None = None) -> int:
         from .ui.app import run
     except ImportError as e:
         print(f"Interface graphique indisponible ({e}).", file=sys.stderr)
-        print("Utilisez la ligne de commande : "
-              "qcm-papier <open|variants|pdf|generate|correct|check>",
-              file=sys.stderr)
+        print(
+            "Utilisez la ligne de commande : " "qcm-papier <open|variants|pdf|generate|correct|check>", file=sys.stderr
+        )
         return 1
     return run(argv)
 
