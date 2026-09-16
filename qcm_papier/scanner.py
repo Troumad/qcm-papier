@@ -24,14 +24,13 @@ from __future__ import annotations
 import math
 import os
 from dataclasses import dataclass, field
-from typing import Iterable
 
 import numpy as np
 from PIL import Image
 
 from .code39 import CODE39
-from .marking import score_page, PageScore
-from .model import Layout, Project, Variant, VariantStore
+from .marking import score_page
+from .model import Layout, Project, VariantStore
 
 CLAIR = 140  # variable globale du JS (index.html ligne 4)
 
@@ -81,7 +80,6 @@ class Matrix:
         ib = -self.b / det
         ic = -self.c / det
         id_ = self.a / det
-        ie = -(ic * self.e - id_ * self.f) if False else (-self.c * self.e + self.a * self.f) / det
         ie = (self.c * self.f - self.d * self.e) / det
         if_ = (self.b * self.e - self.a * self.f) / det
         return Matrix(a=ia, b=ib, c=ic, d=id_, e=ie, f=if_)
@@ -969,8 +967,6 @@ def read_barcode_line(pimg: PixelImage, matrix: Matrix, layout: Layout,
     cr_x, cr_y = mi.apply(right_x, right_y)
     cl_x, cl_y = round(cl_x), round(cl_y)
     cr_x, cr_y = round(cr_x), round(cr_y)
-    canvas_left = min(cl_x, cr_x)
-    canvas_top = min(cl_y, cr_y)
     canvas_w = abs(cr_x - cl_x) + 1
     canvas_h = abs(cr_y - cl_y) + 1
     canvas_dist = math.sqrt(canvas_w * canvas_w + canvas_h * canvas_h)

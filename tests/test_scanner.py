@@ -5,7 +5,6 @@ il demande qu'on les mette à la main et après, il peut essayer de corriger la
 feuille en faisant une transformation affine de la page ».
 """
 
-import pymupdf
 import pytest
 
 from qcm_papier import generator, model, pdf_writer, scanner

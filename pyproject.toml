@@ -62,7 +62,5 @@ target-version = "py310"
 line-length = 120
 
 [tool.ruff.lint]
-# Étape 1 : seules les vraies erreurs bloquent (syntaxe, noms non définis,
-# comparaisons invalides). Les autres règles sont signalées par la CI sans
-# bloquer, en attendant un commit de nettoyage dédié.
-select = ["E9", "F63", "F7", "F82"]
+# Erreurs bloquantes et détection des imports, redéfinitions et variables inutilisés.
+select = ["E9", "F63", "F7", "F82", "F401", "F811", "F841"]
