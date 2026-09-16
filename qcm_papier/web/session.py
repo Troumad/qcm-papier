@@ -21,7 +21,7 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .. import editing, generator, pdf_writer, scanner, scodoc, scodoc_api, scodoc_config
+from .. import editing, generator, pdf_preview, pdf_writer, scanner, scodoc, scodoc_api, scodoc_config
 from .. import project as project_mod
 from ..marking import score_page
 from ..model import Project
@@ -97,6 +97,8 @@ class Session:
         self.clair = CLAIR_DEFAULT
         self.job = Job()
         self.scodoc_client: scodoc_api.ScoDocClient | None = None
+        # Sujet rendu pour l'aperçu, gardé entre deux pages affichées.
+        self.preview_pdf: bytes | None = None
 
     # ------------------------------------------------------------------
     # Projet
@@ -108,6 +110,7 @@ class Session:
             self.copies = []
             self.pages = []
             self.notes = {}
+            self.preview_pdf = None
 
     def load_project(self, path: str) -> None:
         project = project_mod.load_project(path)
@@ -115,6 +118,7 @@ class Session:
         with self.lock:
             self.project = project
             self.project_path = path
+            self.preview_pdf = None
 
     def project_json(self) -> str:
         return project_mod.project_to_json(self.project)
@@ -139,6 +143,20 @@ class Session:
         if not self.variant_ids():
             raise ValueError("Aucune variante : générez d'abord les variantes.")
         return pdf_writer.generate_pdf(self.project)
+
+    def refresh_preview(self) -> list[tuple[float, float]]:
+        """Régénère le sujet pour l'aperçu et renvoie la taille de ses pages."""
+        with self.lock:
+            self.preview_pdf = self.generate_pdf()
+            return pdf_preview.page_sizes(self.preview_pdf)
+
+    def preview_image(self, index: int, dpi: int) -> bytes:
+        """PNG d'une page du sujet, rendu à la demande."""
+        with self.lock:
+            if self.preview_pdf is None:
+                self.preview_pdf = self.generate_pdf()
+            pdf = self.preview_pdf
+        return pdf_preview.render_page(pdf, index, dpi)
 
     # ------------------------------------------------------------------
     # Copies
