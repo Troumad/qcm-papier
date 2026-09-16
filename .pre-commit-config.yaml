@@ -1,8 +1,6 @@
 # Vérifications lancées avant chaque commit.
 # Installation : pip install -e ".[dev]" puis pre-commit install
-#
-# ruff-format n'est pas encore activé : il reformaterait des fichiers entiers
-# à chaque modification. Il le sera après le commit de nettoyage global.
+# Le formatage Python est vérifié automatiquement avec Ruff.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -18,3 +16,4 @@ repos:
     rev: v0.6.9
     hooks:
       - id: ruff
+      - id: ruff-format

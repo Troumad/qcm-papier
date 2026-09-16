@@ -83,9 +83,7 @@ def test_export_scodoc_notes(tmp_path):
 
     path_out = tmp_path / "notes_out.xls"
     notes = {"12345": 15.0, "12346": 8.5}
-    count = scodoc.export_scodoc_notes(str(path_in), str(path_out), notes,
-                                      note_max=20.0, notemax=20.0,
-                                      header_row=7)
+    count = scodoc.export_scodoc_notes(str(path_in), str(path_out), notes, note_max=20.0, notemax=20.0, header_row=7)
     assert count == 2
     # Le fichier .xls est en réalité du .xlsx (openpyxl ne gère pas biff8).
     out_xlsx = str(path_out)[:-4] + ".xlsx"
@@ -114,19 +112,17 @@ def test_export_scodoc_notes_min0(tmp_path):
     path_out = tmp_path / "notes_out.xlsx"
     # 12345 : note négative ; 12346 : note positive ; 12347 : zéro.
     notes = {"12345": -1.5, "12346": 8.0, "12347": 0.0}
-    count = scodoc.export_scodoc_notes(str(path_in), str(path_out), notes,
-                                      min0=True)
+    count = scodoc.export_scodoc_notes(str(path_in), str(path_out), notes, min0=True)
     assert count == 3
     wb2 = load_workbook(str(path_out))
     ws2 = wb2.active
-    assert ws2.cell(row=8, column=5).value == "0,00"   # -1.5 → 0
+    assert ws2.cell(row=8, column=5).value == "0,00"  # -1.5 → 0
     assert ws2.cell(row=9, column=5).value == "8,00"
     assert ws2.cell(row=10, column=5).value == "0,00"
 
     # Sans min0, la note négative est conservée.
     path_out2 = tmp_path / "notes_out_raw.xlsx"
-    scodoc.export_scodoc_notes(str(path_in), str(path_out2), notes,
-                              min0=False)
+    scodoc.export_scodoc_notes(str(path_in), str(path_out2), notes, min0=False)
     wb3 = load_workbook(str(path_out2))
     ws3 = wb3.active
     assert ws3.cell(row=8, column=5).value == "-1,50"  # négatif conservé

@@ -140,8 +140,10 @@ def test_recherche_globale_sur_reperes_synthetiques(angle):
     draw = ImageDraw.Draw(img)
     rad = math.radians(angle)
     expected = [
-        (round(150 + 1.8 * (x * math.cos(rad) - y * math.sin(rad))),
-         round(100 + 1.8 * (x * math.sin(rad) + y * math.cos(rad))))
+        (
+            round(150 + 1.8 * (x * math.cos(rad) - y * math.sin(rad))),
+            round(100 + 1.8 * (x * math.sin(rad) + y * math.cos(rad))),
+        )
         for x, y in zip(layout.shapes_x, layout.shapes_y)
     ]
     for x, y in [*expected, (330, 300), (600, 500), (550, 720)]:
