@@ -144,7 +144,6 @@ class StructureEditor(Gtk.Box):
                 question.choices[0].penalty = False
             elif len(correct_choices) > 1:
                 # Plusieurs choix corrects → ne garder que le premier
-                first_correct = correct_choices[0]
                 for c in correct_choices[1:]:
                     c.correct = False
                     c.neutral = True
@@ -846,7 +845,6 @@ class StructureEditor(Gtk.Box):
 
     def _set_and_notify(self, obj, attr, value, update_tree: bool = True):
         """Modifie un attribut et notifie les changements."""
-        old_value = getattr(obj, attr, None)
         setattr(obj, attr, value)
 
         if attr == "single" and value and isinstance(obj, Question):

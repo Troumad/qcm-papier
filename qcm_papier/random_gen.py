@@ -15,7 +15,6 @@ aléatoire) se font en testant un bit du seed.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
 
 # Nombre premier supérieur à 2^15 = 32768, utilisé dans le code original.
 PRIME = 32771

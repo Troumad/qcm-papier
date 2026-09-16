@@ -150,7 +150,6 @@ def cmd_correct(args: argparse.Namespace) -> int:
         raise SystemExit("Aucune copie à corriger.")
 
     print(f"Correction de {len(copies)} fichier(s)...")
-    state_path = getattr(args, "load_state", None) or getattr(args, "save_state", None)
     notes: dict[str, float] = {}
     corrected_pages: list = []
     for copy_path in copies:
