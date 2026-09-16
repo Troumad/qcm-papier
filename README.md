@@ -321,7 +321,10 @@ L'interface est organisée en onglets :
    l'arborescence porte trois boutons : ▲ et ▼ déplacent l'élément d'un cran,
    ✕ le supprime après confirmation. Un projet garde toujours au moins un
    exercice, et un exercice au moins une question.
-4. **Génération** — générer les variantes et le PDF sujet.
+4. **Génération** — générer les variantes et le PDF sujet. Dans l'interface
+   web, « Aperçu du sujet » affiche le PDF sans quitter l'application :
+   navigation page à page (flèches du clavier comprises), zoom de 50 à 300 %,
+   et téléchargement depuis la même fenêtre.
 5. **Correction** — charger les copies, lancer la correction, voir les pages
    corrigées, lever l'anonymat (Scodoc) et exporter les notes.
 6. **Aide** — ce guide.
@@ -341,6 +344,9 @@ uv run qcm-papier serve                              # ouvre le navigateur
 uv run qcm-papier serve -p math/2026/OML1_bis.json   # avec un projet ouvert
 ```
 
+- L'aperçu du sujet est rendu par le serveur avec PyMuPDF, page par page :
+  il s'affiche donc dans toutes les fenêtres, y compris celle de
+  l'application Tauri sous Linux, où un PDF placé dans un cadre reste blanc.
 - Le serveur écoute uniquement sur `127.0.0.1` (port 8060 par défaut,
   `--port` pour le changer) : les copies et les notes restent sur la machine.
 - Les fichiers (projet, copies, tables Scodoc) sont choisis dans la page et
