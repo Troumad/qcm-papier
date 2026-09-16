@@ -178,7 +178,7 @@ Les contrôles suivants sont bloquants :
   inclut GTK ; le seuil de 80 % porte explicitement sur le code hors `ui/`, y compris
   la CLI et le point d'entrée. La couverture Python ne mesure ni JavaScript ni Rust.
 
-Les versions de Ruff, Bandit et Gitleaks sont fixées. Les seules exceptions Ruff
+Les versions de Ruff, Bandit, Gitleaks et de l'action `setup-uv` sont fixées. Les seules exceptions Ruff
 sont documentées dans `pyproject.toml` : longueur des lignes gérée par le formateur,
 préférence pour certains blocs explicites, ordre d'initialisation GTK et marqueurs
 FastAPI. Il n'est pas nécessaire d'installer Flake8, isort ou Black en plus.
