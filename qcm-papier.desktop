@@ -1,7 +1,8 @@
 [Desktop Entry]
 Name=QCM-Papier
 Comment=Générateur/Correcteur de QCM papier
-Exec=python3 -m qcm_papier
+# Adaptez le chemin au dossier où le projet est installé.
+Exec=sh -c 'exec "$(dirname "%k")/qcm-papier.sh"'
 Terminal=false
 Type=Application
 Categories=Education;
