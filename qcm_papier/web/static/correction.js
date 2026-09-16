@@ -165,8 +165,88 @@
   $("#btn-students").addEventListener("click", () => {
     loadScodocImages($("#dlg-students"));
     $("#students-status").textContent = "";
+    $("#scodoc-status").textContent = "";
     $("#dlg-students").showModal();
+    guard(scodocInit);
   });
+
+  // Levée d'anonymat via l'API ScoDoc (compte dédié, onglet Réglages) ----
+  function scodocMessage(text, cls = "status") {
+    const status = $("#scodoc-status");
+    status.className = cls;
+    status.textContent = text;
+  }
+
+  function showConnected(connected) {
+    $("#scodoc-disconnected").hidden = connected;
+    $("#scodoc-connected").hidden = !connected;
+  }
+
+  function fillSelect(select, items, valueKey, labelKey) {
+    select.replaceChildren(...items.map((item) => el("option", { value: item[valueKey] }, item[labelKey])));
+  }
+
+  async function scodocInit() {
+    const status = await api("GET", "/api/scodoc/api/status");
+    $("#scodoc-account").textContent = status.configured
+      ? `Compte ${status.username} sur ${status.url} (réseau de l'IUT ou VPN).`
+      : "Aucun compte ScoDoc configuré : renseignez-le dans l'onglet Réglages.";
+    $("#scodoc-connect").disabled = !status.configured;
+    // Connecté côté serveur mais liste des départements perdue (page rechargée) : on repart de zéro.
+    if (status.connected && !$("#scodoc-dept").options.length) {
+      await api("POST", "/api/scodoc/api/logout");
+      status.connected = false;
+    }
+    showConnected(status.connected);
+  }
+
+  async function loadSemesters() {
+    const departement = $("#scodoc-dept").value;
+    if (!departement) return;
+    scodocMessage("Lecture des semestres…");
+    const semesters = await api("GET", `/api/scodoc/api/formsemestres?departement=${encodeURIComponent(departement)}`);
+    fillSelect($("#scodoc-sem"), semesters, "id", "label");
+    scodocMessage(semesters.length ? "" : "Aucun semestre en cours dans ce département.", semesters.length ? "status" : "status error");
+  }
+
+  $("#scodoc-connect").addEventListener("click", () => guard(async () => {
+    scodocMessage("Connexion à ScoDoc…");
+    try {
+      const data = await api("POST", "/api/scodoc/api/login");
+      fillSelect($("#scodoc-dept"), data.departements, "acronym", "label");
+      const geii = data.departements.find((d) => d.acronym.toUpperCase() === "GEII");
+      if (geii) $("#scodoc-dept").value = geii.acronym;
+      showConnected(true);
+      await loadSemesters();
+    } catch (error) {
+      scodocMessage(error.message, "status error");
+    }
+  }));
+
+  $("#scodoc-dept").addEventListener("change", () => guard(loadSemesters));
+  $("#scodoc-load").addEventListener("click", () => guard(async () => {
+    const formsemestreId = Number($("#scodoc-sem").value);
+    if (!formsemestreId) {
+      scodocMessage("Choisissez un semestre.", "status error");
+      return;
+    }
+    scodocMessage("Lecture des étudiants…");
+    try {
+      const data = await api("POST", "/api/scodoc/api/students", { formsemestre_id: formsemestreId });
+      scodocMessage(data.message, "status ok");
+      await refresh(data);
+      if (current >= 0) showPage(current);
+    } catch (error) {
+      scodocMessage(error.message, "status error");
+    }
+  }));
+  $("#scodoc-logout").addEventListener("click", () => guard(async () => {
+    await api("POST", "/api/scodoc/api/logout");
+    $("#scodoc-dept").replaceChildren();
+    $("#scodoc-sem").replaceChildren();
+    showConnected(false);
+    scodocMessage("Déconnecté de ScoDoc.");
+  }));
   uploadFiles($("#input-students"), "/api/scodoc/students", "file", async (data) => {
     const status = $("#students-status");
     status.className = "status ok";
