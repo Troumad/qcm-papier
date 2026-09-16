@@ -69,14 +69,17 @@ Les tirages de tests sont fixés pour rendre les résultats reproductibles.
 ## Reproduire
 
 ```bash
-python -m pip install -e ".[dev]"
-python -m coverage run -m pytest -q
-python -m coverage report
-python -m coverage report --omit="qcm_papier/ui/*" --fail-under=80
-python -m coverage html
-pre-commit run --all-files
-pre-commit run gitleaks-history --all-files --hook-stage manual
+uv sync --extra dev
+uv run coverage run -m pytest -q
+uv run coverage report
+uv run coverage report --omit="qcm_papier/ui/*" --fail-under=80
+uv run coverage html
+uv run pre-commit run --all-files
+uv run pre-commit run gitleaks-history --all-files --hook-stage manual
 ```
+
+Sans [uv](https://docs.astral.sh/uv/) : `python -m pip install -e ".[dev]"` dans un
+environnement virtuel, puis les mêmes commandes sans le préfixe `uv run`.
 
 La présence du PDF local peut augmenter le nombre de tests exécutés et la couverture.
 Le rapport HTML contient les lignes et branches non exercées pour guider les prochains tests.
