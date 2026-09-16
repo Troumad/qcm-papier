@@ -298,6 +298,7 @@ def create_app(session: Session | None = None) -> FastAPI:
     @app.put("/api/settings/scodoc")
     def scodoc_settings_save(data: dict[str, str] = Body(...)) -> dict[str, Any]:
         scodoc_config.save_account(data.get("url", ""), data.get("username", ""), data.get("password") or None)
+        s().scodoc_logout()
         return _account_view()
 
     @app.delete("/api/settings/scodoc")
@@ -316,7 +317,7 @@ def create_app(session: Session | None = None) -> FastAPI:
     def scodoc_api_status() -> dict[str, Any]:
         account = scodoc_config.load_account()
         return {
-            "connected": s().scodoc_client is not None,
+            "connected": s().scodoc_client is not None and bool(s().scodoc_client.token),
             "configured": account.complete,
             "url": account.url,
             "username": account.username,

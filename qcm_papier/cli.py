@@ -258,11 +258,14 @@ def cmd_scodoc(args: argparse.Namespace) -> int:
             print(f"Connexion réussie : {len(departements)} département(s) visible(s).")
             return 0
         # dump : réponses brutes de l'API, pour vérifier leur forme exacte.
-        os.makedirs(args.output, exist_ok=True)
+        os.makedirs(args.output, mode=0o700, exist_ok=True)
 
         def write(name: str, data) -> None:
             path = os.path.join(args.output, name)
-            with open(path, "w", encoding="utf-8") as f:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                if os.name != "nt":
+                    os.fchmod(f.fileno(), 0o600)
                 json.dump(data, f, ensure_ascii=False, indent=2)
             size = len(data) if isinstance(data, list) else 1
             print(f"  {path} ({size} élément(s))")

@@ -37,6 +37,11 @@ class ScoDocAuthError(ScoDocError):
     """Identifiants refusés ou session expirée."""
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ScoDocError("Redirection ScoDoc refusée : renseignez l'adresse finale du serveur.")
+
+
 def normalize_base_url(url: str) -> str:
     """Nettoie l'adresse saisie : ``https://scodoc.exemple.fr`` → ``.../ScoDoc``.
 
@@ -44,9 +49,15 @@ def normalize_base_url(url: str) -> str:
     machine locale.
     """
     url = (url or "").strip().rstrip("/")
-    parts = urllib.parse.urlsplit(url)
+    try:
+        parts = urllib.parse.urlsplit(url)
+        parts.port  # Valide aussi un éventuel port saisi.
+    except ValueError as exc:
+        raise ScoDocError("Adresse ScoDoc invalide.") from exc
     if parts.scheme not in ("http", "https") or not parts.netloc:
         raise ScoDocError("Adresse ScoDoc invalide (exemple : https://scodoc.exemple.fr/ScoDoc).")
+    if parts.username is not None or parts.password is not None or parts.query or parts.fragment:
+        raise ScoDocError("L'adresse ScoDoc ne doit contenir ni identifiants, ni paramètres, ni fragment.")
     if parts.scheme == "http" and parts.hostname not in ("localhost", "127.0.0.1", "::1"):
         raise ScoDocError("Adresse en http:// refusée : utilisez https:// pour protéger le mot de passe.")
     if not parts.path:
@@ -63,7 +74,8 @@ class ScoDocClient:
 
     def _open(self, request: urllib.request.Request) -> Any:
         try:
-            with urllib.request.urlopen(request, timeout=TIMEOUT) as response:  # noqa: S310 - adresse vérifiée
+            opener = urllib.request.build_opener(_NoRedirect())
+            with opener.open(request, timeout=TIMEOUT) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             if e.code in (401, 403):
@@ -77,6 +89,7 @@ class ScoDocClient:
             raise ScoDocError(f"Réponse ScoDoc invalide ou trop lente : {e}") from e
 
     def authenticate(self, username: str, password: str) -> None:
+        self.token = None
         if not username or not password:
             raise ScoDocAuthError("Identifiant et mot de passe ScoDoc requis.")
         credentials = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
@@ -85,7 +98,7 @@ class ScoDocClient:
         )
         data = self._open(request)
         token = data.get("token") if isinstance(data, dict) else None
-        if not token:
+        if not isinstance(token, str) or not token:
             raise ScoDocAuthError("ScoDoc n'a pas renvoyé de jeton d'accès.")
         self.token = token
 
@@ -93,7 +106,14 @@ class ScoDocClient:
         if not self.token:
             raise ScoDocAuthError("Non connecté à ScoDoc.")
         request = urllib.request.Request(f"{self.base_url}{endpoint}", headers={"Authorization": f"Bearer {self.token}"})
-        return self._open(request)
+        try:
+            result = self._open(request)
+        except ScoDocAuthError:
+            self.token = None
+            raise
+        if not isinstance(result, list) or not all(isinstance(item, dict) for item in result):
+            raise ScoDocError("Réponse ScoDoc invalide : une liste d'objets était attendue.")
+        return result
 
     def departements(self) -> list[dict]:
         return self.get("/api/departements")

@@ -18,7 +18,7 @@ HTML5 + JavaScript (Université Lyon 1, auteur original : Florent Ouchet).
   détection des cases cochées, calcul des notes.
 - **Correction manuelle** des questions à réponse libre.
 - **Export Scodoc** des notes (fichier `.xls`), levée d'anonymat via la table
-  des étudiants.
+  des étudiants (Excel ou API ScoDoc dans l'interface web).
 - **Sauvegarde/chargement du projet** au format JSON (compatible avec le format
   du code original).
 
@@ -33,6 +33,8 @@ qcm_papier/
 ├── scanner.py        # Lecture des copies : alignement, code-barres, cases
 ├── marking.py        # Calcul des notes / barèmes
 ├── scodoc.py         # Import table étudiants + export notes Scodoc
+├── scodoc_api.py     # Client HTTP ScoDoc et conversion des étudiants
+├── scodoc_config.py  # Compte enregistré et mot de passe dans le trousseau
 ├── project.py        # Persistance JSON du projet
 ├── cli.py            # Interface en ligne de commande
 ├── editing.py        # Règles d'édition utilisées par l'interface web
@@ -54,7 +56,7 @@ qcm_papier/
 - Pillow (images scannées)
 - PyMuPDF (lecture des PDF scannés)
 - numpy (calculs sur les images scannées : repères, cases, recherche globale)
-- FastAPI, Uvicorn et python-multipart (option `.[web]`)
+- FastAPI, Uvicorn, python-multipart et keyring (option `.[web]`)
 - PyGObject + GTK 4 (interface graphique, paquets système
   `gir1.2-gtk-4.0` + `python3-gi`)
 

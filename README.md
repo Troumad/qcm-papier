@@ -334,8 +334,8 @@ Pour associer les noms et prénoms :
 les étudiants directement depuis le serveur ScoDoc, sans fichier Excel.
 
 1. Une seule fois, dans l'onglet **Réglages** : adresse du serveur (en
-   `https://`), identifiant et mot de passe du **compte ScoDoc dédié** (le
-   même que celui de l'application des stages), puis **Tester la connexion**.
+   `https://`), identifiant et mot de passe du **compte ScoDoc dédié** disposant des droits de lecture
+   des étudiants et semestres concernés, puis **Tester la connexion**.
 2. Dans **Table étudiants (Scodoc)…** : **Se connecter à ScoDoc**, choisir le
    département et le semestre en cours, puis **Charger les étudiants du
    semestre**.
@@ -343,8 +343,20 @@ les étudiants directement depuis le serveur ScoDoc, sans fichier Excel.
 Le mot de passe est rangé dans le trousseau sécurisé du système (Trousseau
 macOS, Gestionnaire d'identifiants Windows, Secret Service sous Linux) ; il
 n'est jamais écrit dans un fichier ni réaffiché. Sans trousseau disponible,
-l'enregistrement est refusé. Le serveur ScoDoc n'est joignable que depuis le
-réseau de l'IUT ou le VPN.
+l'enregistrement est refusé. Selon votre établissement, l'accès au serveur
+peut nécessiter le réseau interne ou le VPN. Installez les dépendances avec
+`python -m pip install -e ".[web]"`.
+
+L'adresse et l'identifiant sont conservés dans `scodoc.json`, dans le dossier
+de configuration de l'application ; seul le mot de passe va dans le trousseau.
+Un mot de passe laissé vide conserve celui du compte enregistré uniquement si
+l'adresse et l'identifiant restent identiques. Un changement de serveur ou de
+compte exige de le ressaisir. Après modification des réglages ou expiration du
+jeton, reconnectez-vous depuis la fenêtre de sélection des étudiants.
+
+Utilisez l'adresse HTTPS finale du serveur : les redirections sont refusées.
+L'intégration lit les départements, semestres en cours et étudiants ; elle
+n'envoie aucune note à l'API. L'export des notes reste réalisé par fichier Excel.
 
 En ligne de commande, avec le compte enregistré :
 

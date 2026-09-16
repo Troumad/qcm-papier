@@ -57,10 +57,17 @@ def test_mot_de_passe_dans_le_trousseau_pas_dans_le_fichier(ring, tmp_path):
         assert oct(os.stat(tmp_path / "scodoc.json").st_mode & 0o777) == "0o600"
 
 
-def test_modifier_adresse_sans_ressaisir_le_mot_de_passe(ring):
+def test_changer_de_serveur_exige_un_mot_de_passe(ring):
     scodoc_config.save_account("https://a.exemple.fr/ScoDoc", "api_stages", "S3cret!")
-    account = scodoc_config.save_account("https://b.exemple.fr/ScoDoc", "api_stages", "")
+    with pytest.raises(ScoDocConfigError, match="Mot de passe requis"):
+        scodoc_config.save_account("https://b.exemple.fr/ScoDoc", "api_stages", "")
+    account = scodoc_config.save_account("https://b.exemple.fr/ScoDoc", "api_stages", "AutreSecret")
     assert account.url == "https://b.exemple.fr/ScoDoc" and account.has_password
+
+
+def test_conserver_mot_de_passe_du_meme_compte(ring):
+    scodoc_config.save_account("https://a.exemple.fr", "api_stages", "secret")
+    assert scodoc_config.save_account("https://a.exemple.fr/", "api_stages", "").has_password
 
 
 def test_changer_de_compte_exige_un_mot_de_passe_et_nettoie_l_ancien(ring):
@@ -95,3 +102,21 @@ def test_sans_trousseau_on_refuse_d_enregistrer(tmp_path, monkeypatch):
         assert not (tmp_path / "scodoc.json").exists()
     finally:
         keyring.set_keyring(previous)
+
+
+def test_backend_en_clair_refuse(ring, monkeypatch):
+    monkeypatch.setattr(MemoryKeyring, "__module__", "keyrings.alt.file")
+    with pytest.raises(ScoDocConfigError, match="trousseau sécurisé"):
+        scodoc_config.save_account("https://a.exemple.fr", "compte", "secret")
+    assert not ring.store
+
+
+def test_trousseau_verrouille_erreur_affichable(ring, monkeypatch, tmp_path):
+    from keyring.errors import KeyringError
+
+    def locked(*_args):
+        raise KeyringError("locked")
+    monkeypatch.setattr(ring, "set_password", locked)
+    with pytest.raises(ScoDocConfigError, match="verrouillé"):
+        scodoc_config.save_account("https://a.exemple.fr", "compte", "secret")
+    assert not (tmp_path / "scodoc.json").exists()
