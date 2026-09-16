@@ -57,20 +57,33 @@ def _config_path() -> str:
 def _keyring():
     try:
         import keyring
-        from keyring.backends import fail
+        from keyring.backends import chainer, fail, null
     except ImportError as e:
         raise ScoDocConfigError('Module « keyring » absent : pip install -e ".[web]"') from e
-    if isinstance(keyring.get_keyring(), fail.Keyring):
-        raise ScoDocConfigError(
-            "Aucun trousseau sécurisé disponible sur cette machine : le mot de passe ne peut pas être enregistré."
-        )
-    return keyring
+    backend = keyring.get_keyring()
+    candidates = backend.backends if isinstance(backend, chainer.ChainerBackend) else [backend]
+    for candidate in candidates:
+        if not isinstance(candidate, (fail.Keyring, null.Keyring)) and not type(candidate).__module__.startswith("keyrings.alt"):
+            return candidate
+    raise ScoDocConfigError(
+        "Aucun trousseau sécurisé disponible sur cette machine : le mot de passe ne peut pas être enregistré."
+    )
+
+
+def _password(method: str, username: str, *args):
+    backend = _keyring()
+    from keyring.errors import KeyringError
+
+    try:
+        return getattr(backend, method)(KEYRING_SERVICE, username, *args)
+    except KeyringError as exc:
+        raise ScoDocConfigError("Le trousseau est inaccessible ou verrouillé. Déverrouillez-le puis réessayez.") from exc
 
 
 def keyring_name() -> str:
     """Nom du trousseau utilisé (affiché dans les réglages)."""
     try:
-        backend = _keyring().get_keyring()
+        backend = _keyring()
     except ScoDocConfigError as e:
         return str(e)
     return getattr(backend, "name", type(backend).__name__)
@@ -82,11 +95,13 @@ def load_account() -> ScoDocAccount:
             data = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return ScoDocAccount()
+    if not isinstance(data, dict):
+        raise ScoDocConfigError("Le fichier de configuration ScoDoc est invalide.")
     url, username = str(data.get("url", "")), str(data.get("username", ""))
     has_password = False
     if username:
         try:
-            has_password = _keyring().get_password(KEYRING_SERVICE, username) is not None
+            has_password = bool(_password("get_password", username))
         except ScoDocConfigError:
             has_password = False
     return ScoDocAccount(url=url, username=username, has_password=has_password)
@@ -98,11 +113,11 @@ def save_account(url: str, username: str, password: str | None = None) -> ScoDoc
     username = (username or "").strip()
     if not username:
         raise ScoDocConfigError("Identifiant ScoDoc requis.")
-    ring = _keyring()
+    _keyring()
     previous = load_account()
     if password:
-        ring.set_password(KEYRING_SERVICE, username, password)
-    elif previous.username != username or not previous.has_password:
+        _password("set_password", username, password)
+    elif previous.url != url or previous.username != username or not previous.has_password:
         raise ScoDocConfigError("Mot de passe requis pour ce compte.")
     if previous.username and previous.username != username:
         _delete_password(previous.username)
@@ -116,10 +131,14 @@ def save_account(url: str, username: str, password: str | None = None) -> ScoDoc
 
 
 def _delete_password(username: str) -> None:
+    from keyring.errors import KeyringError, PasswordDeleteError
+
     try:
         _keyring().delete_password(KEYRING_SERVICE, username)
-    except Exception:  # noqa: BLE001 - mot de passe déjà absent
+    except PasswordDeleteError:
         pass
+    except KeyringError as exc:
+        raise ScoDocConfigError("Impossible de supprimer le mot de passe du trousseau.") from exc
 
 
 def delete_account() -> None:
@@ -137,7 +156,7 @@ def connect() -> ScoDocClient:
     account = load_account()
     if not account.complete:
         raise ScoDocConfigError("Compte ScoDoc non configuré : renseignez-le dans l'onglet Réglages.")
-    password = _keyring().get_password(KEYRING_SERVICE, account.username)
+    password = _password("get_password", account.username)
     client = ScoDocClient(account.url)
     client.authenticate(account.username, password or "")
     return client

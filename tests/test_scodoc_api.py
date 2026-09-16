@@ -30,6 +30,11 @@ class FakeScoDoc(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
+        if self.path == "/redirect/api/tokens":
+            self.send_response(302)
+            self.send_header("Location", "/ScoDoc/api/departements")
+            self.end_headers()
+            return
         expected = "Basic " + base64.b64encode(f"{USER}:{PASSWORD}".encode()).decode()
         if self.path == "/ScoDoc/api/tokens" and self.headers.get("Authorization") == expected:
             self._send(200, {"token": TOKEN})
@@ -59,6 +64,7 @@ def scodoc_url():
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{server.server_address[1]}"
     server.shutdown()
+    server.server_close()
 
 
 def test_normalize_base_url():
@@ -87,8 +93,47 @@ def test_client_jeton_et_lectures(scodoc_url):
 
 
 def test_mauvais_mot_de_passe(scodoc_url):
+    client = ScoDocClient(scodoc_url)
+    client.authenticate(USER, PASSWORD)
     with pytest.raises(ScoDocAuthError):
-        ScoDocClient(scodoc_url).authenticate(USER, "faux")
+        client.authenticate(USER, "faux")
+    assert client.token is None
+
+
+def test_redirection_ne_transmet_pas_les_identifiants(scodoc_url):
+    with pytest.raises(ScoDocError, match="Redirection"):
+        ScoDocClient(scodoc_url + "/redirect").authenticate(USER, PASSWORD)
+
+
+@pytest.mark.parametrize("url", ["https://u:secret@example.org", "https://example.org?q=1",
+                                    "https://example.org/#fragment", "https://example.org:abc"])
+def test_adresses_ambigues_refusees(url):
+    with pytest.raises(ScoDocError):
+        scodoc_api.normalize_base_url(url)
+
+
+def test_reponse_inattendue_et_session_expiree(monkeypatch):
+    client = ScoDocClient("https://scodoc.exemple.fr")
+    client.token = TOKEN
+    monkeypatch.setattr(client, "_open", lambda _request: {"erreur": "pas une liste"})
+    with pytest.raises(ScoDocError, match="liste"):
+        client.departements()
+    def expired(_request):
+        raise ScoDocAuthError("expiré")
+    monkeypatch.setattr(client, "_open", expired)
+    with pytest.raises(ScoDocAuthError):
+        client.departements()
+    assert client.token is None
+
+
+def test_nouvelle_table_efface_anciennes_identites(tmp_path):
+    session = _session_avec_pages(tmp_path)
+    session.apply_students(scodoc_api.students_from_api(ETUDIANTS))
+    assert session.pages[0].page.student_eid == "101"
+    session.apply_students({})
+    page = session.pages[0].page
+    assert (page.student_eid, page.student_name, page.student_firstname) == (None, None, None)
+    assert session.notes == {"p2504873": 12.0, "p0000001": 8.0}
 
 
 def test_serveur_injoignable():
@@ -153,6 +198,10 @@ def test_levee_anonymat_par_api_web(scodoc_url, tmp_path, memory_keyring):
     assert results[0]["student"] == "DUPONT Jean"
     assert results[1]["student"] == "p0000001"
     assert session.notes == {"101": 12.0, "p0000001": 8.0}  # export par EID après identification
+
+    client.put("/api/settings/scodoc", json={"url": scodoc_url, "username": USER, "password": ""})
+    assert client.get("/api/scodoc/api/status").json()["connected"] is False
+    assert client.post("/api/scodoc/api/login").json()["connected"] is True
 
     assert client.post("/api/scodoc/api/logout").json()["connected"] is False
     assert client.get("/api/scodoc/api/formsemestres", params={"departement": "GEII"}).status_code == 400
