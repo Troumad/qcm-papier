@@ -19,7 +19,6 @@ La structure des ``marks`` d'une page suit le format du code original :
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from .model import Exercise, Project, Question
 

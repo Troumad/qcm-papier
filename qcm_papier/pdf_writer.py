@@ -10,14 +10,13 @@ et rectangles de la variante.
 from __future__ import annotations
 
 import io
-from typing import IO, Any
+from typing import IO
 
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas as canvaslib
-from reportlab.lib.pagesizes import A4, landscape
 
 from .code39 import CODE39
-from .model import Layout, Project, Variant, VariantStore
+from .model import Layout, Project, Variant
 
 # Format ReportLab : 'A3', 'A4', 'A5' en majuscule.
 _REPORTLAB_FORMATS = {"a3": "A3", "a4": "A4", "a5": "A5"}
@@ -153,9 +152,6 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant,
             c.drawString(text["x"] * mm, to_pdf_y(text["y"]), text.get("t", ""))
 
     # Cercles (cases à cocher).
-    import time
-    nb = int(time.time() * 1000) % 1000
-    coups = 1
     c.setLineWidth(0.2)
     for circle in variant.circles:
         r = circle.get("r", 2.3)
@@ -194,7 +190,6 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None,
     """Génère le PDF sujet pour toutes les variantes du projet."""
     from reportlab.lib.pagesizes import A4, landscape
 
-    #variant_ids = [k for k in project.variants.keys() if k not in ("p", "l")]
     variant_ids = []
     for k in project.variants.keys():
         if k not in ("p", "l"):

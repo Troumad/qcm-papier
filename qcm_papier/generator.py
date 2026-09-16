@@ -15,19 +15,14 @@ from __future__ import annotations
 
 import random
 
-import math
-from typing import Any
 
 from . import random_gen as rg
 from .code39 import code39_width
 from .model import (
-    Exercise,
     Layout,
     Project,
     ProjectSettings,
-    Question,
     Variant,
-    VariantStore,
 )
 
 def _exercise_to_dict(e) -> dict:
@@ -420,11 +415,9 @@ def _place_choices(variant, variant_id,
         texts.append({"x": x, "y": y, "t": choice.get("name", ""),
                       "center": True})
         
-        # Déterminer le niveau de fantôme
+        # Déterminer le contexte fantôme
         exercice_fantome = exercise.get("index", -1) < 0
         question_fantome = question.get("index", -1) < 0
-        choix_fantome = choice.get("index", -1) < 0
-        niveau_fantome = sum([exercice_fantome, question_fantome, choix_fantome])
         
         # Placer le cercle (pré-coché ou non)
         # les vraies cases à cocher et la première ligne des exercices fantomes
@@ -453,7 +446,7 @@ def _place_choices(variant, variant_id,
         else:
             # Contexte normal (pas de fantôme)
             if choice_checked :
-                info={"index": choice.get("index", -1)}["index"]
+                info=choice.get("index", -1)
                 if  info<0 and random.randint(1, 2) == 1 : # précoché sans jocker
                     circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
                 else:
@@ -484,8 +477,6 @@ def _place_choices(variant, variant_id,
         dup_texts = [dict(t) for t in texts[1:]]  # sans le nom de question
         dup_circles = []
         
-        # Vérifier si la question a des choix fantômes (index < 0)
-        a_des_choix_fantomes = any(c.get("index", -1) < 0 for c in circles)
         
         # Pour la PREMIÈRE LIGNE (circles existants) :
         # On modifie directement les circles originaux selon les règles
@@ -660,7 +651,6 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
     x_max = layout.margin_left
     y_max = variant.id_y + variant.id_height
     x_line_start = variant.id_x
-    y_column_start = variant.id_y
 
     # Initialisation des positions selon le mode
     if go_right :
@@ -668,7 +658,6 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         exercise_x = variant.id_x + variant.id_width
         exercise_y = variant.id_y
         y_max = variant.id_y + variant.id_height  # Point bas maximal initial (boîte d'identification)
-        #x_line_start = variant.id_x + variant.id_width  # Début de ligne (après la boîte)
     else:
         # Mode "vers le bas" : première colonne commence sous la boîte
         # d'identification, alignée sous celle-ci (x = id_x) pour ne pas

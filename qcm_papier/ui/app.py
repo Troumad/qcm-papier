@@ -1890,7 +1890,6 @@ class QcmWindow(Gtk.ApplicationWindow):
         if marked_idx < 0 or marked_idx >= len(self.marked_pages):
             return
         _label, page = self.marked_pages[marked_idx]
-        fname = os.path.basename(getattr(page, "copy_path", "") or "")
         failed = (page.matrix_inv is None or page.variant_id is None
                   or page.student_id is None)
         for row in self.results_store:
