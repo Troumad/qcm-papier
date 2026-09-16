@@ -48,7 +48,11 @@ def test_compte_absent(ring):
 
 def test_mot_de_passe_dans_le_trousseau_pas_dans_le_fichier(ring, tmp_path):
     account = scodoc_config.save_account("https://scodoc.exemple.fr", "api_stages", "S3cret!")
-    assert (account.url, account.username, account.has_password) == ("https://scodoc.exemple.fr/ScoDoc", "api_stages", True)
+    assert (account.url, account.username, account.has_password) == (
+        "https://scodoc.exemple.fr/ScoDoc",
+        "api_stages",
+        True,
+    )
     content = (tmp_path / "scodoc.json").read_text()
     assert "S3cret!" not in content
     assert json.loads(content) == {"url": "https://scodoc.exemple.fr/ScoDoc", "username": "api_stages"}
@@ -116,6 +120,7 @@ def test_trousseau_verrouille_erreur_affichable(ring, monkeypatch, tmp_path):
 
     def locked(*_args):
         raise KeyringError("locked")
+
     monkeypatch.setattr(ring, "set_password", locked)
     with pytest.raises(ScoDocConfigError, match="verrouillé"):
         scodoc_config.save_account("https://a.exemple.fr", "compte", "secret")

@@ -24,7 +24,6 @@ from .. import editing, scodoc_config
 from ..scodoc_api import ScoDocError
 from .session import Session
 
-
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(HERE, "static")
 SCODOC_DIR = os.path.join(os.path.dirname(HERE), "data", "scodoc")
@@ -62,9 +61,11 @@ def create_app(session: Session | None = None) -> FastAPI:
         except ValueError:
             host = None
         origin = request.headers.get("origin")
-        if (host not in LOCAL_HOSTS
-                or (origin is not None and origin != str(request.base_url).rstrip("/"))
-                or request.headers.get("sec-fetch-site") == "cross-site"):
+        if (
+            host not in LOCAL_HOSTS
+            or (origin is not None and origin != str(request.base_url).rstrip("/"))
+            or request.headers.get("sec-fetch-site") == "cross-site"
+        ):
             return JSONResponse(status_code=403, content={"detail": "Accès réservé à cette application locale."})
         return await call_next(request)
 

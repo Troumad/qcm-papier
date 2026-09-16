@@ -19,7 +19,6 @@ from openpyxl import load_workbook
 
 from .model import Student
 
-
 # ---------------------------------------------------------------------------
 # Import de la table étudiants
 # ---------------------------------------------------------------------------
@@ -79,10 +78,7 @@ def load_students_table(path: str) -> dict[str, Student]:
         elif value == _HEADER_FIRSTNAME:
             col_firstname = c
     if None in (col_eid, col_nip, col_name, col_firstname):
-        raise ValueError(
-            "La feuille doit contenir les colonnes 'etudid', 'code_nip', "
-            "'nom', 'prenom'."
-        )
+        raise ValueError("La feuille doit contenir les colonnes 'etudid', 'code_nip', " "'nom', 'prenom'.")
 
     students: dict[str, Student] = {}
     for row in rows:
@@ -99,10 +95,16 @@ def load_students_table(path: str) -> dict[str, Student]:
 # Export des notes Scodoc
 # ---------------------------------------------------------------------------
 
-def export_scodoc_notes(path_input: str, path_output: str,
-                        notes: dict[str, float],
-                        note_max: float = 20.0, notemax: float = 20.0,
-                        header_row: int = 7, min0: bool = False) -> int:
+
+def export_scodoc_notes(
+    path_input: str,
+    path_output: str,
+    notes: dict[str, float],
+    note_max: float = 20.0,
+    notemax: float = 20.0,
+    header_row: int = 7,
+    min0: bool = False,
+) -> int:
     """Injecte les notes dans une feuille Scodoc et sauvegarde en XLS.
 
     Reprend ``MarkingScodocExportLoad`` (index.html ~7625-7710) :

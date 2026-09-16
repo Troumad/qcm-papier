@@ -51,7 +51,7 @@ def normalize_base_url(url: str) -> str:
     url = (url or "").strip().rstrip("/")
     try:
         parts = urllib.parse.urlsplit(url)
-        parts.port  # Valide aussi un éventuel port saisi.
+        _ = parts.port  # Cette propriété valide le port et peut lever ValueError.
     except ValueError as exc:
         raise ScoDocError("Adresse ScoDoc invalide.") from exc
     if parts.scheme not in ("http", "https") or not parts.netloc:
@@ -105,7 +105,9 @@ class ScoDocClient:
     def get(self, endpoint: str) -> Any:
         if not self.token:
             raise ScoDocAuthError("Non connecté à ScoDoc.")
-        request = urllib.request.Request(f"{self.base_url}{endpoint}", headers={"Authorization": f"Bearer {self.token}"})
+        request = urllib.request.Request(
+            f"{self.base_url}{endpoint}", headers={"Authorization": f"Bearer {self.token}"}
+        )
         try:
             result = self._open(request)
         except ScoDocAuthError:

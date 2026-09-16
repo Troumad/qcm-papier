@@ -1,0 +1,82 @@
+# Bilan des tests et de la couverture
+
+Mesure du 16 septembre 2026, Python 3.12, sur une copie ne contenant que les
+fichiers versionnés et les nouveaux tests. Aucun PDF étudiant privé n'est requis.
+
+## Résultats
+
+- 134 tests Python réussis, 5 ignorés car ils nécessitent le PDF local de correction.
+- Les mêmes tests passent sous Python 3.10.
+- 3 tests JavaScript du rendu Markdown réussis ; pas de mesure de couverture JavaScript.
+- Ruff étendu, formatage et Bandit passent.
+- Gitleaks passe sur l'historique : deux faux positifs jsPDF (alphabet hexadécimal)
+  sont exclus par empreinte précise dans `.gitleaksignore`.
+
+## Couverture
+
+La mesure combine lignes exécutables et branches conditionnelles :
+
+- **49,2 % sur tout le paquet Python**, GTK inclus.
+- **80,6 % hors `qcm_papier/ui/`**, CLI et point d'entrée inclus.
+- Sur ce dernier périmètre : **84,4 % des lignes** (3127/3704) et
+  **69,8 % des branches conditionnelles** (917/1314).
+- Le seuil CI de **80 %** porte sur la mesure combinée hors GTK. Ce seuil protège
+  contre les régressions globales ; il ne garantit pas chaque module individuellement.
+
+| Module | Couverture combinée |
+|---|---:|
+| `qcm_papier/__main__.py` | 50.0 % |
+| `qcm_papier/cli.py` | 76.0 % |
+| `qcm_papier/code39.py` | 90.9 % |
+| `qcm_papier/config.py` | 80.0 % |
+| `qcm_papier/editing.py` | 92.4 % |
+| `qcm_papier/generator.py` | 81.3 % |
+| `qcm_papier/marking.py` | 79.1 % |
+| `qcm_papier/model.py` | 89.2 % |
+| `qcm_papier/pdf_writer.py` | 77.2 % |
+| `qcm_papier/project.py` | 86.5 % |
+| `qcm_papier/random_gen.py` | 100.0 % |
+| `qcm_papier/scanner.py` | 74.8 % |
+| `qcm_papier/scodoc.py` | 90.4 % |
+| `qcm_papier/scodoc_api.py` | 94.2 % |
+| `qcm_papier/scodoc_config.py` | 78.7 % |
+| `qcm_papier/ui/app.py` | 0.0 % |
+| `qcm_papier/ui/editor.py` | 0.0 % |
+| `qcm_papier/web/server.py` | 75.2 % |
+| `qcm_papier/web/session.py` | 83.3 % |
+
+## Ce qui a été renforcé
+
+19 cas supplémentaires vérifient les commandes CLI, la génération effective de PDF,
+la sauvegarde des variantes, les erreurs de fichiers, la correction et reprise CLI,
+les réponses joker selon trois barèmes, ainsi que le parcours API de correction,
+identification manuelle, images PNG, sauvegarde ZIP, suppression et reprise.
+Les tirages de tests sont fixés pour rendre les résultats reproductibles.
+
+## Limites et prochains tests prioritaires
+
+1. Scanner (74,8 %) : copies dégradées, rotations, numéros illisibles et échecs
+   d'alignement. Le PDF synthétique valide un parcours idéal, pas toutes les qualités de scan.
+2. Calcul des notes (79,1 %) : combinaisons de barèmes, notes manuelles et cas limites.
+3. API web (75,2 %) et CLI (76 %) : erreurs d'import, export des notes, annulation
+   et échecs de tâches en arrière-plan.
+4. GTK : code non exercé ici ; il faut des tests dans un environnement GTK adapté.
+5. ScoDoc : serveur simulé et trousseau en mémoire. Un serveur réel et les trousseaux
+   natifs doivent encore être essayés.
+6. Navigateur et Tauri : pas de tests du parcours visuel, de couverture Rust ou de
+   validation Windows/Linux dans cette suite. Les tests Markdown ne couvrent pas toute l'interface.
+
+## Reproduire
+
+```bash
+python -m pip install -e ".[dev]"
+python -m coverage run -m pytest -q
+python -m coverage report
+python -m coverage report --omit="qcm_papier/ui/*" --fail-under=80
+python -m coverage html
+pre-commit run --all-files
+pre-commit run gitleaks-history --all-files --hook-stage manual
+```
+
+La présence du PDF local peut augmenter le nombre de tests exécutés et la couverture.
+Le rapport HTML contient les lignes et branches non exercées pour guider les prochains tests.
