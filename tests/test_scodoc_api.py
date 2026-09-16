@@ -105,8 +105,15 @@ def test_redirection_ne_transmet_pas_les_identifiants(scodoc_url):
         ScoDocClient(scodoc_url + "/redirect").authenticate(USER, PASSWORD)
 
 
-@pytest.mark.parametrize("url", ["https://u:secret@example.org", "https://example.org?q=1",
-                                    "https://example.org/#fragment", "https://example.org:abc"])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://u:secret@example.org",
+        "https://example.org?q=1",
+        "https://example.org/#fragment",
+        "https://example.org:abc",
+    ],
+)
 def test_adresses_ambigues_refusees(url):
     with pytest.raises(ScoDocError):
         scodoc_api.normalize_base_url(url)
@@ -118,8 +125,10 @@ def test_reponse_inattendue_et_session_expiree(monkeypatch):
     monkeypatch.setattr(client, "_open", lambda _request: {"erreur": "pas une liste"})
     with pytest.raises(ScoDocError, match="liste"):
         client.departements()
+
     def expired(_request):
         raise ScoDocAuthError("expiré")
+
     monkeypatch.setattr(client, "_open", expired)
     with pytest.raises(ScoDocAuthError):
         client.departements()

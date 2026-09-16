@@ -62,9 +62,11 @@ def create_app(session: Session | None = None) -> FastAPI:
         except ValueError:
             host = None
         origin = request.headers.get("origin")
-        if (host not in LOCAL_HOSTS
-                or (origin is not None and origin != str(request.base_url).rstrip("/"))
-                or request.headers.get("sec-fetch-site") == "cross-site"):
+        if (
+            host not in LOCAL_HOSTS
+            or (origin is not None and origin != str(request.base_url).rstrip("/"))
+            or request.headers.get("sec-fetch-site") == "cross-site"
+        ):
             return JSONResponse(status_code=403, content={"detail": "Accès réservé à cette application locale."})
         return await call_next(request)
 

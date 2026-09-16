@@ -32,15 +32,6 @@ jobs:
         run: pre-commit run --all-files
       - name: Ruff (règles étendues, informatif)
         run: ruff check qcm_papier tests --select E,W,F,I,B,UP,SIM --statistics --exit-zero
-      - name: Formatage (informatif)
-        run: |
-          status=0
-          ruff format --check qcm_papier tests || status=$?
-          if [ "$status" -eq 1 ]; then
-            echo "Des fichiers peuvent être reformatés ; ce contrôle est informatif." >> "$GITHUB_STEP_SUMMARY"
-          elif [ "$status" -ne 0 ]; then
-            exit "$status"
-          fi
 
   test:
     runs-on: ubuntu-latest
