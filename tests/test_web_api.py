@@ -63,6 +63,38 @@ def test_edition_structure_et_parametres(client):
     assert client.patch("/api/structure/exercises/9", json={"name": "x"}).status_code == 404
 
 
+def test_suppression_et_deplacement_structure(client):
+    for _ in range(2):
+        client.post("/api/structure/exercises")
+    client.patch("/api/structure/exercises/0", json={"name": "Premier"})
+    client.patch("/api/structure/exercises/1", json={"name": "Second"})
+
+    data = client.post("/api/structure/exercises/0/move", json={"delta": 1}).json()
+    assert [e["name"] for e in data["structure"]["exercises"]] == ["Second", "Premier"]
+    assert data["accepted"] is True
+    assert client.post("/api/structure/exercises/0/move", json={"delta": -1}).json()["accepted"] is False
+
+    client.post("/api/structure/exercises/0/questions")
+    url = "/api/structure/exercises/0/questions"
+    data = client.post(f"{url}/1/move", json={"delta": -1}).json()
+    assert [q["name"] for q in data["structure"]["exercises"][0]["questions"]] == ["Question 2", "Question 1"]
+    data = client.delete(f"{url}/0").json()
+    assert [q["name"] for q in data["structure"]["exercises"][0]["questions"]] == ["Question 1"]
+    assert client.delete(f"{url}/0").json()["accepted"] is False  # une question au minimum
+
+    data = client.delete("/api/structure/exercises/1").json()
+    assert [e["name"] for e in data["structure"]["exercises"]] == ["Second"]
+    assert client.delete("/api/structure/exercises/0").json()["accepted"] is False  # un exercice au minimum
+
+
+def test_structure_refuse_les_rangs_invalides(client):
+    client.post("/api/structure/exercises")
+    assert client.delete("/api/structure/exercises/9").status_code == 404
+    assert client.delete("/api/structure/exercises/0/questions/9").status_code == 404
+    assert client.post("/api/structure/exercises/9/move", json={"delta": 1}).status_code == 404
+    assert client.post("/api/structure/exercises/0/move", json={"delta": 3}).status_code == 400
+
+
 def test_generation_variantes_et_pdf(client):
     client.post("/api/structure/exercises")
     client.put("/api/settings", json={"generate_count": 2, "generate_variants": ""})

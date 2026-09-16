@@ -92,3 +92,86 @@ def test_apply_info_defaults_ne_remplace_que_les_vides():
     editing.apply_info_defaults(settings)
     assert settings.establishment == "Lyon 2"
     assert settings.duration == "1h"
+
+
+# ---------------------------------------------------------------------------
+# Suppression et déplacement (mêmes règles que ui/editor.py)
+# ---------------------------------------------------------------------------
+
+
+def _project(exercises=2, questions=2):
+    project = Project()
+    for _ in range(exercises):
+        exercise = editing.add_exercise(project)
+        for _ in range(questions - 1):
+            editing.add_question(exercise)
+    return project
+
+
+def test_remove_exercise_reindexe_les_suivants():
+    project = _project(exercises=3)
+    project.structure[1].name = "Cible"
+    assert editing.remove_exercise(project, 1) is True
+    assert [e.name for e in project.structure] == ["Exercice 1", "Exercice 3"]
+    assert [e.index for e in project.structure] == [0, 1]
+
+
+def test_remove_exercise_garde_le_dernier():
+    project = _project(exercises=1)
+    assert editing.remove_exercise(project, 0) is False
+    assert len(project.structure) == 1
+
+
+def test_remove_question_reindexe_et_garde_la_derniere():
+    project = _project(exercises=1, questions=3)
+    exercise = project.structure[0]
+    assert editing.remove_question(exercise, 0) is True
+    assert [q.name for q in exercise.questions] == ["Question 2", "Question 3"]
+    assert [q.index for q in exercise.questions] == [0, 1]
+    assert editing.remove_question(exercise, 0) is True
+    assert editing.remove_question(exercise, 0) is False
+    assert len(exercise.questions) == 1
+
+
+def test_move_exercise_echange_avec_le_voisin():
+    project = _project(exercises=3)
+    assert editing.move_exercise(project, 0, 1) is True
+    assert [e.name for e in project.structure] == ["Exercice 2", "Exercice 1", "Exercice 3"]
+    assert [e.index for e in project.structure] == [0, 1, 2]
+
+
+def test_move_exercise_refuse_de_sortir_des_bornes():
+    project = _project(exercises=2)
+    assert editing.move_exercise(project, 0, -1) is False
+    assert editing.move_exercise(project, 1, 1) is False
+    assert [e.name for e in project.structure] == ["Exercice 1", "Exercice 2"]
+
+
+def test_move_question_dans_son_exercice():
+    exercise = _project(exercises=1, questions=3).structure[0]
+    assert editing.move_question(exercise, 2, -1) is True
+    assert [q.name for q in exercise.questions] == ["Question 1", "Question 3", "Question 2"]
+    assert [q.index for q in exercise.questions] == [0, 1, 2]
+    assert editing.move_question(exercise, 0, -1) is False
+    assert editing.move_question(exercise, 2, 1) is False
+
+
+def test_move_refuse_un_deplacement_autre_que_un_cran():
+    project = _project(exercises=3)
+    with pytest.raises(ValueError):
+        editing.move_exercise(project, 0, 2)
+    with pytest.raises(ValueError):
+        editing.move_question(project.structure[0], 0, 0)
+
+
+def test_rang_hors_liste_refuse():
+    project = _project(exercises=2)
+    for call in (
+        lambda: editing.remove_exercise(project, 2),
+        lambda: editing.remove_exercise(project, -1),
+        lambda: editing.move_exercise(project, 5, 1),
+        lambda: editing.remove_question(project.structure[0], -1),
+        lambda: editing.move_question(project.structure[0], 9, -1),
+    ):
+        with pytest.raises(IndexError):
+            call()
