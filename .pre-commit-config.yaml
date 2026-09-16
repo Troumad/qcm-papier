@@ -1,5 +1,6 @@
 # Vérifications lancées avant chaque commit.
-# Installation : pip install -e ".[dev]" puis pre-commit install
+# Installation : uv sync --extra dev puis uv run pre-commit install
+# (sans uv : pip install -e ".[dev]" puis pre-commit install)
 # Le formatage Python est vérifié automatiquement avec Ruff.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks

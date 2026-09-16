@@ -78,17 +78,26 @@ est d'utiliser [MSYS2](https://www.msys2.org/) :
 
 ### Interface web locale
 
-Depuis la racine d'une version contenant la commande `serve` :
+Depuis la racine d'une version contenant la commande `serve`, avec
+[uv](https://docs.astral.sh/uv/) (installation : `curl -LsSf https://astral.sh/uv/install.sh | sh`,
+ou `winget install astral-sh.uv` sous Windows) :
+
+```bash
+uv sync --extra web
+uv run qcm-papier serve
+```
+
+`uv sync` crée l'environnement `.venv` du projet, y installe le bon Python et
+les dépendances exactes du fichier `uv.lock` : rien à activer, rien à choisir.
+
+Sans uv, l'environnement se prépare à la main :
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate        # Windows PowerShell : .venv\Scripts\Activate.ps1
 python -m pip install ".[web]"
 python -m qcm_papier serve
 ```
-
-Sous Windows PowerShell, utilisez `py -m venv .venv`, puis
-`.venv\Scripts\Activate.ps1` pour activer l'environnement.
 Le navigateur s'ouvre sur `http://127.0.0.1:8060`. Gardez le terminal ouvert ;
 `Ctrl+C` arrête le serveur. Aucune compilation des fichiers HTML/JS n'est nécessaire.
 
@@ -99,15 +108,18 @@ Récupérez la version publique (branche `main`) :
 ```bash
 git clone https://github.com/Troumad/qcm-papier.git
 cd qcm-papier
-pip install ".[gui]"
+uv sync --extra gui        # sans uv : pip install ".[gui]"
 ```
 
 Pour mettre à jour vers la dernière version publiée :
 
 ```bash
 git pull origin main
-pip install ".[gui]"
+uv sync --extra gui        # sans uv : pip install ".[gui]"
 ```
+
+Les lanceurs (`qcm-papier.command`, `qcm-papier.bat`, `qcm-papier.sh`) utilisent
+le `.venv` du projet s'il existe, sinon le `python3` du système.
 
 ### Pour développeurs (branche de développement)
 
@@ -119,35 +131,31 @@ réinstaller le paquet :
 git clone https://github.com/Troumad/qcm-papier.git
 cd qcm-papier
 git checkout nouvelle_main
-pip install -e ".[gui]"
+uv sync --extra gui
 ```
 
-Mises à jour :
-
-```bash
-git pull origin nouvelle_main
-```
-
-(Sans le mode `-e`, refaites `pip install -e ".[gui]"`.)
+`uv sync` installe le projet en mode editable : les mises à jour se font par un
+simple `git pull origin nouvelle_main`, suivi de `uv sync --extra gui` si les
+dépendances ont changé. Sans uv : `pip install -e ".[gui]"`.
 
 #### Vérifications avant commit
 
 Les outils de vérification (tests, couverture, Ruff, Bandit, pre-commit) s'installent avec :
 
 ```bash
-pip install -e ".[dev]"
-pre-commit install
+uv sync --extra dev        # sans uv : pip install -e ".[dev]"
+uv run pre-commit install
 ```
 
 Chaque `git commit` lance alors les vérifications automatiquement. Pour les
 lancer à la main :
 
 ```bash
-pre-commit run --all-files
-pre-commit run gitleaks-history --all-files --hook-stage manual
-python -m coverage run -m pytest -q
-python -m coverage report
-python -m coverage report --omit="qcm_papier/ui/*" --fail-under=80
+uv run pre-commit run --all-files
+uv run pre-commit run gitleaks-history --all-files --hook-stage manual
+uv run coverage run -m pytest -q
+uv run coverage report
+uv run coverage report --omit="qcm_papier/ui/*" --fail-under=80
 ```
 
 GTK n'est pas nécessaire pour ces vérifications. Pour utiliser aussi
@@ -323,9 +331,9 @@ Cette première version ne reprend pas encore toutes les commandes de l'éditeur
 notamment la suppression et le déplacement des exercices et des questions.
 
 ```bash
-pip install -e ".[web]"
-qcm-papier serve                              # ouvre le navigateur
-qcm-papier serve -p math/2026/OML1_bis.json   # avec un projet ouvert
+uv sync --extra web
+uv run qcm-papier serve                              # ouvre le navigateur
+uv run qcm-papier serve -p math/2026/OML1_bis.json   # avec un projet ouvert
 ```
 
 - Le serveur écoute uniquement sur `127.0.0.1` (port 8060 par défaut,
@@ -370,7 +378,13 @@ macOS, Gestionnaire d'identifiants Windows, Secret Service sous Linux) ; il
 n'est jamais écrit dans un fichier ni réaffiché. Sans trousseau disponible,
 l'enregistrement est refusé. Selon votre établissement, l'accès au serveur
 peut nécessiter le réseau interne ou le VPN. Installez les dépendances avec
-`python -m pip install -e ".[web]"`.
+`uv sync --extra web`.
+
+Si la connexion échoue avec `[SSL: CERTIFICATE_VERIFY_FAILED] ... unable to get
+local issuer certificate`, l'interpréteur utilisé n'a pas de magasin de
+certificats : c'est le cas d'un Python installé depuis python.org sous macOS
+tant que `/Applications/Python 3.x/Install Certificates.command` n'a pas été
+lancé. Passer par `uv sync` puis `uv run` évite le problème.
 
 L'adresse et l'identifiant sont conservés dans `scodoc.json`, dans le dossier
 de configuration de l'application ; seul le mot de passe va dans le trousseau.

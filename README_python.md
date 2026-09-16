@@ -66,17 +66,20 @@ qcm_papier/
 # Paquets système (Debian/Ubuntu) pour GTK 4
 sudo apt-get install python3-gi gir1.2-gtk-4.0
 
-# Dépendances Python
-pip install -e .
+# Dépendances Python (uv crée .venv et installe les versions de uv.lock)
+uv sync
 ```
+
+Sans [uv](https://docs.astral.sh/uv/) : `python3 -m venv .venv`, activation de
+l'environnement, puis `pip install -e .`.
 
 ## Utilisation
 
 ### Interface web locale
 
 ```bash
-python -m pip install -e ".[web]"
-python -m qcm_papier serve
+uv sync --extra web
+uv run qcm-papier serve
 ```
 
 Le serveur sert les fichiers de `web/static/` et écoute sur la boucle locale.
@@ -89,7 +92,7 @@ Le lanceur Rust est décrit dans [src-tauri/README.md](src-tauri/README.md).
 ### Interface graphique GTK
 
 ```bash
-python3 -m qcm_papier
+uv run python -m qcm_papier
 ```
 
 ### Ligne de commande
@@ -105,8 +108,8 @@ qcm-papier correct --project qcm.json --copies scans/ --output notes.xls
 ## Tests
 
 ```bash
-python -m pip install -e ".[dev]"
-pytest -q
+uv sync --extra dev
+uv run pytest -q
 node --test tests/js/*.cjs
 ```
 
