@@ -20,3 +20,6 @@ math/2026/correction3.pdf
 # Application Tauri : fichiers de compilation
 src-tauri/target/
 src-tauri/gen/
+
+# Sortie de test générée localement
+/test_output.pdf

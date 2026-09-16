@@ -15,8 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from openpyxl import load_workbook, Workbook
-from openpyxl.utils import get_column_letter
+from openpyxl import load_workbook
 
 from .model import Student
 
