@@ -151,25 +151,105 @@ const QUESTION_TYPES = [
 ];
 const CHOICE_STATES = [["correct", "Correct"], ["neutral", "Neutre"], ["penalty", "Faux"]];
 
+// Boutons « monter », « descendre » et « supprimer » d'une ligne de l'arbre.
+// Les mêmes règles que l'éditeur GTK s'appliquent : un projet garde au moins un
+// exercice, un exercice au moins une question.
+function rowActions({ label, count, index, disabledRemove, move, remove }) {
+  const button = (text, title, onclick, disabled, className = "") =>
+    el("button", {
+      type: "button", class: className, title, "aria-label": title, disabled,
+      onclick: (ev) => { ev.stopPropagation(); guard(onclick); },
+    }, text);
+  return el("span", { class: "row-actions" },
+    button("▲", `Monter ${label}`, () => move(-1), index === 0),
+    button("▼", `Descendre ${label}`, () => move(+1), index === count - 1),
+    button("✕", `Supprimer ${label}`, remove, disabledRemove, "remove"),
+  );
+}
+
 function renderTree() {
   const { structure } = project;
   $("#interval").textContent = `Intervalle : ${fmt(structure.range[0])} ↗ ${fmt(structure.range[1])}`;
   const tree = $("#tree");
   tree.replaceChildren();
-  structure.exercises.forEach((exercise, e) => {
+  const exercises = structure.exercises;
+  exercises.forEach((exercise, e) => {
+    const exUrl = `/api/structure/exercises/${e}`;
     const item = el("li", { class: "exercise", tabindex: "0", onclick: () => select({ e }) },
-      `Exercice ${e + 1} : ${exercise.name} ${fmt(exercise.range[0])} ↗ ${fmt(exercise.range[1])}`);
-    item.classList.toggle("selected", selected && selected.e === e && selected.q === undefined);
+      el("span", { class: "label" },
+        `Exercice ${e + 1} : ${exercise.name} ${fmt(exercise.range[0])} ↗ ${fmt(exercise.range[1])}`),
+      rowActions({
+        label: `l'exercice ${e + 1}`, count: exercises.length, index: e,
+        disabledRemove: exercises.length <= 1,
+        move: (delta) => moveItem(exUrl, { e }, delta),
+        remove: () => removeItem(exUrl, `Supprimer « ${exercise.name} » et toutes ses questions ?`, { e }),
+      }));
+    item.classList.toggle("selected", Boolean(selected && selected.e === e && selected.q === undefined));
     tree.append(item);
     exercise.questions.forEach((question, q) => {
+      const qUrl = `${exUrl}/questions/${q}`;
       const row = el("li", { class: "question", tabindex: "0", onclick: () => select({ e, q }) },
-        `Q${q + 1} : ${question.name} ${question.range[0]} ↗ ${question.range[1]} `,
-        ...question.choices.map((c) => el("span", { class: `choice ${c.state}` }, `(${c.name})`)));
+        el("span", { class: "label" },
+          `Q${q + 1} : ${question.name} ${question.range[0]} ↗ ${question.range[1]} `,
+          ...question.choices.map((c) => el("span", { class: `choice ${c.state}` }, `(${c.name})`))),
+        rowActions({
+          label: `la question ${q + 1}`, count: exercise.questions.length, index: q,
+          disabledRemove: exercise.questions.length <= 1,
+          move: (delta) => moveItem(qUrl, { e, q }, delta),
+          remove: () => removeItem(qUrl, `Supprimer « ${question.name} » ?`, { e, q }),
+        }));
       row.classList.toggle("selected", Boolean(selected && selected.e === e && selected.q === q));
       tree.append(row);
     });
   });
   renderProps();
+}
+
+// Déplacement d'un cran : la sélection suit l'élément déplacé.
+async function moveItem(url, target, delta) {
+  const data = await structureCall("POST", `${url}/move`, { delta });
+  if (!data.accepted) return;
+  selected = target.q === undefined
+    ? { e: target.e + delta }
+    : { e: target.e, q: target.q + delta };
+  renderTree();
+}
+
+// Suppression après confirmation, comme le dialogue de l'éditeur GTK.
+async function removeItem(url, message, target) {
+  if (!(await confirmRemoval(message))) return;
+  const data = await structureCall("DELETE", url);
+  if (!data.accepted) {
+    toast(target.q === undefined
+      ? "Le projet doit garder au moins un exercice."
+      : "Un exercice doit garder au moins une question.", true);
+    return;
+  }
+  const exercises = data.structure.exercises;
+  if (target.q === undefined) {
+    selected = exercises.length ? { e: Math.min(target.e, exercises.length - 1) } : null;
+  } else {
+    const questions = exercises[target.e].questions;
+    selected = { e: target.e, q: Math.min(target.q, questions.length - 1) };
+  }
+  renderTree();
+}
+
+// Confirmation par <dialog> : pas de window.confirm, qui bloque la fenêtre.
+function confirmRemoval(message) {
+  const dialog = $("#dlg-confirm");
+  $("#confirm-title").textContent = "Suppression définitive";
+  $("#confirm-message").textContent = `${message} Cette action est irréversible.`;
+  return new Promise((resolve) => {
+    // Le gestionnaire est retiré avant la fermeture : sans cela, close()
+    // déclencherait « onclose » et la promesse se résoudrait toujours à false.
+    const close = (value) => { dialog.onclose = null; dialog.close(); resolve(value); };
+    dialog.onclose = () => resolve(false);  // Fermeture par Échap.
+    $("#confirm-ok").onclick = () => close(true);
+    $("#confirm-cancel").onclick = () => close(false);
+    dialog.showModal();
+    $("#confirm-cancel").focus();
+  });
 }
 
 function select(target) {

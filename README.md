@@ -317,7 +317,10 @@ L'interface est organisée en onglets :
 
 1. **Fichier** — ouvrir, créer, enregistrer un projet.
 2. **Informations** — résumé du projet (exercices, questions, choix, variantes).
-3. **Structure** — éditeur des exercices, questions et choix.
+3. **Structure** — éditeur des exercices, questions et choix. Chaque ligne de
+   l'arborescence porte trois boutons : ▲ et ▼ déplacent l'élément d'un cran,
+   ✕ le supprime après confirmation. Un projet garde toujours au moins un
+   exercice, et un exercice au moins une question.
 4. **Génération** — générer les variantes et le PDF sujet.
 5. **Correction** — charger les copies, lancer la correction, voir les pages
    corrigées, lever l'anonymat (Scodoc) et exporter les notes.
@@ -327,8 +330,10 @@ L'interface est organisée en onglets :
 
 Une interface complémentaire existe dans le navigateur : édition, génération,
 correction et sauvegarde. Elle utilise Python avec `.[web]`, sans GTK.
-Cette première version ne reprend pas encore toutes les commandes de l'éditeur GTK,
-notamment la suppression et le déplacement des exercices et des questions.
+L'éditeur de structure applique les mêmes règles que l'interface GTK, y compris
+la suppression et le déplacement des exercices et des questions. Le choix du
+dossier d'enregistrement reste propre à GTK : le navigateur télécharge les
+fichiers dans son dossier habituel.
 
 ```bash
 uv sync --extra web
