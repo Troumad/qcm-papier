@@ -44,15 +44,14 @@ def test_tri_from_flags():
 
 def test_random_index():
     assert rg.random_index(42, 10) == 2  # 42 % 10
-    assert rg.random_index(7, 3) == 1   # 7 % 3
+    assert rg.random_index(7, 3) == 1  # 7 % 3
     assert rg.random_index(100, 0) == 0  # longueur nulle
 
 
 def test_insert_choices_ajoute_neutres():
     """insert_choices ajoute des choix fantômes neutres à des positions pseudo-aléatoires."""
     choice_list = [{"index": 0, "name": "A", "correct": True, "neutral": False, "penalty": False}]
-    rg.insert_choices(42, choice_list, additional=0,
-                      new_choices_name="X", new_choices_count=3)
+    rg.insert_choices(42, choice_list, additional=0, new_choices_name="X", new_choices_count=3)
     # On doit avoir 1 + 3 = 4 choix.
     assert len(choice_list) == 4
     # Les 3 nouveaux sont neutres et index -1.
@@ -67,9 +66,9 @@ def test_insert_choices_ajoute_neutres():
 def test_insert_questions_structure():
     """insert_questions ajoute des questions fantômes avec des choix neutres."""
     question_list = [{"index": 0, "name": "Q", "choices": []}]
-    rg.insert_questions(42, question_list,
-                        new_questions=2, new_choices=4,
-                        new_questions_name="FQ", new_choices_name="C")
+    rg.insert_questions(
+        42, question_list, new_questions=2, new_choices=4, new_questions_name="FQ", new_choices_name="C"
+    )
     assert len(question_list) == 3
     fantomes = [q for q in question_list if q["index"] == -1]
     assert len(fantomes) == 2

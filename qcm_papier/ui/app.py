@@ -20,13 +20,16 @@ from __future__ import annotations
 import os
 
 import gi
-gi.require_version('Gtk', '4.0')
-from gi.repository import Gtk, Gdk, GLib
 
-from .. import generator, pdf_writer, project as project_mod, scanner, scodoc
+gi.require_version("Gtk", "4.0")
+from gi.repository import Gdk, GLib, Gtk
+
+from .. import generator, pdf_writer, scanner, scodoc
+from .. import project as project_mod
 from ..marking import score_page
 from ..model import Project
 from .editor import StructureEditor
+
 
 def _file_dialog(parent, title: str, action, filters=None, initial_name=None):
     """Crée un sélecteur de fichier natif (GTK 4)."""
@@ -43,6 +46,7 @@ def _file_dialog(parent, title: str, action, filters=None, initial_name=None):
 
     path = [None]
     from gi.repository import GLib
+
     loop = GLib.MainLoop()
 
     def on_response(native, response):
@@ -60,8 +64,7 @@ def _file_dialog(parent, title: str, action, filters=None, initial_name=None):
 
 def _file_dialog_multiple(parent, title: str, filters=None):
     """Sélecteur de fichiers natif en mode sélection multiple (GTK 4)."""
-    dialog = Gtk.FileChooserNative.new(title, parent, Gtk.FileChooserAction.OPEN,
-                                       None, None)
+    dialog = Gtk.FileChooserNative.new(title, parent, Gtk.FileChooserAction.OPEN, None, None)
     dialog.set_select_multiple(True)
     if filters:
         for name, patterns in filters:
@@ -73,6 +76,7 @@ def _file_dialog_multiple(parent, title: str, filters=None):
 
     paths = []
     from gi.repository import GLib
+
     loop = GLib.MainLoop()
 
     def on_response(native, response):
@@ -94,6 +98,7 @@ def _file_dialog_multiple(parent, title: str, filters=None):
 
 def _img_to_texture(img) -> object:
     import io
+
     buf = io.BytesIO()
     img.save(buf, format="png")
     return Gdk.Texture.new_from_bytes(GLib.Bytes.new(buf.getvalue()))
@@ -107,6 +112,7 @@ def _label_font(size: int = 16):
     police bitmap par défaut (sans redimensionnement).
     """
     from PIL import ImageFont
+
     try:
         return ImageFont.load_default(size=size)
     except TypeError:
@@ -134,9 +140,11 @@ def _help_markdown_path() -> str:
     """
     here = os.path.dirname(os.path.abspath(__file__))
     pkg_dir = os.path.dirname(here)
-    for cand in (os.path.join(pkg_dir, "README.md"),
-                 os.path.join(here, "README.md"),
-                 os.path.join(os.path.dirname(pkg_dir), "README.md")):
+    for cand in (
+        os.path.join(pkg_dir, "README.md"),
+        os.path.join(here, "README.md"),
+        os.path.join(os.path.dirname(pkg_dir), "README.md"),
+    ):
         if os.path.exists(cand):
             return cand
     return ""
@@ -152,17 +160,18 @@ def _scodoc_picture(data_dir: str, name: str, max_width: int = 800):
     path = os.path.join(data_dir, name)
     if not os.path.exists(path) or os.path.getsize(path) < 100:
         import sys
+
         print(f"[scodoc-image] image absente : {path}", file=sys.stderr)
         return None
     try:
         from PIL import Image as PILImage
+
         img = PILImage.open(path)
         if img.width < 2 and img.height < 2:
             return None  # placeholder 1x1
         if img.width > max_width:
             ratio = max_width / img.width
-            img = img.resize((max_width, int(img.height * ratio)),
-                             PILImage.LANCZOS)
+            img = img.resize((max_width, int(img.height * ratio)), PILImage.LANCZOS)
         pic = Gtk.Picture()
         texture = _img_to_texture(img.convert("RGBA"))
         pic.set_paintable(texture)
@@ -170,6 +179,7 @@ def _scodoc_picture(data_dir: str, name: str, max_width: int = 800):
         return pic
     except Exception as e:
         import sys
+
         print(f"[scodoc-image] échec chargement {path} : {e}", file=sys.stderr)
         return None
 
@@ -178,8 +188,7 @@ class QcmWindow(Gtk.ApplicationWindow):
     """Fenêtre principale de l'application."""
 
     def __init__(self, **kwargs):
-        super().__init__(title="Générateur/Correcteur de QCM papier",
-                        default_width=1000, default_height=700, **kwargs)
+        super().__init__(title="Générateur/Correcteur de QCM papier", default_width=1000, default_height=700, **kwargs)
 
         self.project = Project()
         # Chemin courant du projet : None tant qu'aucun « Enregistrer sous »
@@ -221,9 +230,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             }
         """)
         Gtk.StyleContext.add_provider_for_display(
-            Gdk.Display.get_default(),
-            style_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            Gdk.Display.get_default(), style_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
 
         self._build_file_tab()
@@ -292,8 +299,9 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.entry_establishment = Gtk.Entry()
         self.entry_establishment.set_hexpand(True)
         self.entry_establishment.set_text(self.project.settings.establishment or "Université Lyon 1")
-        self.entry_establishment.connect("changed",
-            lambda e: setattr(self.project.settings, "establishment", e.get_text()))
+        self.entry_establishment.connect(
+            "changed", lambda e: setattr(self.project.settings, "establishment", e.get_text())
+        )
         if not self.project.settings.establishment:
             self.entry_establishment.get_style_context().add_class("suggestion")
         grid1.attach(self.entry_establishment, 1, 0, 1, 1)
@@ -302,8 +310,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.entry_institute = Gtk.Entry()
         self.entry_institute.set_hexpand(True)
         self.entry_institute.set_text(self.project.settings.institute or "IUT LYON 1")
-        self.entry_institute.connect("changed",
-            lambda e: setattr(self.project.settings, "institute", e.get_text()))
+        self.entry_institute.connect("changed", lambda e: setattr(self.project.settings, "institute", e.get_text()))
         if not self.project.settings.institute:
             self.entry_institute.get_style_context().add_class("suggestion")
         grid1.attach(self.entry_institute, 3, 0, 1, 1)
@@ -312,8 +319,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.entry_formation = Gtk.Entry()
         self.entry_formation.set_hexpand(True)
         self.entry_formation.set_text(self.project.settings.formation or "Département GEii")
-        self.entry_formation.connect("changed",
-            lambda e: setattr(self.project.settings, "formation", e.get_text()))
+        self.entry_formation.connect("changed", lambda e: setattr(self.project.settings, "formation", e.get_text()))
         if not self.project.settings.formation:
             self.entry_formation.get_style_context().add_class("suggestion")
         grid1.attach(self.entry_formation, 5, 0, 1, 1)
@@ -325,8 +331,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.entry_year = Gtk.Entry()
         self.entry_year.set_hexpand(True)
         self.entry_year.set_text(self.project.settings.year or "2026")
-        self.entry_year.connect("changed",
-            lambda e: setattr(self.project.settings, "year", e.get_text()))
+        self.entry_year.connect("changed", lambda e: setattr(self.project.settings, "year", e.get_text()))
         if not self.project.settings.year:
             self.entry_year.get_style_context().add_class("suggestion")
         grid2.attach(self.entry_year, 1, 0, 1, 1)
@@ -335,8 +340,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.entry_semester = Gtk.Entry()
         self.entry_semester.set_hexpand(True)
         self.entry_semester.set_text(self.project.settings.semester or "S1")
-        self.entry_semester.connect("changed",
-            lambda e: setattr(self.project.settings, "semester", e.get_text()))
+        self.entry_semester.connect("changed", lambda e: setattr(self.project.settings, "semester", e.get_text()))
         if not self.project.settings.semester:
             self.entry_semester.get_style_context().add_class("suggestion")
         grid2.attach(self.entry_semester, 3, 0, 1, 1)
@@ -345,8 +349,9 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.entry_teaching_unit = Gtk.Entry()
         self.entry_teaching_unit.set_hexpand(True)
         self.entry_teaching_unit.set_text(self.project.settings.teaching_unit or "UE3")
-        self.entry_teaching_unit.connect("changed",
-            lambda e: setattr(self.project.settings, "teaching_unit", e.get_text()))
+        self.entry_teaching_unit.connect(
+            "changed", lambda e: setattr(self.project.settings, "teaching_unit", e.get_text())
+        )
         if not self.project.settings.teaching_unit:
             self.entry_teaching_unit.get_style_context().add_class("suggestion")
         grid2.attach(self.entry_teaching_unit, 5, 0, 1, 1)
@@ -358,8 +363,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.entry_module_full = Gtk.Entry()
         self.entry_module_full.set_hexpand(True)
         self.entry_module_full.set_text(self.project.settings.module_full or "Mathématiques")
-        self.entry_module_full.connect("changed",
-            lambda e: setattr(self.project.settings, "module_full", e.get_text()))
+        self.entry_module_full.connect("changed", lambda e: setattr(self.project.settings, "module_full", e.get_text()))
         if not self.project.settings.module_full:
             self.entry_module_full.get_style_context().add_class("suggestion")
         grid3.attach(self.entry_module_full, 1, 0, 1, 1)
@@ -368,8 +372,9 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.entry_module_short = Gtk.Entry()
         self.entry_module_short.set_hexpand(True)
         self.entry_module_short.set_text(self.project.settings.module_short or "OML1")
-        self.entry_module_short.connect("changed",
-            lambda e: setattr(self.project.settings, "module_short", e.get_text()))
+        self.entry_module_short.connect(
+            "changed", lambda e: setattr(self.project.settings, "module_short", e.get_text())
+        )
         if not self.project.settings.module_short:
             self.entry_module_short.get_style_context().add_class("suggestion")
         grid3.attach(self.entry_module_short, 3, 0, 1, 1)
@@ -381,8 +386,9 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.entry_evaluation_full = Gtk.Entry()
         self.entry_evaluation_full.set_hexpand(True)
         self.entry_evaluation_full.set_text(self.project.settings.evaluation_full or "QCM Mathématiques")
-        self.entry_evaluation_full.connect("changed",
-            lambda e: setattr(self.project.settings, "evaluation_full", e.get_text()))
+        self.entry_evaluation_full.connect(
+            "changed", lambda e: setattr(self.project.settings, "evaluation_full", e.get_text())
+        )
         if not self.project.settings.evaluation_full:
             self.entry_evaluation_full.get_style_context().add_class("suggestion")
         grid4.attach(self.entry_evaluation_full, 1, 0, 1, 1)
@@ -391,8 +397,9 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.entry_evaluation_short = Gtk.Entry()
         self.entry_evaluation_short.set_hexpand(True)
         self.entry_evaluation_short.set_text(self.project.settings.evaluation_short or "OML1")
-        self.entry_evaluation_short.connect("changed",
-            lambda e: setattr(self.project.settings, "evaluation_short", e.get_text()))
+        self.entry_evaluation_short.connect(
+            "changed", lambda e: setattr(self.project.settings, "evaluation_short", e.get_text())
+        )
         if not self.project.settings.evaluation_short:
             self.entry_evaluation_short.get_style_context().add_class("suggestion")
         grid4.attach(self.entry_evaluation_short, 3, 0, 1, 1)
@@ -404,8 +411,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.entry_teachers = Gtk.Entry()
         self.entry_teachers.set_hexpand(True)
         self.entry_teachers.set_text(self.project.settings.teachers or "BS")
-        self.entry_teachers.connect("changed",
-            lambda e: setattr(self.project.settings, "teachers", e.get_text()))
+        self.entry_teachers.connect("changed", lambda e: setattr(self.project.settings, "teachers", e.get_text()))
         if not self.project.settings.teachers:
             self.entry_teachers.get_style_context().add_class("suggestion")
         grid5.attach(self.entry_teachers, 1, 0, 1, 1)
@@ -414,8 +420,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.entry_date = Gtk.Entry()
         self.entry_date.set_hexpand(True)
         self.entry_date.set_text(self.project.settings.date or "09/10/2026")
-        self.entry_date.connect("changed",
-            lambda e: setattr(self.project.settings, "date", e.get_text()))
+        self.entry_date.connect("changed", lambda e: setattr(self.project.settings, "date", e.get_text()))
         if not self.project.settings.date:
             self.entry_date.get_style_context().add_class("suggestion")
         grid5.attach(self.entry_date, 3, 0, 1, 1)
@@ -424,8 +429,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.entry_duration = Gtk.Entry()
         self.entry_duration.set_hexpand(True)
         self.entry_duration.set_text(self.project.settings.duration or "1h")
-        self.entry_duration.connect("changed",
-            lambda e: setattr(self.project.settings, "duration", e.get_text()))
+        self.entry_duration.connect("changed", lambda e: setattr(self.project.settings, "duration", e.get_text()))
         if not self.project.settings.duration:
             self.entry_duration.get_style_context().add_class("suggestion")
         grid5.attach(self.entry_duration, 5, 0, 1, 1)
@@ -454,39 +458,40 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         # Ligne 7: Marges
         grid7 = Gtk.Grid(column_spacing=8, row_spacing=4)
-        
+
         # Marge haute
         grid7.attach(Gtk.Label(label="Marge haute :"), 3, 0, 1, 1)
         self.margin_top_spin = Gtk.SpinButton()
         self.margin_top_spin.set_range(5, 25)
         self.margin_top_spin.set_increments(1, 1)
         self.margin_top_spin.set_value(10)
-        self.margin_top_spin.connect("value-changed", 
-            lambda s: setattr(self.project.settings, "margin_top", float(s.get_value())))
+        self.margin_top_spin.connect(
+            "value-changed", lambda s: setattr(self.project.settings, "margin_top", float(s.get_value()))
+        )
         grid7.attach(self.margin_top_spin, 4, 0, 1, 1)
-        
 
         # Ligne 8: Marges gauche/droite
         grid7.attach(Gtk.Label(label="Marges en mm :    "), 0, 1, 1, 1)
-        
+
         grid7.attach(Gtk.Label(label="Marge gauche"), 1, 1, 1, 1)
         self.margin_left_spin = Gtk.SpinButton()
         self.margin_left_spin.set_range(5, 25)
         self.margin_left_spin.set_increments(1, 1)
         self.margin_left_spin.set_value(10)
-        self.margin_left_spin.connect("value-changed", 
-            lambda s: setattr(self.project.settings, "margin_left", float(s.get_value())))
+        self.margin_left_spin.connect(
+            "value-changed", lambda s: setattr(self.project.settings, "margin_left", float(s.get_value()))
+        )
         grid7.attach(self.margin_left_spin, 2, 1, 1, 1)
-        
+
         grid7.attach(Gtk.Label(label="Marge droite"), 5, 1, 1, 1)
         self.margin_right_spin = Gtk.SpinButton()
         self.margin_right_spin.set_range(5, 25)
         self.margin_right_spin.set_increments(1, 1)
         self.margin_right_spin.set_value(10)
-        self.margin_right_spin.connect("value-changed", 
-            lambda s: setattr(self.project.settings, "margin_right", float(s.get_value())))
+        self.margin_right_spin.connect(
+            "value-changed", lambda s: setattr(self.project.settings, "margin_right", float(s.get_value()))
+        )
         grid7.attach(self.margin_right_spin, 6, 1, 1, 1)
-        
 
         # Ligne 9: Marge basse
         grid7.attach(Gtk.Label(label="Marge basse :"), 3, 3, 1, 1)
@@ -494,10 +499,11 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.margin_bottom_spin.set_range(5, 25)
         self.margin_bottom_spin.set_increments(1, 1)
         self.margin_bottom_spin.set_value(10)
-        self.margin_bottom_spin.connect("value-changed", 
-            lambda s: setattr(self.project.settings, "margin_bottom", float(s.get_value())))
+        self.margin_bottom_spin.connect(
+            "value-changed", lambda s: setattr(self.project.settings, "margin_bottom", float(s.get_value()))
+        )
         grid7.attach(self.margin_bottom_spin, 4, 3, 1, 1)
-        
+
         box.append(grid7)
 
         self.notebook.append_page(box, Gtk.Label(label="Informations"))
@@ -505,21 +511,31 @@ class QcmWindow(Gtk.ApplicationWindow):
         # Suivi des modifications (onglet Informations) : chaque champ marque le
         # projet « dirty ». On ajoute un second gestionnaire à chaque widget
         # (les lambdas existants écrivent déjà les settings).
-        info_widgets = [self.entry_establishment, self.entry_institute,
-                       self.entry_formation, self.entry_year,
-                       self.entry_semester, self.entry_teaching_unit,
-                       self.entry_module_full, self.entry_module_short,
-                       self.entry_evaluation_full, self.entry_evaluation_short,
-                       self.entry_teachers, self.entry_date, self.entry_duration,
-                       self.paper_format_combo, self.paper_orientation_combo,
-                       self.margin_top_spin, self.margin_left_spin,
-                       self.margin_right_spin, self.margin_bottom_spin]
+        info_widgets = [
+            self.entry_establishment,
+            self.entry_institute,
+            self.entry_formation,
+            self.entry_year,
+            self.entry_semester,
+            self.entry_teaching_unit,
+            self.entry_module_full,
+            self.entry_module_short,
+            self.entry_evaluation_full,
+            self.entry_evaluation_short,
+            self.entry_teachers,
+            self.entry_date,
+            self.entry_duration,
+            self.paper_format_combo,
+            self.paper_orientation_combo,
+            self.margin_top_spin,
+            self.margin_left_spin,
+            self.margin_right_spin,
+            self.margin_bottom_spin,
+        ]
         for w in info_widgets:
-            if isinstance(w, (Gtk.Entry,)):
+            if isinstance(w, Gtk.Entry | Gtk.ComboBoxText):
                 w.connect("changed", self._mark_dirty)
-            elif isinstance(w, (Gtk.ComboBoxText,)):
-                w.connect("changed", self._mark_dirty)
-            elif isinstance(w, (Gtk.SpinButton,)):
+            elif isinstance(w, Gtk.SpinButton):
                 w.connect("value-changed", self._mark_dirty)
 
     # ------------------------------------------------------------------
@@ -786,8 +802,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.checked_combo.append_text("Toujours")
         self.checked_combo.append_text("De temps en temps")
         self.checked_combo.set_active(0)
-        new_grid.attach(self.checked_combo, 1,11, 1, 1)
-
+        new_grid.attach(self.checked_combo, 1, 11, 1, 1)
 
         params_box2.append(new_frame)
 
@@ -856,12 +871,18 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         # ===== SENS DE LECTURE =====
         dir_groups = [
-            ("identification_dir", self.ident_dir_combo, "identification_dir_left", "identification_dir_top", "identification_dir_both"),
+            (
+                "identification_dir",
+                self.ident_dir_combo,
+                "identification_dir_left",
+                "identification_dir_top",
+                "identification_dir_both",
+            ),
             ("exercise_dir", self.exercise_dir_combo, "exercise_dir_left", "exercise_dir_top", "exercise_dir_both"),
             ("question_dir", self.question_dir_combo, "question_dir_left", "question_dir_top", "question_dir_both"),
-            ("choice_dir", self.choice_dir_combo, "choice_dir_left", "choice_dir_top", "choice_dir_both")
+            ("choice_dir", self.choice_dir_combo, "choice_dir_left", "choice_dir_top", "choice_dir_both"),
         ]
-        for group, combo, left_attr, top_attr, both_attr in dir_groups:
+        for _group, combo, left_attr, top_attr, both_attr in dir_groups:
             # Vérifier que TOUS les attributs existent
             for attr in (left_attr, top_attr, both_attr):
                 if not hasattr(settings, attr):
@@ -886,11 +907,23 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         # ===== AJOUTS FANTÔMES =====
         new_groups = [
-            ("exercise_new", self.exercise_new_combo, "exercise_new_never", "exercise_new_always", "exercise_new_sometimes"),
-            ("question_new", self.question_new_combo, "question_new_never", "question_new_always", "question_new_sometimes"),
-            ("choice_new", self.choice_new_combo, "choice_new_never", "choice_new_always", "choice_new_sometimes")
+            (
+                "exercise_new",
+                self.exercise_new_combo,
+                "exercise_new_never",
+                "exercise_new_always",
+                "exercise_new_sometimes",
+            ),
+            (
+                "question_new",
+                self.question_new_combo,
+                "question_new_never",
+                "question_new_always",
+                "question_new_sometimes",
+            ),
+            ("choice_new", self.choice_new_combo, "choice_new_never", "choice_new_always", "choice_new_sometimes"),
         ]
-        for group, combo, never_attr, always_attr, sometimes_attr in new_groups:
+        for _group, combo, never_attr, always_attr, sometimes_attr in new_groups:
             for attr in (never_attr, always_attr, sometimes_attr):
                 if not hasattr(settings, attr):
                     raise AttributeError(
@@ -917,12 +950,12 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.exercise_new_questions_name_entry.set_text(settings.exercise_new_questions_name)
         self.exercise_new_choices_spin.set_value(settings.exercise_new_choices)
         self.exercise_new_choices_name_entry.set_text(settings.exercise_new_choices_name)
-        
+
         self.question_new_questions_spin.set_value(settings.question_new_questions)
         self.question_new_questions_name_entry.set_text(settings.question_new_questions_name)
         self.question_new_choices_spin.set_value(settings.question_new_choices)
         self.question_new_choices_name_entry.set_text(settings.question_new_choices_name)
-        
+
         self.choice_new_choices_spin.set_value(settings.choice_new_choices)
         self.choice_new_choices_name_entry.set_text(settings.choice_new_choices_name)
 
@@ -934,7 +967,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             self.paper_format_combo.set_active(1)
         elif settings.paper_a5:
             self.paper_format_combo.set_active(2)
-        
+
         # Orientation
         if settings.paper_both:
             self.paper_orientation_combo.set_active(2)
@@ -972,11 +1005,29 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         # ===== ORDRE ALÉATOIRE =====
         order_groups = [
-            ("exercise_order", self.exercise_order_combo, "exercise_order_never", "exercise_order_always", "exercise_order_sometimes"),
-            ("question_order", self.question_order_combo, "question_order_never", "question_order_always", "question_order_sometimes"),
-            ("choice_order", self.choice_order_combo, "choice_order_never", "choice_order_always", "choice_order_sometimes")
+            (
+                "exercise_order",
+                self.exercise_order_combo,
+                "exercise_order_never",
+                "exercise_order_always",
+                "exercise_order_sometimes",
+            ),
+            (
+                "question_order",
+                self.question_order_combo,
+                "question_order_never",
+                "question_order_always",
+                "question_order_sometimes",
+            ),
+            (
+                "choice_order",
+                self.choice_order_combo,
+                "choice_order_never",
+                "choice_order_always",
+                "choice_order_sometimes",
+            ),
         ]
-        for group, combo, never_attr, always_attr, sometimes_attr in order_groups:
+        for _group, combo, never_attr, always_attr, sometimes_attr in order_groups:
             for attr in (never_attr, always_attr, sometimes_attr):
                 if not hasattr(settings, attr):
                     raise AttributeError(
@@ -995,19 +1046,25 @@ class QcmWindow(Gtk.ApplicationWindow):
                 combo.set_active(0)
             else:
                 combo.set_active(0)
-            
+
     def _save_generation_params(self):
         """Sauvegarde les paramètres des widgets dans ProjectSettings."""
         settings = self.project.settings
 
         # ===== SENS DE LECTURE =====
         dir_groups = [
-            ("identification_dir", self.ident_dir_combo, "identification_dir_left", "identification_dir_top", "identification_dir_both"),
+            (
+                "identification_dir",
+                self.ident_dir_combo,
+                "identification_dir_left",
+                "identification_dir_top",
+                "identification_dir_both",
+            ),
             ("exercise_dir", self.exercise_dir_combo, "exercise_dir_left", "exercise_dir_top", "exercise_dir_both"),
             ("question_dir", self.question_dir_combo, "question_dir_left", "question_dir_top", "question_dir_both"),
-            ("choice_dir", self.choice_dir_combo, "choice_dir_left", "choice_dir_top", "choice_dir_both")
+            ("choice_dir", self.choice_dir_combo, "choice_dir_left", "choice_dir_top", "choice_dir_both"),
         ]
-        for group, combo, left_attr, top_attr, both_attr in dir_groups:
+        for _group, combo, left_attr, top_attr, both_attr in dir_groups:
             active = combo.get_active()
             # Réinitialiser tous les booléens à False
             setattr(settings, left_attr, False)
@@ -1023,11 +1080,23 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         # ===== AJOUTS FANTÔMES =====
         new_groups = [
-            ("exercise_new", self.exercise_new_combo, "exercise_new_never", "exercise_new_always", "exercise_new_sometimes"),
-            ("question_new", self.question_new_combo, "question_new_never", "question_new_always", "question_new_sometimes"),
-            ("choice_new", self.choice_new_combo, "choice_new_never", "choice_new_always", "choice_new_sometimes")
+            (
+                "exercise_new",
+                self.exercise_new_combo,
+                "exercise_new_never",
+                "exercise_new_always",
+                "exercise_new_sometimes",
+            ),
+            (
+                "question_new",
+                self.question_new_combo,
+                "question_new_never",
+                "question_new_always",
+                "question_new_sometimes",
+            ),
+            ("choice_new", self.choice_new_combo, "choice_new_never", "choice_new_always", "choice_new_sometimes"),
         ]
-        for group, combo, never_attr, always_attr, sometimes_attr in new_groups:
+        for _group, combo, never_attr, always_attr, sometimes_attr in new_groups:
             active = combo.get_active()
             setattr(settings, never_attr, False)
             setattr(settings, always_attr, False)
@@ -1046,27 +1115,27 @@ class QcmWindow(Gtk.ApplicationWindow):
         settings.exercise_new_questions_name = self.exercise_new_questions_name_entry.get_text()
         settings.exercise_new_choices = self.exercise_new_choices_spin.get_value_as_int()
         settings.exercise_new_choices_name = self.exercise_new_choices_name_entry.get_text()
-        
+
         settings.question_new_questions = self.question_new_questions_spin.get_value_as_int()
         settings.question_new_questions_name = self.question_new_questions_name_entry.get_text()
         settings.question_new_choices = self.question_new_choices_spin.get_value_as_int()
         settings.question_new_choices_name = self.question_new_choices_name_entry.get_text()
-        
+
         settings.choice_new_choices = self.choice_new_choices_spin.get_value_as_int()
         settings.choice_new_choices_name = self.choice_new_choices_name_entry.get_text()
 
         # ===== FORMAT DE PAPIER =====
         # Format
         format_active = self.paper_format_combo.get_active()
-        settings.paper_a3 = (format_active == 0)
-        settings.paper_a4 = (format_active == 1)
-        settings.paper_a5 = (format_active == 2)
-        
+        settings.paper_a3 = format_active == 0
+        settings.paper_a4 = format_active == 1
+        settings.paper_a5 = format_active == 2
+
         # Orientation
         orientation_active = self.paper_orientation_combo.get_active()
-        settings.paper_portrait = (orientation_active == 0)
-        settings.paper_landscape = (orientation_active == 1)
-        settings.paper_both = (orientation_active == 2)
+        settings.paper_portrait = orientation_active == 0
+        settings.paper_landscape = orientation_active == 1
+        settings.paper_both = orientation_active == 2
 
         # ===== MARGE =====
         settings.margin_top = str(int(self.margin_top_spin.get_value()))
@@ -1091,11 +1160,29 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         # ===== ORDRE ALÉATOIRE =====
         order_groups = [
-            ("exercise_order", self.exercise_order_combo, "exercise_order_never", "exercise_order_always", "exercise_order_sometimes"),
-            ("question_order", self.question_order_combo, "question_order_never", "question_order_always", "question_order_sometimes"),
-            ("choice_order", self.choice_order_combo, "choice_order_never", "choice_order_always", "choice_order_sometimes")
+            (
+                "exercise_order",
+                self.exercise_order_combo,
+                "exercise_order_never",
+                "exercise_order_always",
+                "exercise_order_sometimes",
+            ),
+            (
+                "question_order",
+                self.question_order_combo,
+                "question_order_never",
+                "question_order_always",
+                "question_order_sometimes",
+            ),
+            (
+                "choice_order",
+                self.choice_order_combo,
+                "choice_order_never",
+                "choice_order_always",
+                "choice_order_sometimes",
+            ),
         ]
-        for group, combo, never_attr, always_attr, sometimes_attr in order_groups:
+        for _group, combo, never_attr, always_attr, sometimes_attr in order_groups:
             active = combo.get_active()
             setattr(settings, never_attr, False)
             setattr(settings, always_attr, False)
@@ -1135,13 +1222,16 @@ class QcmWindow(Gtk.ApplicationWindow):
             base = os.path.splitext(os.path.basename(self.project_path))[0]
         else:
             base = self.project.settings.evaluation_short or "sujet"
-        path = _file_dialog(self, "Enregistrer le PDF",
-                            Gtk.FileChooserAction.SAVE,
-                            initial_name=f"{base}.pdf",
-                            filters=[("Fichiers PDF", ["*.pdf"])])
+        path = _file_dialog(
+            self,
+            "Enregistrer le PDF",
+            Gtk.FileChooserAction.SAVE,
+            initial_name=f"{base}.pdf",
+            filters=[("Fichiers PDF", ["*.pdf"])],
+        )
         # Forcer l'extension .pdf si absente
-        if path and not path.endswith('.pdf'):
-            path += '.pdf'
+        if path and not path.endswith(".pdf"):
+            path += ".pdf"
         if path is None:
             return
         try:
@@ -1177,10 +1267,10 @@ class QcmWindow(Gtk.ApplicationWindow):
                     "Le fichier JSON à jour est indispensable pour mener "
                     "à bien la correction automatique : il contient les "
                     "réponses attendues, les barèmes et les paramètres "
-                    "de chaque variante."))
-            dialog.add_buttons(
-                "Écraser", Gtk.ResponseType.YES,
-                "Ne pas enregistrer", Gtk.ResponseType.NO)
+                    "de chaque variante."
+                ),
+            )
+            dialog.add_buttons("Écraser", Gtk.ResponseType.YES, "Ne pas enregistrer", Gtk.ResponseType.NO)
             dialog.set_default_response(Gtk.ResponseType.NO)
             dialog.connect("response", self._on_save_json_dialog_response, json_path)
             dialog.present()
@@ -1192,8 +1282,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         if response == Gtk.ResponseType.YES:
             self._do_save_json(json_path)
         else:
-            self.generate_status.set_text(
-                f"PDF généré. JSON non enregistré (annulé).")
+            self.generate_status.set_text("PDF généré. JSON non enregistré (annulé).")
 
     def _do_save_json(self, json_path: str) -> None:
         try:
@@ -1203,11 +1292,9 @@ class QcmWindow(Gtk.ApplicationWindow):
             self._dirty = False
             if self.project_path != json_path:
                 self.project_path = json_path
-            self.generate_status.set_text(
-                f"PDF généré. Projet enregistré : {json_path}")
+            self.generate_status.set_text(f"PDF généré. Projet enregistré : {json_path}")
         except Exception as e:
-            self.generate_status.set_text(
-                f"PDF généré. Erreur enregistrement JSON : {e}")
+            self.generate_status.set_text(f"PDF généré. Erreur enregistrement JSON : {e}")
 
     # ------------------------------------------------------------------
     # Onglet Correction
@@ -1272,6 +1359,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         # Résultats
         self.results_store = Gtk.ListStore(str, str, str, str, str, int)
         results_tree = Gtk.TreeView(model=self.results_store)
+
         # Tri numérique pour la colonne Note (stockée en texte) : id de tri 100
         # pour ne pas confondre avec les indices de colonnes.
         def _note_sort_func(_model, a, b, _d):
@@ -1286,8 +1374,7 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         self.results_store.set_sort_func(100, _note_sort_func)
 
-        for i, title in enumerate(["Fichier", "Variante", "Étudiant",
-                                    "Note", "Statut"]):
+        for i, title in enumerate(["Fichier", "Variante", "Étudiant", "Note", "Statut"]):
             col = Gtk.TreeViewColumn(title, Gtk.CellRendererText(), text=i)
             col.set_resizable(True)
             if i == 3:
@@ -1349,7 +1436,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         path = _help_markdown_path()
         if path:
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     buf.set_text(f.read())
             except Exception as e:
                 buf.set_text(f"Impossible de charger l'aide ({path}) : {e}")
@@ -1357,7 +1444,8 @@ class QcmWindow(Gtk.ApplicationWindow):
             buf.set_text(
                 "Fichier README.md introuvable. "
                 "Consultez le dépôt du projet pour le guide d'installation "
-                "et d'utilisation.")
+                "et d'utilisation."
+            )
         scroll.set_child(view)
         self.notebook.append_page(scroll, Gtk.Label(label="Aide"))
 
@@ -1380,24 +1468,29 @@ class QcmWindow(Gtk.ApplicationWindow):
         lbl_ok = Gtk.Label(label="")
         lbl_err = Gtk.Label(label="")
         lbl_rest = Gtk.Label(label="")
-        for l, css in [(lbl_ok, "prog_ok"), (lbl_err, "prog_err"),
-                        (lbl_rest, "prog_rest")]:
-            l.get_style_context().add_class(css)
-            bar.append(l)
+        for label, css in [(lbl_ok, "prog_ok"), (lbl_err, "prog_err"), (lbl_rest, "prog_rest")]:
+            label.get_style_context().add_class(css)
+            bar.append(label)
         row.append(bar)
         list_row = Gtk.ListBoxRow()
         list_row.set_child(row)
         self.copies_list.append(list_row)
         self.copy_rows[path] = {
-            "row": list_row, "bar": bar,
-            "lbl_ok": lbl_ok, "lbl_err": lbl_err, "lbl_rest": lbl_rest,
-            "n_ok": 0, "n_err": 0, "n_pages": 0, "check": check,
+            "row": list_row,
+            "bar": bar,
+            "lbl_ok": lbl_ok,
+            "lbl_err": lbl_err,
+            "lbl_rest": lbl_rest,
+            "n_ok": 0,
+            "n_err": 0,
+            "n_pages": 0,
+            "check": check,
         }
 
     def _on_load_copies(self, _btn) -> None:
-        paths = _file_dialog_multiple(self, "Choisir les copies",
-                            filters=[("PDF et images", ["*.pdf", "*.png",
-                                                         "*.jpg", "*.jpeg"])])
+        paths = _file_dialog_multiple(
+            self, "Choisir les copies", filters=[("PDF et images", ["*.pdf", "*.png", "*.jpg", "*.jpeg"])]
+        )
         if not paths:
             return
         for p in paths:
@@ -1410,9 +1503,13 @@ class QcmWindow(Gtk.ApplicationWindow):
         if not self.copies:
             self.marking_status.set_text("Aucune copie à supprimer.")
             return
-        win = Gtk.Window(title="Supprimer des fichiers de correction",
-                          transient_for=self, modal=True,
-                          default_width=420, default_height=400)
+        win = Gtk.Window(
+            title="Supprimer des fichiers de correction",
+            transient_for=self,
+            modal=True,
+            default_width=420,
+            default_height=400,
+        )
         main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         main.set_margin_start(8)
         main.set_margin_end(8)
@@ -1449,6 +1546,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         btn_cancel = Gtk.Button(label="Annuler")
         btn_cancel.connect("clicked", lambda _b: win.destroy())
         btn_ok = Gtk.Button(label="Supprimer")
+
         def _do_remove(_b):
             removed = set(p for p, cb in checks.items() if cb.get_active())
             for path in removed:
@@ -1457,19 +1555,19 @@ class QcmWindow(Gtk.ApplicationWindow):
                     self.copies_list.remove(info["row"])
                 if path in self.copies:
                     self.copies.remove(path)
-            total = sum(1 for _l, pg in self.marked_pages
-                        if getattr(pg, "copy_path", None) in removed)
+            total = sum(1 for _l, pg in self.marked_pages if getattr(pg, "copy_path", None) in removed)
+
             def progress(i):
-                self.marking_status.set_text(
-                    f"Suppression copie {i}/{total}…")
+                self.marking_status.set_text(f"Suppression copie {i}/{total}…")
                 ctx = GLib.MainContext.default()
                 while ctx.pending():
                     ctx.iteration(False)
                 ctx.iteration(False)
+
             self._purge_marked_pages(removed, progress=progress)
-            self.marking_status.set_text(
-                f"{len(self.copies)} copie(s) restante(s).")
+            self.marking_status.set_text(f"{len(self.copies)} copie(s) restante(s).")
             win.destroy()
+
         btn_ok.connect("clicked", _do_remove)
         btn_box.append(btn_cancel)
         btn_box.append(btn_ok)
@@ -1488,9 +1586,9 @@ class QcmWindow(Gtk.ApplicationWindow):
         self._show_anonymat_dialog()
 
     def _show_anonymat_dialog(self) -> None:
-        win = Gtk.Window(title="Levée d'anonymat Scodoc",
-                          transient_for=self, modal=True,
-                          default_width=900, default_height=700)
+        win = Gtk.Window(
+            title="Levée d'anonymat Scodoc", transient_for=self, modal=True, default_width=900, default_height=700
+        )
         main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         main.set_margin_start(10)
         main.set_margin_end(10)
@@ -1507,13 +1605,16 @@ class QcmWindow(Gtk.ApplicationWindow):
         scroll.set_child(content)
 
         intro = Gtk.Label(
-            label=("Les étudiants ont identifié leurs copies à l'aide de leur "
-                   "numéro « p******* ». Les noms, prénoms et EID des "
-                   "étudiants peuvent être associés grâce à la table des "
-                   "étudiants.\n\n"
-                   "Celle-ci peut être téléchargée depuis Scodoc (ou "
-                   "Scodoc-visu) dans les menus en haut de la page principale "
-                   "du semestre comportant cette évaluation."))
+            label=(
+                "Les étudiants ont identifié leurs copies à l'aide de leur "
+                "numéro « p******* ». Les noms, prénoms et EID des "
+                "étudiants peuvent être associés grâce à la table des "
+                "étudiants.\n\n"
+                "Celle-ci peut être téléchargée depuis Scodoc (ou "
+                "Scodoc-visu) dans les menus en haut de la page principale "
+                "du semestre comportant cette évaluation."
+            )
+        )
         intro.set_wrap(True)
         intro.set_xalign(0.5)
         content.append(intro)
@@ -1524,12 +1625,11 @@ class QcmWindow(Gtk.ApplicationWindow):
         if pic is not None:
             content.append(pic)
         else:
-            content.append(Gtk.Label(
-                label="(Capture d'écran Scodoc absente — voir "
-                      "qcm_papier/data/scodoc/ pour l'ajouter.)"))
+            content.append(
+                Gtk.Label(label="(Capture d'écran Scodoc absente — voir " "qcm_papier/data/scodoc/ pour l'ajouter.)")
+            )
 
-        content.append(Gtk.Label(
-            label="Charger le fichier Excel obtenu depuis Scodoc :"))
+        content.append(Gtk.Label(label="Charger le fichier Excel obtenu depuis Scodoc :"))
 
         status = Gtk.Label(label="")
         status.set_wrap(True)
@@ -1545,8 +1645,8 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         def _choose(_b) -> None:
             path = _file_dialog(
-                win, "Table étudiants Scodoc", Gtk.FileChooserAction.OPEN,
-                filters=[("Excel", ["*.xlsx", "*.xls"])])
+                win, "Table étudiants Scodoc", Gtk.FileChooserAction.OPEN, filters=[("Excel", ["*.xlsx", "*.xls"])]
+            )
             if path is None:
                 return
             try:
@@ -1557,8 +1657,8 @@ class QcmWindow(Gtk.ApplicationWindow):
             n = len(self.project.students)
             n_matched = self._apply_anonymat()
             status.set_markup(
-                f"<span color='#080'>{n} étudiant(s) chargé(s), "
-                f"{n_matched} copie(s) identifiée(s).</span>")
+                f"<span color='#080'>{n} étudiant(s) chargé(s), " f"{n_matched} copie(s) identifiée(s).</span>"
+            )
 
         def _close(_b) -> None:
             win.destroy()
@@ -1591,8 +1691,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             if not isinstance(idx, int) or not (0 <= idx < len(self.marked_pages)):
                 continue
             _label, page = self.marked_pages[idx]
-            failed = (page.matrix_inv is None or page.variant_id is None
-                      or page.student_id is None)
+            failed = page.matrix_inv is None or page.variant_id is None or page.student_id is None
             if not failed:
                 row[2] = _student_display(page)
         # Reconstruit la table des notes indexée par EID, pour que l'export
@@ -1600,8 +1699,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         # Avant la levée d'anonymat, _last_notes était indexé par student_id.
         self._last_notes = self._collect_notes_by_eid()
         if self.marking_status is not None:
-            self.marking_status.set_text(
-                f"Levée d'anonymat : {n_matched} copie(s) identifiée(s).")
+            self.marking_status.set_text(f"Levée d'anonymat : {n_matched} copie(s) identifiée(s).")
         return n_matched
 
     def _collect_notes_by_eid(self) -> dict[str, float]:
@@ -1639,18 +1737,18 @@ class QcmWindow(Gtk.ApplicationWindow):
     def _on_correct(self, _btn) -> None:
         variant_keys = [k for k in self.project.variants if k not in ("p", "l")]
         if not variant_keys:
-            self.marking_status.set_text(
-                "Aucune variante : chargez un projet avec variantes générées.")
+            self.marking_status.set_text("Aucune variante : chargez un projet avec variantes générées.")
             return
         if not self.copies:
             self.marking_status.set_text("Aucune copie chargée.")
             return
-        to_correct = [p for p in self.copies
-                      if self.copy_rows.get(p, {}).get("check") is not None
-                      and self.copy_rows[p]["check"].get_active()]
+        to_correct = [
+            p
+            for p in self.copies
+            if self.copy_rows.get(p, {}).get("check") is not None and self.copy_rows[p]["check"].get_active()
+        ]
         if not to_correct:
-            self.marking_status.set_text(
-                "Aucune copie à corriger (cochez les fichiers souhaités).")
+            self.marking_status.set_text("Aucune copie à corriger (cochez les fichiers souhaités).")
             return
         self.results_store.clear()
         self.marked_pages = []
@@ -1661,16 +1759,14 @@ class QcmWindow(Gtk.ApplicationWindow):
         for copy_idx, copy_path in enumerate(to_correct, 1):
             fname = os.path.basename(copy_path)
             info = self.copy_rows.get(copy_path)
-            self.marking_status.set_text(
-                f"Correction {copy_idx}/{total} : {fname}")
+            self.marking_status.set_text(f"Correction {copy_idx}/{total} : {fname}")
             self._scroll_to_copy(copy_path)
             self._ui_flush()
             try:
                 pages = scanner.load_pages_from_file(copy_path, dpi=150)
             except Exception as e:
                 n_err += 1
-                self.results_store.append([fname, "",
-                                            "", "", f"Erreur : {e}", -1])
+                self.results_store.append([fname, "", "", "", f"Erreur : {e}", -1])
                 if info:
                     info["n_err"] = 1
                     info["n_pages"] = 1
@@ -1682,8 +1778,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                 info["n_pages"] = len(pages)
             for page in pages:
                 page.copy_path = copy_path
-                ok = scanner.auto_check(page, self.project,
-                                         clair=int(self.clair_spin.get_value()))
+                ok = scanner.auto_check(page, self.project, clair=int(self.clair_spin.get_value()))
                 if ok:
                     n_ok += 1
                     if info:
@@ -1692,14 +1787,16 @@ class QcmWindow(Gtk.ApplicationWindow):
                     note = page.value if page.value is not None else 0.0
                     if eid:
                         notes[eid] = note
-                    self.results_store.append([
-                        fname,
-                        str(page.variant_id or ""),
-                        _student_display(page),
-                        f"{note:.2f}",
-                        "complète" if page.complete else "incomplète",
-                        len(self.marked_pages),
-                    ])
+                    self.results_store.append(
+                        [
+                            fname,
+                            str(page.variant_id or ""),
+                            _student_display(page),
+                            f"{note:.2f}",
+                            "complète" if page.complete else "incomplète",
+                            len(self.marked_pages),
+                        ]
+                    )
                     label = f"{fname} v{page.variant_id} {page.student_id or ''}"
                     self.marked_pages.append((label, page))
                 else:
@@ -1711,9 +1808,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                         reason = "Code-barres non trouvé"
                     elif page.student_id is None:
                         reason = "N° étudiant non trouvé"
-                    self.results_store.append([fname, "",
-                                                "", "", reason,
-                                                len(self.marked_pages)])
+                    self.results_store.append([fname, "", "", "", reason, len(self.marked_pages)])
                     label = f"{fname} ⚠ {reason}"
                     self.marked_pages.append((label, page))
                 if info:
@@ -1722,8 +1817,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             if info:
                 info["check"].set_active(False)
         self._last_notes = notes
-        self.marking_status.set_text(
-            f"{n_ok} corrigée(s), {n_err} en erreur sur {total}.")
+        self.marking_status.set_text(f"{n_ok} corrigée(s), {n_err} en erreur sur {total}.")
         self._refresh_page_selector()
 
     def _scroll_to_copy(self, copy_path: str) -> None:
@@ -1737,9 +1831,10 @@ class QcmWindow(Gtk.ApplicationWindow):
             return
         # grab_focus() fait défiler le ScrolledWindow parent pour rendre la
         # ligne visible (compatible toutes versions GTK 4).
+        # Un échec du focus facultatif ne doit pas interrompre la correction.
         try:
             row.grab_focus()
-        except Exception:
+        except Exception:  # nosec B110
             pass
 
     def _ui_flush(self) -> None:
@@ -1783,8 +1878,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         if self.marked_pages:
             self._display_marked_page(0)
 
-    def _purge_marked_pages(self, removed_paths: set[str],
-                            progress=None) -> None:
+    def _purge_marked_pages(self, removed_paths: set[str], progress=None) -> None:
         """Retire des résultats et de l'aperçu les copies des fichiers
         supprimés, puis reconstruit le sélecteur et le tableau."""
         if not removed_paths:
@@ -1800,11 +1894,10 @@ class QcmWindow(Gtk.ApplicationWindow):
             kept.append((label, page))
         self.marked_pages = kept
         self.results_store.clear()
-        for idx, (label, page) in enumerate(self.marked_pages):
+        for idx, (_label, page) in enumerate(self.marked_pages):
             fname = os.path.basename(getattr(page, "copy_path", "") or "")
             note = page.value if page.value is not None else 0.0
-            failed = (page.matrix_inv is None or page.variant_id is None
-                      or page.student_id is None)
+            failed = page.matrix_inv is None or page.variant_id is None or page.student_id is None
             if failed:
                 reason = "Échec alignement"
                 if page.variant_id is not None and page.student_id is None:
@@ -1813,11 +1906,16 @@ class QcmWindow(Gtk.ApplicationWindow):
                     reason = "Code-barres non trouvé"
                 self.results_store.append([fname, "", "", "", reason, idx])
             else:
-                self.results_store.append([
-                    fname, str(page.variant_id or ""),
-                    _student_display(page), f"{note:.2f}",
-                    "complète" if page.complete else "incomplète", idx,
-                ])
+                self.results_store.append(
+                    [
+                        fname,
+                        str(page.variant_id or ""),
+                        _student_display(page),
+                        f"{note:.2f}",
+                        "complète" if page.complete else "incomplète",
+                        idx,
+                    ]
+                )
         self._refresh_page_selector()
 
     def _on_result_selected(self, selection) -> None:
@@ -1838,9 +1936,9 @@ class QcmWindow(Gtk.ApplicationWindow):
             return
         page_idx = model.get_value(tree_iter, 5)
         if page_idx is not None and 0 <= page_idx < len(self.marked_pages):
-            win = MarkedPageWindow(self.marked_pages, page_idx, self,
-                                   on_navigate=self._enlarge_navigate,
-                                   project=self.project)
+            win = MarkedPageWindow(
+                self.marked_pages, page_idx, self, on_navigate=self._enlarge_navigate, project=self.project
+            )
             win.present()
 
     def _on_page_selected(self, _dropdown, _pspec) -> None:
@@ -1864,6 +1962,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         if img is None:
             return
         from PIL import Image as PILImage
+
         max_w = max(200, self.get_width() - 40)
         if img.width > max_w:
             ratio = max_w / img.width
@@ -1874,9 +1973,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         idx = self.page_selector.get_selected()
         if idx < 0 or idx >= len(self.marked_pages):
             return
-        win = MarkedPageWindow(self.marked_pages, idx, self,
-                               on_navigate=self._enlarge_navigate,
-                               project=self.project)
+        win = MarkedPageWindow(self.marked_pages, idx, self, on_navigate=self._enlarge_navigate, project=self.project)
         win.present()
 
     def _enlarge_navigate(self, idx: int) -> None:
@@ -1890,8 +1987,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         if marked_idx < 0 or marked_idx >= len(self.marked_pages):
             return
         _label, page = self.marked_pages[marked_idx]
-        failed = (page.matrix_inv is None or page.variant_id is None
-                  or page.student_id is None)
+        failed = page.matrix_inv is None or page.variant_id is None or page.student_id is None
         for row in self.results_store:
             if row[5] == marked_idx:
                 if failed:
@@ -1907,7 +2003,6 @@ class QcmWindow(Gtk.ApplicationWindow):
                     row[4] = "complète" if page.complete else "incomplète"
                 break
 
-
     def _on_export_scodoc(self, _btn) -> None:
         if not self._last_notes:
             self.marking_status.set_text("Aucune note à exporter : corrigez d'abord.")
@@ -1921,9 +2016,9 @@ class QcmWindow(Gtk.ApplicationWindow):
         texte d'aide, captures d'écran Scodoc, choix du fichier d'entrée,
         checkbox pour ramener les notes négatives à 0.
         """
-        win = Gtk.Window(title="Exportation des notes Scodoc",
-                         transient_for=self, modal=True,
-                         default_width=900, default_height=700)
+        win = Gtk.Window(
+            title="Exportation des notes Scodoc", transient_for=self, modal=True, default_width=900, default_height=700
+        )
         main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         main.set_margin_start(10)
         main.set_margin_end(10)
@@ -1939,9 +2034,12 @@ class QcmWindow(Gtk.ApplicationWindow):
         content.set_halign(Gtk.Align.CENTER)
         scroll.set_child(content)
 
-        content.append(Gtk.Label(
-            label="Les fichiers de notes Scodoc peuvent être téléchargés "
-                  "depuis la page de saisie des notes pour l'évaluation :"))
+        content.append(
+            Gtk.Label(
+                label="Les fichiers de notes Scodoc peuvent être téléchargés "
+                "depuis la page de saisie des notes pour l'évaluation :"
+            )
+        )
         content.append(Gtk.Label(label=""))
 
         data_dir = self._scodoc_data_dir()
@@ -1950,16 +2048,21 @@ class QcmWindow(Gtk.ApplicationWindow):
             if pic is not None:
                 content.append(pic)
             else:
-                content.append(Gtk.Label(
-                    label=f"(Capture d'écran {img_name} absente \u2014 voir "
-                          "qcm_papier/data/scodoc/ pour l'ajouter.)"))
+                content.append(
+                    Gtk.Label(
+                        label=f"(Capture d'écran {img_name} absente \u2014 voir "
+                        "qcm_papier/data/scodoc/ pour l'ajouter.)"
+                    )
+                )
 
-        content.append(Gtk.Label(
-            label="puis obtenir le fichier tableur."))
+        content.append(Gtk.Label(label="puis obtenir le fichier tableur."))
         content.append(Gtk.Label(label=""))
-        content.append(Gtk.Label(
-            label="Charger le fichier tableur obtenu, choisir le fichier "
-                  "de sortie, puis cliquer sur « Exporter »."))
+        content.append(
+            Gtk.Label(
+                label="Charger le fichier tableur obtenu, choisir le fichier "
+                "de sortie, puis cliquer sur « Exporter »."
+            )
+        )
         content.append(Gtk.Label(label=""))
 
         # Checkbox : monter les notes négatives à 0.
@@ -1970,14 +2073,20 @@ class QcmWindow(Gtk.ApplicationWindow):
         # Capture d'écran pour le renvoi des notes dans Scodoc.
         pic_send = _scodoc_picture(data_dir, "Scodoc_eval_send.png")
         if pic_send is not None:
-            content.append(Gtk.Label(
-                label="Le fichier exporté peut ensuite être chargé dans "
-                      "l'interface Scodoc dans l'encadré suivant :"))
+            content.append(
+                Gtk.Label(
+                    label="Le fichier exporté peut ensuite être chargé dans "
+                    "l'interface Scodoc dans l'encadré suivant :"
+                )
+            )
             content.append(pic_send)
         else:
-            content.append(Gtk.Label(
-                label="(Capture d'écran Scodoc_eval_send.png absente \u2014 "
-                      "voir qcm_papier/data/scodoc/ pour l'ajouter.)"))
+            content.append(
+                Gtk.Label(
+                    label="(Capture d'écran Scodoc_eval_send.png absente \u2014 "
+                    "voir qcm_papier/data/scodoc/ pour l'ajouter.)"
+                )
+            )
 
         # Boutons.
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -1996,9 +2105,12 @@ class QcmWindow(Gtk.ApplicationWindow):
         state = {"path_in": None}
 
         def _choose_in(_b) -> None:
-            path = _file_dialog(win, "Feuille de notes Scodoc (entrée)",
-                                Gtk.FileChooserAction.OPEN,
-                                filters=[("Excel", ["*.xlsx", "*.xls"])])
+            path = _file_dialog(
+                win,
+                "Feuille de notes Scodoc (entrée)",
+                Gtk.FileChooserAction.OPEN,
+                filters=[("Excel", ["*.xlsx", "*.xls"])],
+            )
             if path is None:
                 return
             state["path_in"] = path
@@ -2007,23 +2119,20 @@ class QcmWindow(Gtk.ApplicationWindow):
         def _export(_b) -> None:
             path_in = state.get("path_in")
             if path_in is None:
-                status.set_markup(
-                    "<span color='#F00'>Choisissez d'abord le fichier tableur.</span>")
+                status.set_markup("<span color='#F00'>Choisissez d'abord le fichier tableur.</span>")
                 return
-            path_out = _file_dialog(win, "Enregistrer les notes",
-                                    Gtk.FileChooserAction.SAVE,
-                                    initial_name="notes_scodoc.xlsx")
+            path_out = _file_dialog(
+                win, "Enregistrer les notes", Gtk.FileChooserAction.SAVE, initial_name="notes_scodoc.xlsx"
+            )
             if path_out is None:
                 return
             min0 = min0_check.get_active()
             try:
-                count = scodoc.export_scodoc_notes(
-                    path_in, path_out, self._last_notes, min0=min0)
+                count = scodoc.export_scodoc_notes(path_in, path_out, self._last_notes, min0=min0)
                 status.set_markup(
-                    f"<span color='#080'>{count} note(s) exportée(s) \u2192 "
-                    f"{os.path.basename(path_out)}</span>")
-                self.marking_status.set_text(
-                    f"{count} note(s) exportée(s) \u2192 {path_out}")
+                    f"<span color='#080'>{count} note(s) exportée(s) \u2192 " f"{os.path.basename(path_out)}</span>"
+                )
+                self.marking_status.set_text(f"{count} note(s) exportée(s) \u2192 {path_out}")
             except Exception as e:
                 status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
 
@@ -2039,10 +2148,13 @@ class QcmWindow(Gtk.ApplicationWindow):
         if not self.marked_pages:
             self.marking_status.set_text("Aucune correction à sauvegarder.")
             return
-        path = _file_dialog(self, "Sauvegarder l'état de correction",
-                             Gtk.FileChooserAction.SAVE,
-                             initial_name="correction.json",
-                             filters=[("JSON", ["*.json"])])
+        path = _file_dialog(
+            self,
+            "Sauvegarder l'état de correction",
+            Gtk.FileChooserAction.SAVE,
+            initial_name="correction.json",
+            filters=[("JSON", ["*.json"])],
+        )
         if path is None:
             return
         try:
@@ -2054,9 +2166,9 @@ class QcmWindow(Gtk.ApplicationWindow):
             self.marking_status.set_text(f"Erreur : {e}")
 
     def _on_load_state(self, _btn) -> None:
-        path = _file_dialog(self, "Recharger un état de correction",
-                             Gtk.FileChooserAction.OPEN,
-                             filters=[("JSON", ["*.json"])])
+        path = _file_dialog(
+            self, "Recharger un état de correction", Gtk.FileChooserAction.OPEN, filters=[("JSON", ["*.json"])]
+        )
         if path is None:
             return
         # Si aucune copie n'est chargée, on pré-remplit la liste des copies
@@ -2064,8 +2176,9 @@ class QcmWindow(Gtk.ApplicationWindow):
         # la case de correction : les notes sont déjà dans la sauvegarde).
         if not self.copies:
             import json as _json
+
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     _data = _json.load(f)
             except Exception as e:
                 self.marking_status.set_text(f"Erreur lecture sauvegarde : {e}")
@@ -2093,8 +2206,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         for copy_idx, copy_path in enumerate(self.copies, 1):
             fname = os.path.basename(copy_path)
             info = self.copy_rows.get(copy_path)
-            self.marking_status.set_text(
-                f"Rechargement {copy_idx}/{total} : {fname}")
+            self.marking_status.set_text(f"Rechargement {copy_idx}/{total} : {fname}")
             self._scroll_to_copy(copy_path)
             self._ui_flush()
             try:
@@ -2113,25 +2225,30 @@ class QcmWindow(Gtk.ApplicationWindow):
                 info["n_pages"] = len(pages)
             for page_idx, page in enumerate(pages):
                 page.copy_path = copy_path
-                restored = scanner.load_correction_state(copy_path, page, path,
-                                                          page_index=page_idx)
+                restored = scanner.load_correction_state(copy_path, page, path, page_index=page_idx)
                 if not restored:
                     n_err += 1
                     if info:
                         info["n_err"] += 1
-                    self.results_store.append([fname, "", "", "",
-                                               "Non trouvée dans la sauvegarde",
-                                               len(self.marked_pages)])
+                    self.results_store.append(
+                        [fname, "", "", "", "Non trouvée dans la sauvegarde", len(self.marked_pages)]
+                    )
                     continue
                 # Page non corrigée (alignement échoué) : on l'affiche
                 # quand même (statut « Non lue ») pour qu'on puisse l'ouvrir
                 # et la corriger manuellement.
                 if page.variant_id is None and not page.marks:
                     n_skip += 1
-                    self.results_store.append([
-                        fname, "", "", "", "Non lue",
-                        len(self.marked_pages),
-                    ])
+                    self.results_store.append(
+                        [
+                            fname,
+                            "",
+                            "",
+                            "",
+                            "Non lue",
+                            len(self.marked_pages),
+                        ]
+                    )
                     label = f"{fname} ⚠ Non lue"
                     self.marked_pages.append((label, page))
                     continue
@@ -2142,12 +2259,16 @@ class QcmWindow(Gtk.ApplicationWindow):
                 note = page.value if page.value is not None else 0.0
                 if eid:
                     notes[eid] = note
-                self.results_store.append([
-                    fname, str(page.variant_id or ""),
-                    _student_display(page), f"{note:.2f}",
-                    "complète" if page.complete else "incomplète",
-                    len(self.marked_pages),
-                ])
+                self.results_store.append(
+                    [
+                        fname,
+                        str(page.variant_id or ""),
+                        _student_display(page),
+                        f"{note:.2f}",
+                        "complète" if page.complete else "incomplète",
+                        len(self.marked_pages),
+                    ]
+                )
                 label = f"{fname} v{page.variant_id} {page.student_id or ''}"
                 self.marked_pages.append((label, page))
                 if info:
@@ -2156,8 +2277,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             if info:
                 info["check"].set_active(False)
         self._last_notes = notes
-        self.marking_status.set_text(
-            f"{n_ok} restaurée(s), {n_err} en erreur, {n_skip} non lue(s).")
+        self.marking_status.set_text(f"{n_ok} restaurée(s), {n_err} en erreur, {n_skip} non lue(s).")
         self._refresh_page_selector()
 
     # ------------------------------------------------------------------
@@ -2183,8 +2303,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.present()
 
     def _on_open(self, _btn) -> None:
-        path = _file_dialog(self, "Ouvrir un projet", Gtk.FileChooserAction.OPEN,
-                            filters=[("Projet JSON", ["*.json"])])
+        path = _file_dialog(self, "Ouvrir un projet", Gtk.FileChooserAction.OPEN, filters=[("Projet JSON", ["*.json"])])
         if path is None:
             return
         self._load_project_from_path(path)
@@ -2210,16 +2329,31 @@ class QcmWindow(Gtk.ApplicationWindow):
                     entry.set_text(value)
                     entry.get_style_context().remove_class("suggestion")
 
-            set_entry_with_default(self.entry_establishment, self.project.settings.establishment, "Université Lyon 1", "establishment")
+            set_entry_with_default(
+                self.entry_establishment, self.project.settings.establishment, "Université Lyon 1", "establishment"
+            )
             set_entry_with_default(self.entry_institute, self.project.settings.institute, "IUT LYON 1", "institute")
-            set_entry_with_default(self.entry_formation, self.project.settings.formation, "Département GEii", "formation")
+            set_entry_with_default(
+                self.entry_formation, self.project.settings.formation, "Département GEii", "formation"
+            )
             set_entry_with_default(self.entry_year, self.project.settings.year, "2026", "year")
             set_entry_with_default(self.entry_semester, self.project.settings.semester, "S1", "semester")
-            set_entry_with_default(self.entry_teaching_unit, self.project.settings.teaching_unit, "UE3", "teaching_unit")
-            set_entry_with_default(self.entry_module_full, self.project.settings.module_full, "Mathématiques", "module_full")
+            set_entry_with_default(
+                self.entry_teaching_unit, self.project.settings.teaching_unit, "UE3", "teaching_unit"
+            )
+            set_entry_with_default(
+                self.entry_module_full, self.project.settings.module_full, "Mathématiques", "module_full"
+            )
             set_entry_with_default(self.entry_module_short, self.project.settings.module_short, "OML1", "module_short")
-            set_entry_with_default(self.entry_evaluation_full, self.project.settings.evaluation_full, "QCM Mathématiques", "evaluation_full")
-            set_entry_with_default(self.entry_evaluation_short, self.project.settings.evaluation_short, "OML1", "evaluation_short")
+            set_entry_with_default(
+                self.entry_evaluation_full,
+                self.project.settings.evaluation_full,
+                "QCM Mathématiques",
+                "evaluation_full",
+            )
+            set_entry_with_default(
+                self.entry_evaluation_short, self.project.settings.evaluation_short, "OML1", "evaluation_short"
+            )
             set_entry_with_default(self.entry_teachers, self.project.settings.teachers, "BS", "teachers")
             set_entry_with_default(self.entry_date, self.project.settings.date, "09/10/2026", "date")
             set_entry_with_default(self.entry_duration, self.project.settings.duration, "1h", "duration")
@@ -2267,9 +2401,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         """Enregistre le projet sous un nouveau chemin (demande le nom)."""
         self._save_generation_params()  # Sauvegarder les paramètres avant d'enregistrer
         name = self.project.settings.evaluation_short or "qcm_papier"
-        path = _file_dialog(self, "Enregistrer le projet",
-                            Gtk.FileChooserAction.SAVE,
-                            initial_name=f"{name}.json")
+        path = _file_dialog(self, "Enregistrer le projet", Gtk.FileChooserAction.SAVE, initial_name=f"{name}.json")
         if path is None:
             return
         try:
@@ -2303,11 +2435,17 @@ class QcmWindow(Gtk.ApplicationWindow):
             text="Modifications non enregistrées",
             secondary_text=(
                 "Le projet a été modifié depuis le dernier enregistrement."
-                " Voulez-vous l'enregistrer avant de quitter ?"))
+                " Voulez-vous l'enregistrer avant de quitter ?"
+            ),
+        )
         dialog.add_buttons(
-            "Enregistrer", Gtk.ResponseType.YES,
-            "Ne pas enregistrer", Gtk.ResponseType.NO,
-            "Annuler", Gtk.ResponseType.CANCEL)
+            "Enregistrer",
+            Gtk.ResponseType.YES,
+            "Ne pas enregistrer",
+            Gtk.ResponseType.NO,
+            "Annuler",
+            Gtk.ResponseType.CANCEL,
+        )
         dialog.set_default_response(Gtk.ResponseType.CANCEL)
         dialog.connect("response", self._on_close_dialog_response)
         dialog.present()
@@ -2342,11 +2480,15 @@ class QcmWindow(Gtk.ApplicationWindow):
 class MarkedPageWindow(Gtk.Window):
     """Fenêtre pop-up affichant une page corrigée en grand avec zoom et menu latéral."""
 
-    def __init__(self, marked_pages, idx, parent=None, on_navigate=None,
-                 project=None):
-        super().__init__(title="Page corrigée", transient_for=parent,
-                         default_width=1100, default_height=800,
-                         modal=False, destroy_with_parent=True)
+    def __init__(self, marked_pages, idx, parent=None, on_navigate=None, project=None):
+        super().__init__(
+            title="Page corrigée",
+            transient_for=parent,
+            default_width=1100,
+            default_height=800,
+            modal=False,
+            destroy_with_parent=True,
+        )
         self._parent_window = parent
         self.pages = marked_pages
         self.idx = idx
@@ -2403,8 +2545,7 @@ class MarkedPageWindow(Gtk.Window):
         self.scroll.set_child(self.image)
         left.append(self.scroll)
 
-        scroll_ctrl = Gtk.EventControllerScroll.new(
-            Gtk.EventControllerScrollFlags.BOTH_AXES)
+        scroll_ctrl = Gtk.EventControllerScroll.new(Gtk.EventControllerScrollFlags.BOTH_AXES)
         scroll_ctrl.connect("scroll", self._on_ctrl_scroll)
         self.scroll.add_controller(scroll_ctrl)
 
@@ -2534,7 +2675,7 @@ class MarkedPageWindow(Gtk.Window):
             self.lbl_variant.set_text(f"Variante : {page.variant_id or '—'}")
             self.lbl_student.set_markup(f"<span color='#F00'><b>⚠ {reason}</b></span>")
             self.lbl_note.set_markup("<b><span size='large'>Note : —</span></b>")
-            self.lbl_status.set_markup(f"<span color='#F00'>Non corrigée</span>")
+            self.lbl_status.set_markup("<span color='#F00'>Non corrigée</span>")
         else:
             self.lbl_variant.set_text(f"Variante : {page.variant_id}")
             sid = page.student_id or "—"
@@ -2569,9 +2710,7 @@ class MarkedPageWindow(Gtk.Window):
                 page.student_eid = student.eid
                 page.student_name = student.name
                 page.student_firstname = student.firstname
-        score = score_page(self._project, page.marks,
-                           variant_id=page.variant_id,
-                           student_id=page.student_id)
+        score = score_page(self._project, page.marks, variant_id=page.variant_id, student_id=page.student_id)
         page.value = score.value
         page.total = score.total
         page.complete = score.complete
@@ -2599,7 +2738,9 @@ class MarkedPageWindow(Gtk.Window):
         self._update_image()
 
     def _update_image(self):
-        from PIL import Image as PILImage, ImageDraw
+        from PIL import Image as PILImage
+        from PIL import ImageDraw
+
         # En mode alignement manuel, on part de l'image brute et on dessine
         # les points cliqués par-dessus pour guider l'utilisateur.
         if self._align_mode and self._base_img is not None:
@@ -2608,16 +2749,11 @@ class MarkedPageWindow(Gtk.Window):
             draw = ImageDraw.Draw(overlay)
             for i, (px, py) in enumerate(self._align_points):
                 r = 10
-                draw.ellipse((px - r, py - r, px + r, py + r),
-                             fill=(255, 0, 0, 200))
+                draw.ellipse((px - r, py - r, px + r, py + r), fill=(255, 0, 0, 200))
                 # croix
-                draw.line((px - r - 4, py, px + r + 4, py),
-                          fill=(255, 0, 0, 255), width=2)
-                draw.line((px, py - r - 4, px, py + r + 4),
-                          fill=(255, 0, 0, 255), width=2)
-                draw.text((px + r + 2, py - r),
-                          f"{i + 1} ({px:.0f},{py:.0f})",
-                          fill=(255, 0, 0, 255))
+                draw.line((px - r - 4, py, px + r + 4, py), fill=(255, 0, 0, 255), width=2)
+                draw.line((px, py - r - 4, px, py + r + 4), fill=(255, 0, 0, 255), width=2)
+                draw.text((px + r + 2, py - r), f"{i + 1} ({px:.0f},{py:.0f})", fill=(255, 0, 0, 255))
             display = PILImage.alpha_composite(src, overlay)
         elif self._manual_marks and self._img is not None:
             # Repères placés manuellement, affichés en bleu par-dessus la
@@ -2629,22 +2765,23 @@ class MarkedPageWindow(Gtk.Window):
                 r = 8
                 # Anneau blanc épais pour bien décoller le point du fond,
                 # puis disque bleu vif et numéro blanc lisibles.
-                draw.ellipse((px - r - 3, py - r - 3, px + r + 3, py + r + 3),
-                            outline=(255, 255, 255, 255), width=3)
-                draw.ellipse((px - r, py - r, px + r, py + r),
-                             fill=(0, 120, 255, 230),
-                             outline=(255, 255, 255, 255), width=1)
+                draw.ellipse((px - r - 3, py - r - 3, px + r + 3, py + r + 3), outline=(255, 255, 255, 255), width=3)
+                draw.ellipse(
+                    (px - r, py - r, px + r, py + r), fill=(0, 120, 255, 230), outline=(255, 255, 255, 255), width=1
+                )
                 # pastille de numéro
                 txt = str(i + 1)
                 font = _label_font(16)
                 tw, th = draw.textbbox((0, 0), txt, font=font)[2:]
                 bx0 = px + r + 2
                 by0 = py - th / 2 - 2
-                draw.rectangle((bx0, by0, bx0 + tw + 6, by0 + th + 4),
-                               fill=(0, 120, 255, 230),
-                               outline=(255, 255, 255, 255), width=1)
-                draw.text((bx0 + 3, by0 + 1), txt,
-                          font=font, fill=(255, 255, 255, 255))
+                draw.rectangle(
+                    (bx0, by0, bx0 + tw + 6, by0 + th + 4),
+                    fill=(0, 120, 255, 230),
+                    outline=(255, 255, 255, 255),
+                    width=1,
+                )
+                draw.text((bx0 + 3, by0 + 1), txt, font=font, fill=(255, 255, 255, 255))
             display = PILImage.alpha_composite(src, overlay)
         else:
             display = self._img
@@ -2731,12 +2868,12 @@ class MarkedPageWindow(Gtk.Window):
             return
         clair = 140
         if hasattr(self, "_parent_window") and self._parent_window is not None:
+            # Si le widget est indisponible, conserver le seuil par défaut.
             try:
                 clair = int(self._parent_window.clair_spin.get_value())
-            except Exception:
+            except Exception:  # nosec B110
                 pass
-        ok = scanner.correct_with_manual_align(
-            page, self._project, list(self._align_points), clair=clair)
+        ok = scanner.correct_with_manual_align(page, self._project, list(self._align_points), clair=clair)
         if ok:
             # On mémorise les repères sur la page pour les garder affichés
             # en bleu après l'alignement.
@@ -2749,8 +2886,8 @@ class MarkedPageWindow(Gtk.Window):
             self._show_align_success(page)
         else:
             self.lbl_align.set_markup(
-                "<span color='#F00'>Alignement impossible (repères mal placés ? "
-                "Reprendre les 5 repères).</span>")
+                "<span color='#F00'>Alignement impossible (repères mal placés ? " "Reprendre les 5 repères).</span>"
+            )
 
     def _show_align_success(self, page) -> None:
         """Pop-up de confirmation après alignement manuel réussi."""
@@ -2760,9 +2897,7 @@ class MarkedPageWindow(Gtk.Window):
         dialog = Gtk.AlertDialog()
         dialog.set_modal(True)
         dialog.set_message("Alignement manuel réussi ✓")
-        dialog.set_detail(
-            f"Variante : {variant}\n"
-            f"Note : {note} / {page.total or 20:.0f} ({statut})")
+        dialog.set_detail(f"Variante : {variant}\n" f"Note : {note} / {page.total or 20:.0f} ({statut})")
         dialog.show(self)
 
     def add_side_widget(self, widget):
@@ -2770,8 +2905,7 @@ class MarkedPageWindow(Gtk.Window):
 
 
 class QcmApplication(Gtk.Application):
-    def __init__(self, project_path: str | None = None,
-                 copies: list[str] | None = None):
+    def __init__(self, project_path: str | None = None, copies: list[str] | None = None):
         super().__init__(application_id="org.qcm_papier")
         self.project_path = project_path
         self.copies = copies
@@ -2788,7 +2922,7 @@ class QcmApplication(Gtk.Application):
             win.marking_status.set_text(f"{len(win.copies)} copie(s) chargée(s).")
             win._on_correct(None)
 
-def run(argv: list[str] | None = None, project_path: str | None = None,
-        copies: list[str] | None = None) -> int:
+
+def run(argv: list[str] | None = None, project_path: str | None = None, copies: list[str] | None = None) -> int:
     app = QcmApplication(project_path=project_path, copies=copies)
     return app.run(argv if argv is not None else [])

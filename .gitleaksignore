@@ -1,0 +1,4 @@
+# Faux positifs : alphabet hexadécimal de la table de compression jsPDF 1.3.2.
+# Exceptions limitées aux deux occurrences historiques, sans exclusion du fichier.
+9edb21db56cdfbd8f8d625d78da6d310cfb3abfb:jsPDF/jsPDF-1.3.2/dist/jspdf.debug.js:generic-api-key:8908
+0eb96b7e394c7ea2787a32ab144e21ac6ba4f714:jsPDF/jsPDF-1.3.2/dist/jspdf.debug.js:generic-api-key:8908

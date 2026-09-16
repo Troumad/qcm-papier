@@ -23,3 +23,8 @@ src-tauri/gen/
 
 # Sortie de test générée localement
 /test_output.pdf
+
+# Rapports de couverture
+.coverage*
+coverage.xml
+htmlcov/

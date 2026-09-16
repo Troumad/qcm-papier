@@ -2,7 +2,8 @@
 
 import json
 
-from qcm_papier import model, project as projmod
+from qcm_papier import model
+from qcm_papier import project as projmod
 
 
 def _make_project() -> model.Project:
@@ -26,9 +27,7 @@ def _make_project() -> model.Project:
 def test_model_round_trip():
     """Un projet sérialisé puis rechargé est identique."""
     p = _make_project()
-    p.students = {"p0000001": model.Student(id="p0000001", eid="123",
-                                            nip="p0000001", name="Doe",
-                                            firstname="John")}
+    p.students = {"p0000001": model.Student(id="p0000001", eid="123", nip="p0000001", name="Doe", firstname="John")}
     data = p.to_dict()
     p2 = model.Project.from_dict(data)
     assert len(p2.structure) == 1
@@ -147,8 +146,7 @@ def test_question_mark_range_single():
 def test_question_mark_range_progressive():
     """Choix multiples à gain progressif : min = -penalty × nb choix
     pénalisants (chaque erreur coûte la pénalité), max = gain."""
-    q = model.Question(name="Q", gain=1.5, penalty=0.5, single=False,
-                       multiple_progressive=True, index=0)
+    q = model.Question(name="Q", gain=1.5, penalty=0.5, single=False, multiple_progressive=True, index=0)
     q.choices = [
         model.Choice(name="A", correct=True, neutral=False, index=0),
         model.Choice(name="B", correct=False, neutral=False, penalty=True, index=1),
@@ -164,8 +162,7 @@ def test_exercise_mark_range_progressive():
     (tient compte du mode multiple)."""
     p = model.Project()
     ex = model.Exercise(name="Ex", index=0)
-    q = model.Question(name="Q", gain=1.5, penalty=0.5, single=False,
-                       multiple_progressive=True, index=0)
+    q = model.Question(name="Q", gain=1.5, penalty=0.5, single=False, multiple_progressive=True, index=0)
     q.choices = [
         model.Choice(name="A", correct=True, neutral=False, index=0),
         model.Choice(name="B", correct=False, neutral=False, penalty=True, index=1),

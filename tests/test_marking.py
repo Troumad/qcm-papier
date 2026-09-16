@@ -1,5 +1,7 @@
 """Tests du calcul des notes / barèmes (score_page)."""
 
+import pytest
+
 from qcm_papier import marking, model
 
 
@@ -21,8 +23,7 @@ def _make_project_single() -> model.Project:
 
 def _marks(checked: list[bool]) -> list[dict]:
     """Construit des marks pour 4 choix (checked[i] = l'étudiant a coché le choix i)."""
-    return [{"e": 0, "q": 0, "c": i, "r": 2.3, "x": i, "y": 0, "checked": c}
-            for i, c in enumerate(checked)]
+    return [{"e": 0, "q": 0, "c": i, "r": 2.3, "x": i, "y": 0, "checked": c} for i, c in enumerate(checked)]
 
 
 def test_choix_unique_bonne_reponse():
@@ -56,8 +57,7 @@ def test_choix_multiple_gain_progressif():
     """Question à gain progressif : 2 bonnes sur 3 cochées → gain * 2/3."""
     p = model.Project()
     ex = model.Exercise(name="Ex", index=0)
-    q = model.Question(name="Q", gain=3.0, penalty=1.0, single=False,
-                       multiple_progressive=True, index=0)
+    q = model.Question(name="Q", gain=3.0, penalty=1.0, single=False, multiple_progressive=True, index=0)
     q.choices = [
         model.Choice(name="A", correct=True, neutral=False, index=0),
         model.Choice(name="B", correct=True, neutral=False, index=1),
@@ -80,8 +80,7 @@ def test_choix_multiple_gain_progressif_avec_penalite():
     """
     p = model.Project()
     ex = model.Exercise(name="Ex", index=0)
-    q = model.Question(name="Q", gain=4.0, penalty=0.5, single=False,
-                       multiple_progressive=True, index=0)
+    q = model.Question(name="Q", gain=4.0, penalty=0.5, single=False, multiple_progressive=True, index=0)
     q.choices = [
         model.Choice(name="A", correct=True, neutral=False, index=0),
         model.Choice(name="B", correct=False, neutral=False, penalty=True, index=1),
@@ -96,12 +95,10 @@ def test_choix_multiple_gain_progressif_avec_penalite():
     assert sc.value == 1.5  # 4 * 1/2 - 0.5
     assert sc.total == 4.0
     # Aucune erreur, juste 1 bonne sur 2 : gain progressif pur.
-    sc = marking.score_page(p, _marks([True, False, False, False]),
-                            variant_id=1, student_id="p1")
+    sc = marking.score_page(p, _marks([True, False, False, False]), variant_id=1, student_id="p1")
     assert sc.value == 2.0  # 4 * 1/2
     # Tout juste : gain complet.
-    sc = marking.score_page(p, _marks([True, False, False, True]),
-                            variant_id=1, student_id="p1")
+    sc = marking.score_page(p, _marks([True, False, False, True]), variant_id=1, student_id="p1")
     assert sc.value == 4.0
 
 
@@ -112,8 +109,7 @@ def test_choix_multiple_gain_progressif_penalite_multiple():
     """
     p = model.Project()
     ex = model.Exercise(name="Ex", index=0)
-    q = model.Question(name="Q", gain=4.0, penalty=0.5, single=False,
-                       multiple_progressive=True, index=0)
+    q = model.Question(name="Q", gain=4.0, penalty=0.5, single=False, multiple_progressive=True, index=0)
     q.choices = [
         model.Choice(name="A", correct=True, neutral=False, index=0),
         model.Choice(name="D", correct=False, neutral=False, penalty=True, index=1),
@@ -133,8 +129,7 @@ def test_choix_multiple_correspondance_exacte():
     """Question à correspondance exacte : il faut TOUTES les bonnes cases."""
     p = model.Project()
     ex = model.Exercise(name="Ex", index=0)
-    q = model.Question(name="Q", gain=4.0, penalty=1.0, single=False,
-                       multiple_exact=True, index=0)
+    q = model.Question(name="Q", gain=4.0, penalty=1.0, single=False, multiple_exact=True, index=0)
     q.choices = [
         model.Choice(name="A", correct=True, neutral=False, index=0),
         model.Choice(name="B", correct=True, neutral=False, index=1),
@@ -143,23 +138,22 @@ def test_choix_multiple_correspondance_exacte():
     ex.questions = [q]
     p.structure = [ex]
     # Seulement A coché (1 sur 2) → pas de gain.
-    sc = marking.score_page(p, _marks([True, False, False]),
-                            variant_id=1, student_id="p1")
+    sc = marking.score_page(p, _marks([True, False, False]), variant_id=1, student_id="p1")
     assert sc.value == 0.0
     # A et B cochés (2 sur 2) → gain.
-    sc = marking.score_page(p, _marks([True, True, False]),
-                            variant_id=1, student_id="p1")
+    sc = marking.score_page(p, _marks([True, True, False]), variant_id=1, student_id="p1")
     assert sc.value == 4.0
 
 
 def test_exercice_validation_seuil():
     """Exercice avec validation : si somme >= seuil, on prend le gain ; sinon 0."""
     p = model.Project()
-    ex = model.Exercise(name="Ex", index=0, validation=True,
-                        threshold=2.0, gain=10.0)
+    ex = model.Exercise(name="Ex", index=0, validation=True, threshold=2.0, gain=10.0)
     q = model.Question(name="Q", gain=1.0, penalty=0.5, single=True, index=0)
-    q.choices = [model.Choice(name="A", correct=True, neutral=False, index=0),
-                 model.Choice(name="B", correct=False, neutral=False, penalty=True, index=1)]
+    q.choices = [
+        model.Choice(name="A", correct=True, neutral=False, index=0),
+        model.Choice(name="B", correct=False, neutral=False, penalty=True, index=1),
+    ]
     ex.questions = [q]
     p.structure = [ex]
     # A coché → question = 1, somme = 1 < seuil 2 → exercice = 0.
@@ -210,3 +204,19 @@ def test_scale_note():
     assert marking.scale_note(10.0, 0.0, 20.0) == 0.0
     # note /20 ramenée à /20 : identique.
     assert marking.scale_note(15.0, 20.0, 20.0, 20.0) == 15.0
+
+
+@pytest.mark.parametrize("mode", ["single", "multiple_exact", "multiple_progressive"])
+@pytest.mark.parametrize("selected, expected", [(0, 2.0), (1, -1.0), (2, 0.0)])
+def test_joker_remplace_la_reponse_initiale(mode, selected, expected):
+    p = _make_project_single()
+    question = p.structure[0].questions[0]
+    question.single = mode == "single"
+    question.multiple_exact = mode == "multiple_exact"
+    question.multiple_progressive = mode == "multiple_progressive"
+    # Réponse initiale pénalisante ; la seconde chance doit prendre le relais.
+    marks = _marks([False, True, False, False])
+    marks += [dict(mark, j=True) for mark in _marks([i == selected for i in range(4)])]
+    result = marking.score_page(p, marks, variant_id=1, student_id="p1234567")
+    assert result.value == expected
+    assert result.complete

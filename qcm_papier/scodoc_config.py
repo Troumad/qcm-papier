@@ -63,7 +63,9 @@ def _keyring():
     backend = keyring.get_keyring()
     candidates = backend.backends if isinstance(backend, chainer.ChainerBackend) else [backend]
     for candidate in candidates:
-        if not isinstance(candidate, (fail.Keyring, null.Keyring)) and not type(candidate).__module__.startswith("keyrings.alt"):
+        if not isinstance(candidate, fail.Keyring | null.Keyring) and not type(candidate).__module__.startswith(
+            "keyrings.alt"
+        ):
             return candidate
     raise ScoDocConfigError(
         "Aucun trousseau sécurisé disponible sur cette machine : le mot de passe ne peut pas être enregistré."
@@ -77,7 +79,9 @@ def _password(method: str, username: str, *args):
     try:
         return getattr(backend, method)(KEYRING_SERVICE, username, *args)
     except KeyringError as exc:
-        raise ScoDocConfigError("Le trousseau est inaccessible ou verrouillé. Déverrouillez-le puis réessayez.") from exc
+        raise ScoDocConfigError(
+            "Le trousseau est inaccessible ou verrouillé. Déverrouillez-le puis réessayez."
+        ) from exc
 
 
 def keyring_name() -> str:

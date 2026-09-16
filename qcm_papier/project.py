@@ -10,7 +10,7 @@ rester compatible avec les fichiers existants.
 from __future__ import annotations
 
 import json
-from typing import Any, IO
+from typing import IO, Any
 
 from .model import Project
 
@@ -41,8 +41,7 @@ def project_to_json(project: Project, *, indent: int | None = 2) -> str:
     return json.dumps(data, indent=indent, ensure_ascii=False)
 
 
-def save_project(project: Project, path: str | IO[str], *,
-                 indent: int | None = 2) -> None:
+def save_project(project: Project, path: str | IO[str], *, indent: int | None = 2) -> None:
     """Sauvegarde un projet dans un fichier (ou objet fichier texte)."""
     content = project_to_json(project, indent=indent)
     if isinstance(path, str):
@@ -61,11 +60,11 @@ def load_project(path: str | IO[str] | dict) -> Project:
     if isinstance(path, dict):
         data = path
     elif isinstance(path, str):
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
     else:
-        data = json.load(path)        
-    
+        data = json.load(path)
+
     return Project.from_dict(data)
 
 
