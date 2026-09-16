@@ -105,6 +105,34 @@ def test_generation_variantes_et_pdf(client):
     assert response.content.startswith(b"%PDF")
 
 
+def test_apercu_du_sujet(client):
+    client.post("/api/structure/exercises")
+    assert client.get("/api/generate/preview").status_code == 400  # aucune variante
+
+    client.put("/api/settings", json={"generate_count": 2, "generate_variants": ""})
+    client.post("/api/generate/variants")
+    data = client.get("/api/generate/preview").json()
+    assert data["pages"] >= 1
+    assert all(w > 0 and h > 0 for w, h in data["sizes"])
+
+    image = client.get("/api/generate/preview/0", params={"dpi": 72})
+    assert image.headers["content-type"] == "image/png"
+    assert image.content.startswith(b"\x89PNG")
+    grand = client.get("/api/generate/preview/0", params={"dpi": 150})
+    assert len(grand.content) > len(image.content)
+
+    assert client.get(f"/api/generate/preview/{data['pages']}").status_code == 404
+    assert client.get("/api/generate/preview/0", params={"dpi": 5000}).status_code == 400
+
+
+def test_apercu_sans_appel_prealable(client):
+    """Une page demandée directement rend le sujet, sans passer par /preview."""
+    client.post("/api/structure/exercises")
+    client.put("/api/settings", json={"generate_count": 1, "generate_variants": ""})
+    client.post("/api/generate/variants")
+    assert client.get("/api/generate/preview/0").content.startswith(b"\x89PNG")
+
+
 def test_ouverture_projet_et_telechargement(client):
     with open(PROJECT, "rb") as f:
         data = client.post("/api/project/open", files={"file": ("OML1_bis.json", f, "application/json")}).json()
