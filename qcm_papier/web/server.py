@@ -20,7 +20,7 @@ from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFil
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from .. import editing, scodoc_config
+from .. import editing, pdf_preview, scodoc_config
 from ..scodoc_api import ScoDocError
 from .session import Session
 
@@ -226,6 +226,15 @@ def create_app(session: Session | None = None) -> FastAPI:
         sess = s()
         name = sess.project.settings.evaluation_short or "sujet"
         return _attachment(sess.generate_pdf(), f"{name}.pdf", "application/pdf")
+
+    @app.get("/api/generate/preview")
+    def generate_preview() -> dict[str, Any]:
+        sizes = s().refresh_preview()
+        return {"pages": len(sizes), "sizes": [[w, h] for w, h in sizes]}
+
+    @app.get("/api/generate/preview/{i}")
+    def generate_preview_page(i: int, dpi: int = pdf_preview.DPI_DEFAULT) -> Response:
+        return Response(content=s().preview_image(i, dpi), media_type="image/png")
 
     # -- Correction ------------------------------------------------------
     @app.get("/api/correction")
