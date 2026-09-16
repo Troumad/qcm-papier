@@ -122,6 +122,12 @@ img.scodoc { display: block; max-width: 100%; margin: .5rem auto; }
 .stage canvas { position: absolute; inset: 0; }
 .stage.aligning canvas { cursor: crosshair; }
 .viewer-side { display: flex; flex-direction: column; gap: .45rem; }
+/* Aperçu du sujet : une seule colonne, la page centrée sur le fond gris. */
+.viewer.pdf[open] { grid-template-columns: 1fr; }
+.viewer.pdf .viewer-scroll { display: flex; justify-content: center; align-items: flex-start; padding: .8rem; }
+.viewer.pdf img { max-width: none; box-shadow: 0 2px 10px rgb(0 0 0 / .35); background: #fff; }
+.viewer.pdf img.loading { opacity: .45; }
+.spacer { flex: 1; }
 .viewer-side hr { width: 100%; border: 0; border-top: 1px solid var(--border); }
 #v-note { font-size: 1.15rem; }
 
