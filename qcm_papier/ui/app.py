@@ -203,7 +203,7 @@ _INFO_DEFAULTS = {
 }
 
 
-def _make_macro_chips(macros: dict[str, str], defaults: dict[str, str], on_insert=None) -> Gtk.FlowBox:
+def _make_macro_chips(macros: dict[str, str], defaults: dict[str, str], on_insert=None, labels_out=None) -> Gtk.FlowBox:
     """Construit un flot de macros, chacune dans un petit cadre.
 
     Chaque cadre affiche ``${macro} = valeur`` directement, sans infobulle
@@ -212,6 +212,8 @@ def _make_macro_chips(macros: dict[str, str], defaults: dict[str, str], on_inser
     défaut suggéré (comme le placeholder du HTML d'origine). Les cadres
     flottent et reviennent à la ligne automatiquement. Au clic sur une macro,
     ``on_insert(macro)`` est appelé pour l'insérer dans la zone active.
+    ``labels_out`` (optionnel) reçoit le dict macro -> Gtk.Label construit,
+    pour mettre à jour les valeurs sans reconstruire le flot.
     """
     flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE)
     flow.set_max_children_per_line(100)
@@ -223,6 +225,8 @@ def _make_macro_chips(macros: dict[str, str], defaults: dict[str, str], on_inser
             value = defaults.get(macro, "")
         chip = Gtk.Label(label=f"${{{macro}}} = {value}")
         chip.set_xalign(0)
+        if labels_out is not None:
+            labels_out[macro] = chip
         frame = Gtk.Frame()
         frame.set_child(chip)
         if on_insert is not None:
@@ -298,6 +302,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self._build_marking_tab()
 
         self._last_notes: dict[str, float] = {}
+        self.notebook.connect("switch-page", self._on_notebook_switch_page)
         self.notebook.set_current_page(0)
 
     # ------------------------------------------------------------------
@@ -738,7 +743,9 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         self._apply_footer_enabled()
 
-        self.notebook.append_page(box, Gtk.Label(label="Entête et pied de page"))
+        hf_page = Gtk.Label(label="Entête et pied de page")
+        self.notebook.append_page(box, hf_page)
+        self._header_footer_page = box
 
         for buf in self._hf_buffers.values():
             buf.connect("changed", self._mark_dirty)
@@ -798,6 +805,12 @@ class QcmWindow(Gtk.ApplicationWindow):
     def _apply_footer_enabled(self) -> None:
         enabled = self.footer_enabled_check.get_active()
         self._footer_container.set_sensitive(enabled)
+
+    def _on_notebook_switch_page(self, _notebook, _page, _page_num) -> None:
+        """Rafraîchit l'onglet Entête/pied de page à l'ouverture pour refléter
+        les changements faits dans l'onglet Informations."""
+        if getattr(self, "_header_footer_page", None) is not None and _page is self._header_footer_page:
+            self._refresh_macros()
 
     def _refresh_macros(self) -> None:
         """Reconstruit la liste des macros avec les valeurs courantes du projet."""
