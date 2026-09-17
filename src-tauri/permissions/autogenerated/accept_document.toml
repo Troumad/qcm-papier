@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-accept-document"
+description = "Enables the accept_document command without any pre-configured scope."
+commands.allow = ["accept_document"]
+
+[[permission]]
+identifier = "deny-accept-document"
+description = "Denies the accept_document command without any pre-configured scope."
+commands.deny = ["accept_document"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reset-document"
+description = "Enables the reset_document command without any pre-configured scope."
+commands.allow = ["reset_document"]
+
+[[permission]]
+identifier = "deny-reset-document"
+description = "Denies the reset_document command without any pre-configured scope."
+commands.deny = ["reset_document"]
