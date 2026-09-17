@@ -213,9 +213,7 @@ _HEADER_MACROS = {
 # ~792-802, ~852-859). Quand un champ est vide, c'est ce modèle qui est
 # substitué (comportement du bouton « Valeur par défaut » de l'original).
 HEADER_LEFT_DEFAULT = "${university} - ${college} - ${department}\nAnnée ${year} - Semestre ${semester}"
-HEADER_MIDDLE_DEFAULT = (
-    "\n${name_short} ${course_short}\nCette page est à détacher du sujet et à rendre pour corrections"
-)
+HEADER_MIDDLE_DEFAULT = "${name_short} ${course_short}\nCette page est à rendre pour corrections"
 HEADER_RIGHT_DEFAULT = "${date}\n${authors_short}"
 FOOTER_LEFT_DEFAULT = ""
 FOOTER_MIDDLE_DEFAULT = "Toute détérioration du code barre et/ou des 5 ronds situés en périphérie\nde la page des cadres entraîne un malus sur votre note"
@@ -249,14 +247,16 @@ def _refresh_header_footer(layout: Layout, settings: ProjectSettings) -> None:
     layout.header_height = _header_footer_height(layout.header_left, layout.header_middle, layout.header_right)
     layout.footer_height = _header_footer_height(layout.footer_left, layout.footer_middle, layout.footer_right)
 
+    # Code-barres fixe (indépendant du pied de page) : recalculé avant shapes_y
+    # car les deux repères du bas sont dans le code-barres.
+    layout.barcode_top = layout.page_height - layout.margin_bottom - layout.barcode_height
     layout.shapes_y = [
         layout.margin_top + layout.header_height + 12,
         layout.margin_top + layout.header_height + 37,
-        layout.page_height - layout.margin_bottom - layout.footer_height - 8,
-        layout.page_height - layout.margin_bottom - layout.footer_height - 3,
+        layout.barcode_top + 2,
+        layout.barcode_top + 7,
         layout.margin_top + layout.header_height + 7,
     ]
-    layout.barcode_top = layout.page_height - layout.margin_bottom - layout.footer_height - layout.barcode_height
     layout.barcode_prefix = settings.module_short + settings.evaluation_short + settings.year + "-"
     layout.barcode_length = len(layout.barcode_prefix) + 6
 
@@ -303,22 +303,25 @@ def build_layout(settings: ProjectSettings, orientation: str) -> Layout:
         layout.page_width - layout.margin_right - 2,
         layout.page_width - layout.margin_right - 2,
     ]
-    layout.shapes_y = [
-        layout.margin_top + layout.header_height + 12,
-        layout.margin_top + layout.header_height + 37,
-        layout.page_height - layout.margin_bottom - layout.footer_height - 8,
-        layout.page_height - layout.margin_bottom - layout.footer_height - 3,
-        layout.margin_top + layout.header_height + 7,
-    ]
-    layout.shapes_r = [2, 2, 2, 2, 2]
-
-    # Code-barres.
+    # Code-barres (fixe : indépendant du pied de page, qui se dessine au-dessus).
     layout.barcode_height = 10.0
     layout.barcode_resolution = 0.5
-    layout.barcode_top = layout.page_height - layout.margin_bottom - layout.footer_height - layout.barcode_height
+    layout.barcode_top = layout.page_height - layout.margin_bottom - layout.barcode_height
     layout.barcode_prefix = settings.module_short + settings.evaluation_short + settings.year + "-"
     # Longueur = préfixe + 6 ('*' + 4 chiffres + '*').
     layout.barcode_length = len(layout.barcode_prefix) + 6
+
+    # Repères d'alignement (5 cercles noirs). Les deux repères du bas sont
+    # dans le code-barres (à +2 et +7 mm sous son haut) : le scanner lit le
+    # code-barres entre ces deux repères.
+    layout.shapes_y = [
+        layout.margin_top + layout.header_height + 12,
+        layout.margin_top + layout.header_height + 37,
+        layout.barcode_top + 2,
+        layout.barcode_top + 7,
+        layout.margin_top + layout.header_height + 7,
+    ]
+    layout.shapes_r = [2, 2, 2, 2, 2]
     return layout
 
 
@@ -820,9 +823,10 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
     # d'alignement placés à page_width - margin_right - 2, rayon 2).
     shapes_right = max(layout.shapes_x) if layout.shapes_x else layout.page_width - layout.margin_right
     max_width = shapes_right - 2
-    max_height = layout.barcode_top
+    # Le pied de page se dessine au-dessus du code-barres (qui est fixe) :
+    # il limite l'espace disponible pour les exercices.
 
-    # Initialisation des variables pour les deux modes
+    max_height = layout.barcode_top - layout.footer_height
     x_max = layout.margin_left
     y_max = variant.id_y + variant.id_height
     x_line_start = variant.id_x

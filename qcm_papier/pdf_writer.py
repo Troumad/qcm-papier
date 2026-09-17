@@ -55,9 +55,9 @@ def _draw_code39(c: canvaslib.Canvas, variant: Variant, layout: Layout) -> None:
 def _footer_lines(text: str) -> list[str]:
     """Lignes du pied de page dans l'ordre de dessin (du haut vers le bas).
 
-    La dernière ligne du texte est dessinée à ``margin_bottom`` et les
-    précédentes au-dessus, pour que le pied de page grandisse vers le haut
-    comme la hauteur réservée (``footer_height``) le suppose.
+    La dernière ligne est dessinée juste au-dessus du code-barres (fixe) et
+    les précédentes au-dessus, pour que le pied de page grandisse vers le
+    haut comme la hauteur réservée (``footer_height``) le suppose.
     """
     return [line.strip() for line in text.split("\n") if line.strip()]
 
@@ -70,7 +70,6 @@ def _draw_header_footer(c: canvaslib.Canvas, layout: Layout) -> None:
     page_w = layout.page_width
     page_h = layout.page_height
     center = layout.page_center
-    margin_bottom = layout.margin_bottom
 
     c.setFont("Helvetica", 12)
     # Interligne identique à la hauteur réservée par build_layout
@@ -97,21 +96,25 @@ def _draw_header_footer(c: canvaslib.Canvas, layout: Layout) -> None:
             y = (page_h - margin_top - i * line_height_mm) * mm
             c.drawRightString((page_w - margin_right) * mm, y, line.strip())
 
-    # Pied de page : la dernière ligne est à margin_bottom, les précédentes
-    # au-dessus (le pied de page grandit vers le haut, comme footer_height).
+    # Pied de page : dessiné au-dessus du code-barres (qui est fixe, indépendant
+    # du pied de page). La dernière ligne touche le haut du code-barres et les
+    # précédentes montent vers le haut, comme footer_height le suppose.
+    # ``barcode_top`` est en mm depuis le haut de la page ; en coordonnées ReportLab
+    # (y depuis le bas), le haut du code-barres est à ``page_h - barcode_top``.
     if layout.footer_left:
-        for i, line in enumerate(_footer_lines(layout.footer_left)):
-            y = (margin_bottom + (len(_footer_lines(layout.footer_left)) - 1 - i) * line_height_mm) * mm
+        lines = _footer_lines(layout.footer_left)
+        for i, line in enumerate(lines):
+            y = (page_h - layout.barcode_top + (len(lines) - 1 - i) * line_height_mm) * mm
             c.drawString(margin_left * mm, y, line)
     if layout.footer_middle:
         lines = _footer_lines(layout.footer_middle)
         for i, line in enumerate(lines):
-            y = (margin_bottom + (len(lines) - 1 - i) * line_height_mm) * mm
+            y = (page_h - layout.barcode_top + (len(lines) - 1 - i) * line_height_mm) * mm
             c.drawCentredString(center * mm, y, line)
     if layout.footer_right:
         lines = _footer_lines(layout.footer_right)
         for i, line in enumerate(lines):
-            y = (margin_bottom + (len(lines) - 1 - i) * line_height_mm) * mm
+            y = (page_h - layout.barcode_top + (len(lines) - 1 - i) * line_height_mm) * mm
             c.drawRightString((page_w - margin_right) * mm, y, line)
 
 
@@ -210,11 +213,10 @@ def _shift_variant_y(variant: Variant, dy: float) -> None:
 
     Les coordonnées des textes, cadres, cercles, lignes et de la boîte
     d'identification sont stockées en absolu (déjà décalées de ``id_y`` au
-    moment de la génération). Quand la hauteur de l'en-tête ou du pied de
-    page change après génération (projet chargé depuis JSON puis rendu sans
-    --regenerate), ``id_y`` et tout ce qui en dérive doivent suivre le même
-    décalage pour ne pas chevaucher le nouvel en-tête ni déborder sur le
-    code-barres du bas de page.
+    moment de la génération). Quand la hauteur de l'en-tête change après
+    génération (projet chargé depuis JSON puis rendu sans --regenerate),
+    ``id_y`` et tout ce qui en dérive doivent suivre le même décalage pour
+    ne pas chevaucher le nouvel en-tête.
     """
     if dy == 0:
         return
@@ -235,19 +237,18 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None, per_st
     # layouts pré-générés (chemin `qcm-papier pdf` sans --regenerate, GTK, web).
     from .generator import _refresh_header_footer
 
-    # Hauteurs d'en-tête et de pied de page AVANT rafraîchissement : servent
-    # à translater les variantes déjà générées quand la hauteur réservée
-    # change, sinon les cadres (calculés à partir de header_height) restent à
-    # l'ancienne position et l'en-tête actualisé les chevauche. Le pied de
-    # page est compensé symétriquement pour préserver l'espace vertical
-    # disponible entre l'identification et le code-barres du bas.
+    # Hauteurs d'en-tête AVANT rafraîchissement : servent à translater les
+    # variantes déjà générées quand la hauteur réservée change, sinon les
+    # cadres (calculés à partir de header_height) restent à l'ancienne
+    # position et l'en-tête actualisé les chevauche. Le code-barres et les
+    # repères du bas étant fixes (indépendants du pied de page), la
+    # translation ne dépend que de l'en-tête ; le pied de page se dessine
+    # au-dessus du code-barres sans déplacer les exercices.
     old_header_height: dict[str, float] = {}
-    old_footer_height: dict[str, float] = {}
     for orientation in ("p", "l"):
         layout = project.variants.layout(orientation)
         if layout is not None:
             old_header_height[orientation] = layout.header_height
-            old_footer_height[orientation] = layout.footer_height
             _refresh_header_footer(layout, project.settings)
 
     variant_ids = []
@@ -258,12 +259,10 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None, per_st
     if not variant_ids:
         raise ValueError("Aucune variante à générer : lancez d'abord la " "génération des variantes.")
 
-    # Repositionnement des variantes déjà générées si l'en-tête ou le pied
-    # de page a changé depuis leur génération. La translation est
-    # (dh - df) : le haut suit la croissance de l'en-tête (vers le bas) et le
-    # bas est remonté d'autant que le pied de page grandit, pour préserver
-    # l'espace vertical disponible. Le décalage est nul pour une variante
-    # générée après le rafraîchissement (déjà à la bonne position).
+    # Repositionnement des variantes déjà générées si l'en-tête a changé
+    # depuis leur génération. La translation suit uniquement l'en-tête (le
+    # code-barres est fixe) : le décalage est nul pour une variante générée
+    # après le rafraîchissement (déjà à la bonne position).
     for vid in variant_ids:
         variant = project.variants.variant(vid)
         if variant is None:
@@ -272,8 +271,7 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None, per_st
         if layout is None:
             continue
         dh = layout.header_height - old_header_height.get(variant.layout, layout.header_height)
-        df = layout.footer_height - old_footer_height.get(variant.layout, layout.footer_height)
-        _shift_variant_y(variant, dh - df)
+        _shift_variant_y(variant, dh)
 
     copy_count = project.settings.generate_students if per_student else len(variant_ids)
 
