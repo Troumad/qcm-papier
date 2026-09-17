@@ -83,6 +83,12 @@ Le lanceur Tauri compile sur macOS ; `cargo fmt --check` et
 
 ## Reproduire
 
+Le lanceur `lancer-tauri.sh` dispose en complément de six tests avec outils
+simulés : chemin du JSON avec espaces, environnement Python séparé, absence de
+projet, aide et arguments invalides. Ils n'installent aucun paquet et n'ouvrent
+aucune fenêtre. La compilation et Clippy du lanceur passent sur macOS ; une
+installation complète sur une machine Linux vierge reste à valider.
+
 ```bash
 uv sync --extra dev
 uv run coverage run -m pytest -q
