@@ -447,6 +447,7 @@ class ProjectSettings:
     header_left: str = ""
     header_middle: str = ""
     header_right: str = ""
+    footer_enabled: bool = True
     footer_left: str = ""
     footer_middle: str = ""
     footer_right: str = ""

@@ -22,7 +22,7 @@ import os
 import gi
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gdk, GLib, Gtk
+from gi.repository import Gdk, Gio, GLib, Gtk
 
 from .. import generator, pdf_writer, scanner, scodoc
 from .. import project as project_mod
@@ -31,7 +31,7 @@ from ..model import Project
 from .editor import StructureEditor
 
 
-def _file_dialog(parent, title: str, action, filters=None, initial_name=None):
+def _file_dialog(parent, title: str, action, filters=None, initial_name=None, initial_folder=None):
     """Crée un sélecteur de fichier natif (GTK 4)."""
     dialog = Gtk.FileChooserNative.new(title, parent, action, None, None)
     if filters:
@@ -41,6 +41,8 @@ def _file_dialog(parent, title: str, action, filters=None, initial_name=None):
             for p in patterns:
                 filt.add_pattern(p)
             dialog.add_filter(filt)
+    if initial_folder:
+        dialog.set_current_folder(Gio.File.new_for_path(initial_folder))
     if initial_name and action == Gtk.FileChooserAction.SAVE:
         dialog.set_current_name(initial_name)
 
@@ -184,6 +186,54 @@ def _scodoc_picture(data_dir: str, name: str, max_width: int = 800):
         return None
 
 
+_INFO_DEFAULTS = {
+    "establishment": "Université Lyon 1",
+    "institute": "IUT Lyon 1",
+    "formation": "Département GEii",
+    "year": "2026",
+    "semester": "S1",
+    "teaching_unit": "UE3",
+    "module_full": "Mathématiques",
+    "module_short": "OML1",
+    "evaluation_full": "QCM Mathématiques",
+    "evaluation_short": "OML1",
+    "teachers": "BS",
+    "date": "09/10/2026",
+    "duration": "1h",
+}
+
+
+def _make_macro_chips(macros: dict[str, str], defaults: dict[str, str], on_insert=None) -> Gtk.FlowBox:
+    """Construit un flot de macros, chacune dans un petit cadre.
+
+    Chaque cadre affiche ``${macro} = valeur`` directement, sans infobulle
+    (qui ne s'affichait pas sous ``Gtk.FlowBox`` : l'enfant ``FlowBoxChild``
+    intercepte le survol). Quand la valeur du champ est vide, on affiche le
+    défaut suggéré (comme le placeholder du HTML d'origine). Les cadres
+    flottent et reviennent à la ligne automatiquement. Au clic sur une macro,
+    ``on_insert(macro)`` est appelé pour l'insérer dans la zone active.
+    """
+    flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE)
+    flow.set_max_children_per_line(100)
+    flow.set_column_spacing(4)
+    flow.set_row_spacing(2)
+    flow.set_hexpand(True)
+    for macro, value in macros.items():
+        if not value:
+            value = defaults.get(macro, "")
+        chip = Gtk.Label(label=f"${{{macro}}} = {value}")
+        chip.set_xalign(0)
+        frame = Gtk.Frame()
+        frame.set_child(chip)
+        if on_insert is not None:
+            click = Gtk.GestureClick()
+            click.set_button(1)
+            click.connect("released", lambda _g, _n, _x, _y, m=macro: on_insert(m))
+            frame.add_controller(click)
+        flow.append(frame)
+    return flow
+
+
 class QcmWindow(Gtk.ApplicationWindow):
     """Fenêtre principale de l'application."""
 
@@ -228,6 +278,13 @@ class QcmWindow(Gtk.ApplicationWindow):
                 background-color: #9E9E9E;
                 color: white;
             }
+            .hf_textview {
+                background-color: white;
+                border: 1px solid #888888;
+            }
+            .hf_textview text {
+                background-color: white;
+            }
         """)
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), style_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
@@ -235,12 +292,13 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         self._build_file_tab()
         self._build_info_tab()
+        self._build_header_footer_tab()
         self._build_structure_tab()
         self._build_generate_tab()
         self._build_marking_tab()
 
         self._last_notes: dict[str, float] = {}
-        self.notebook.set_current_page(2)
+        self.notebook.set_current_page(0)
 
     # ------------------------------------------------------------------
     # Onglet Fichier
@@ -537,6 +595,254 @@ class QcmWindow(Gtk.ApplicationWindow):
                 w.connect("changed", self._mark_dirty)
             elif isinstance(w, Gtk.SpinButton):
                 w.connect("value-changed", self._mark_dirty)
+
+    # ------------------------------------------------------------------
+    # Onglet En-tête et pied de page
+    # ------------------------------------------------------------------
+    def _build_header_footer_tab(self) -> None:
+        from ..generator import (
+            FOOTER_LEFT_DEFAULT,
+            FOOTER_MIDDLE_DEFAULT,
+            FOOTER_RIGHT_DEFAULT,
+            HEADER_LEFT_DEFAULT,
+            HEADER_MIDDLE_DEFAULT,
+            HEADER_RIGHT_DEFAULT,
+        )
+
+        self._hf_defaults = {
+            "header_left": HEADER_LEFT_DEFAULT,
+            "header_middle": HEADER_MIDDLE_DEFAULT,
+            "header_right": HEADER_RIGHT_DEFAULT,
+            "footer_left": FOOTER_LEFT_DEFAULT,
+            "footer_middle": FOOTER_MIDDLE_DEFAULT,
+            "footer_right": FOOTER_RIGHT_DEFAULT,
+        }
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box.set_margin_start(8)
+        box.set_margin_end(8)
+        box.set_margin_top(8)
+        box.set_margin_bottom(8)
+
+        title = Gtk.Label(label="<b>En-tête et pied de page</b>")
+        title.set_use_markup(True)
+        title.set_xalign(0)
+        box.append(title)
+
+        self._hf_buffers: dict[str, Gtk.TextBuffer] = {}
+        self._hf_textviews: dict[str, Gtk.TextView] = {}
+        self._active_hf_textview: Gtk.TextView | None = None
+
+        # ===== En-tête (haut) =====
+        header_frame = Gtk.Frame(label="En-tête")
+        header_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        header_frame.set_child(header_box)
+        box.append(header_frame)
+
+        labels_row = Gtk.Grid(column_spacing=8, row_spacing=2)
+        labels_row.set_column_homogeneous(True)
+        lbl_l = Gtk.Label(label="Texte aligné à gauche")
+        lbl_l.set_halign(Gtk.Align.CENTER)
+        labels_row.attach(lbl_l, 0, 0, 1, 1)
+        lbl_c = Gtk.Label(label="Texte centré")
+        lbl_c.set_halign(Gtk.Align.CENTER)
+        labels_row.attach(lbl_c, 1, 0, 1, 1)
+        lbl_r = Gtk.Label(label="Texte aligné à droite")
+        lbl_r.set_halign(Gtk.Align.CENTER)
+        labels_row.attach(lbl_r, 2, 0, 1, 1)
+        header_box.append(labels_row)
+
+        tv_row = Gtk.Grid(column_spacing=8, row_spacing=4)
+        tv_row.set_column_homogeneous(True)
+        for col, key in enumerate(("header_left", "header_middle", "header_right")):
+            tv, buf = self._make_header_footer_textview(
+                key, align="left" if key == "header_left" else ("center" if key == "header_middle" else "right")
+            )
+            tv_row.attach(tv, col, 0, 1, 1)
+        header_box.append(tv_row)
+
+        btn_row = Gtk.Grid(column_spacing=8, row_spacing=4)
+        btn_row.set_column_homogeneous(True)
+        for col, key in enumerate(("header_left", "header_middle", "header_right")):
+            btn = Gtk.Button(label="Valeur par défaut")
+            btn.connect("clicked", self._on_hf_default, key)
+            btn_row.attach(btn, col, 0, 1, 1)
+        header_box.append(btn_row)
+
+        # ===== Liste des macros disponibles (une seule fois, au centre) =====
+        macros_frame = Gtk.Frame(label="Macros disponibles (modifiable à l'onglet Informations) :")
+        macros_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        macros_frame.set_child(macros_box)
+        macros_box.set_margin_start(8)
+        macros_box.set_margin_end(8)
+        macros_box.set_margin_top(8)
+        macros_box.set_margin_bottom(8)
+
+        macro_desc = Gtk.Label(
+            label="Insérez ces macros dans le texte : elles seront remplacées par la valeur du champ d'information correspondant."
+        )
+        macro_desc.set_xalign(0)
+        macro_desc.set_hexpand(True)
+        macro_desc.set_wrap(True)
+        macro_desc.get_style_context().add_class("suggestion")
+        macros_box.append(macro_desc)
+
+        self._macros_box = macros_box
+        self._refresh_macros()
+        box.append(macros_frame)
+
+        # ===== Pied de page (bas) =====
+        footer_frame = Gtk.Frame(label="Pied de page")
+        footer_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        footer_frame.set_child(footer_box)
+        box.append(footer_frame)
+
+        enable_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.footer_enabled_check = Gtk.CheckButton(label="Afficher un pied de page")
+        self.footer_enabled_check.set_active(getattr(self.project.settings, "footer_enabled", True))
+        self.footer_enabled_check.connect("toggled", self._on_footer_enabled_toggled)
+        enable_row.append(self.footer_enabled_check)
+        footer_box.append(enable_row)
+
+        self._footer_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        footer_box.append(self._footer_container)
+
+        labels_row2 = Gtk.Grid(column_spacing=8, row_spacing=2)
+        labels_row2.set_column_homogeneous(True)
+        lbl_l2 = Gtk.Label(label="Texte aligné à gauche")
+        lbl_l2.set_halign(Gtk.Align.CENTER)
+        labels_row2.attach(lbl_l2, 0, 0, 1, 1)
+        lbl_c2 = Gtk.Label(label="Texte centré")
+        lbl_c2.set_halign(Gtk.Align.CENTER)
+        labels_row2.attach(lbl_c2, 1, 0, 1, 1)
+        lbl_r2 = Gtk.Label(label="Texte aligné à droite")
+        lbl_r2.set_halign(Gtk.Align.CENTER)
+        labels_row2.attach(lbl_r2, 2, 0, 1, 1)
+        self._footer_container.append(labels_row2)
+
+        tv_row2 = Gtk.Grid(column_spacing=8, row_spacing=4)
+        tv_row2.set_column_homogeneous(True)
+        for col, key in enumerate(("footer_left", "footer_middle", "footer_right")):
+            align = "left" if key == "footer_left" else ("center" if key == "footer_middle" else "right")
+            tv, _buf = self._make_header_footer_textview(key, align=align)
+            tv_row2.attach(tv, col, 0, 1, 1)
+        self._footer_container.append(tv_row2)
+
+        btn_row2 = Gtk.Grid(column_spacing=8, row_spacing=4)
+        btn_row2.set_column_homogeneous(True)
+        for col, key in enumerate(("footer_left", "footer_middle", "footer_right")):
+            btn = Gtk.Button(label="Valeur par défaut")
+            btn.connect("clicked", self._on_hf_default, key)
+            btn_row2.attach(btn, col, 0, 1, 1)
+        self._footer_container.append(btn_row2)
+
+        self._apply_footer_enabled()
+
+        self.notebook.append_page(box, Gtk.Label(label="Entête et pied de page"))
+
+        for buf in self._hf_buffers.values():
+            buf.connect("changed", self._mark_dirty)
+        self.footer_enabled_check.connect("toggled", self._mark_dirty)
+
+    def _make_header_footer_textview(self, key: str, align: str):
+        settings = self.project.settings
+        text = getattr(settings, key, "") or self._hf_defaults[key]
+        buf = Gtk.TextBuffer()
+        buf.set_text(text)
+        buf.connect("changed", lambda b, k=key: self._on_hf_text_changed(b, k))
+        tv = Gtk.TextView(buffer=buf)
+        tv.set_wrap_mode(Gtk.WrapMode.WORD)
+        tv.get_style_context().add_class("hf_textview")
+        tv.set_hexpand(True)
+        tv.set_vexpand(True)
+        tv.set_halign(Gtk.Align.FILL)
+        tv.set_valign(Gtk.Align.FILL)
+        tv.set_left_margin(4)
+        tv.set_right_margin(4)
+        tv.set_top_margin(4)
+        tv.set_bottom_margin(4)
+        if align == "center":
+            tv.set_justification(Gtk.Justification.CENTER)
+        elif align == "right":
+            tv.set_justification(Gtk.Justification.RIGHT)
+        else:
+            tv.set_justification(Gtk.Justification.LEFT)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_min_content_height(90)
+        scroll.set_hexpand(True)
+        scroll.set_vexpand(True)
+        scroll.get_style_context().add_class("hf_textview")
+        scroll.set_child(tv)
+        frame = Gtk.Frame()
+        frame.set_child(scroll)
+        frame.get_style_context().add_class("hf_textview")
+        self._hf_buffers[key] = buf
+        self._hf_textviews[key] = tv
+        focus_ctl = Gtk.EventControllerFocus()
+        focus_ctl.connect("enter", lambda _c, t=tv: setattr(self, "_active_hf_textview", t))
+        tv.add_controller(focus_ctl)
+        return frame, buf
+
+    def _on_hf_text_changed(self, buf, key: str) -> None:
+        start, end = buf.get_bounds()
+        setattr(self.project.settings, key, buf.get_text(start, end, True))
+
+    def _on_hf_default(self, _btn, key: str) -> None:
+        buf = self._hf_buffers[key]
+        buf.set_text(self._hf_defaults[key])
+
+    def _on_footer_enabled_toggled(self, check) -> None:
+        self.project.settings.footer_enabled = check.get_active()
+        self._apply_footer_enabled()
+
+    def _apply_footer_enabled(self) -> None:
+        enabled = self.footer_enabled_check.get_active()
+        self._footer_container.set_sensitive(enabled)
+
+    def _refresh_macros(self) -> None:
+        """Reconstruit la liste des macros avec les valeurs courantes du projet."""
+        from ..generator import _HEADER_MACROS
+
+        macros_box = getattr(self, "_macros_box", None)
+        if macros_box is None:
+            return
+        child = macros_box.get_first_child()
+        while child is not None:
+            nxt = child.get_next_sibling()
+            macros_box.remove(child)
+            child = nxt
+        settings = self.project.settings
+        macros_map = {
+            macro: str(getattr(settings, field_name, "") or "") for macro, field_name in _HEADER_MACROS.items()
+        }
+        defaults = {macro: _INFO_DEFAULTS.get(field_name, "") for macro, field_name in _HEADER_MACROS.items()}
+        macros_box.append(_make_macro_chips(macros_map, defaults, on_insert=self._insert_macro))
+
+    def _insert_macro(self, macro: str) -> None:
+        """Insère ``${macro}`` dans la zone de texte en-tête/pied de page active, à la place du curseur."""
+        tv = getattr(self, "_active_hf_textview", None)
+        if tv is None:
+            return
+        buf = tv.get_buffer()
+        buf.begin_user_action()
+        buf.insert_at_cursor(f"${{{macro}}}", -1)
+        buf.end_user_action()
+        tv.grab_focus()
+
+    def _load_header_footer_settings(self) -> None:
+        """Recharge les champs en-tête/pied de page depuis le projet (après ouverture)."""
+        settings = self.project.settings
+        for key in ("header_left", "header_middle", "header_right", "footer_left", "footer_middle", "footer_right"):
+            buf = self._hf_buffers.get(key)
+            if buf is None:
+                continue
+            value = getattr(settings, key, "") or self._hf_defaults[key]
+            buf.set_text(value)
+        check = getattr(self, "footer_enabled_check", None)
+        if check is not None:
+            check.set_active(getattr(settings, "footer_enabled", True))
+            self._apply_footer_enabled()
+        self._refresh_macros()
 
     # ------------------------------------------------------------------
     # Onglet Structure
@@ -1626,7 +1932,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             content.append(pic)
         else:
             content.append(
-                Gtk.Label(label="(Capture d'écran Scodoc absente — voir " "qcm_papier/data/scodoc/ pour l'ajouter.)")
+                Gtk.Label(label="(Capture d'écran Scodoc absente — voir qcm_papier/data/scodoc/ pour l'ajouter.)")
             )
 
         content.append(Gtk.Label(label="Charger le fichier Excel obtenu depuis Scodoc :"))
@@ -1657,7 +1963,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             n = len(self.project.students)
             n_matched = self._apply_anonymat()
             status.set_markup(
-                f"<span color='#080'>{n} étudiant(s) chargé(s), " f"{n_matched} copie(s) identifiée(s).</span>"
+                f"<span color='#080'>{n} étudiant(s) chargé(s), {n_matched} copie(s) identifiée(s).</span>"
             )
 
         def _close(_b) -> None:
@@ -2059,8 +2365,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         content.append(Gtk.Label(label=""))
         content.append(
             Gtk.Label(
-                label="Charger le fichier tableur obtenu, choisir le fichier "
-                "de sortie, puis cliquer sur « Exporter »."
+                label="Charger le fichier tableur obtenu, choisir le fichier de sortie, puis cliquer sur « Exporter »."
             )
         )
         content.append(Gtk.Label(label=""))
@@ -2075,8 +2380,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         if pic_send is not None:
             content.append(
                 Gtk.Label(
-                    label="Le fichier exporté peut ensuite être chargé dans "
-                    "l'interface Scodoc dans l'encadré suivant :"
+                    label="Le fichier exporté peut ensuite être chargé dans l'interface Scodoc dans l'encadré suivant :"
                 )
             )
             content.append(pic_send)
@@ -2130,7 +2434,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             try:
                 count = scodoc.export_scodoc_notes(path_in, path_out, self._last_notes, min0=min0)
                 status.set_markup(
-                    f"<span color='#080'>{count} note(s) exportée(s) \u2192 " f"{os.path.basename(path_out)}</span>"
+                    f"<span color='#080'>{count} note(s) exportée(s) \u2192 {os.path.basename(path_out)}</span>"
                 )
                 self.marking_status.set_text(f"{count} note(s) exportée(s) \u2192 {path_out}")
             except Exception as e:
@@ -2364,6 +2668,7 @@ class QcmWindow(Gtk.ApplicationWindow):
 
             # Charger les paramètres de génération
             self._load_generation_params()
+            self._load_header_footer_settings()
 
             self.set_title(f"Générateur/Correcteur de QCM papier - {os.path.basename(path)}")
             self.generate_status.set_text(f"Projet chargé : {path}")
@@ -2401,7 +2706,14 @@ class QcmWindow(Gtk.ApplicationWindow):
         """Enregistre le projet sous un nouveau chemin (demande le nom)."""
         self._save_generation_params()  # Sauvegarder les paramètres avant d'enregistrer
         name = self.project.settings.evaluation_short or "qcm_papier"
-        path = _file_dialog(self, "Enregistrer le projet", Gtk.FileChooserAction.SAVE, initial_name=f"{name}.json")
+        initial_folder = os.path.dirname(self.project_path) if self.project_path else None
+        path = _file_dialog(
+            self,
+            "Enregistrer le projet",
+            Gtk.FileChooserAction.SAVE,
+            initial_name=f"{name}.json",
+            initial_folder=initial_folder,
+        )
         if path is None:
             return
         try:
@@ -2434,8 +2746,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             buttons=Gtk.ButtonsType.NONE,
             text="Modifications non enregistrées",
             secondary_text=(
-                "Le projet a été modifié depuis le dernier enregistrement."
-                " Voulez-vous l'enregistrer avant de quitter ?"
+                "Le projet a été modifié depuis le dernier enregistrement. Voulez-vous l'enregistrer avant de quitter ?"
             ),
         )
         dialog.add_buttons(
@@ -2886,7 +3197,7 @@ class MarkedPageWindow(Gtk.Window):
             self._show_align_success(page)
         else:
             self.lbl_align.set_markup(
-                "<span color='#F00'>Alignement impossible (repères mal placés ? " "Reprendre les 5 repères).</span>"
+                "<span color='#F00'>Alignement impossible (repères mal placés ? Reprendre les 5 repères).</span>"
             )
 
     def _show_align_success(self, page) -> None:
@@ -2897,7 +3208,7 @@ class MarkedPageWindow(Gtk.Window):
         dialog = Gtk.AlertDialog()
         dialog.set_modal(True)
         dialog.set_message("Alignement manuel réussi ✓")
-        dialog.set_detail(f"Variante : {variant}\n" f"Note : {note} / {page.total or 20:.0f} ({statut})")
+        dialog.set_detail(f"Variante : {variant}\nNote : {note} / {page.total or 20:.0f} ({statut})")
         dialog.show(self)
 
     def add_side_widget(self, widget):
