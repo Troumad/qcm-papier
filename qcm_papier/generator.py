@@ -173,19 +173,46 @@ def _settings_tri_groups() -> dict[str, tuple[str, str, str]]:
 # ---------------------------------------------------------------------------
 
 
-def _header_footer_height(settings: ProjectSettings) -> tuple[float, float]:
-    """Calcule les hauteurs d'en-tête et de pied de page (en mm).
+def _header_footer_height(left: str, middle: str, right: str) -> float:
+    """Hauteur d'une zone (en-tête ou pied) en mm.
 
     Reprend ``layout.header_height = max(nb_lignes(gauche,milieu,droite)) *
-    line_height * 1.15`` du code original.
+    line_height * 1.15`` du code original, comptée sur le texte déjà substitué.
     """
 
     def nb_lines(text: str) -> int:
         return len(text.split("\n")) if text else 0
 
-    header_h = max(nb_lines(settings.header_left), nb_lines(settings.header_middle), nb_lines(settings.header_right), 0)
-    footer_h = max(nb_lines(settings.footer_left), nb_lines(settings.footer_middle), nb_lines(settings.footer_right), 0)
-    return header_h * LINE_HEIGHT * 1.15, footer_h * LINE_HEIGHT * 1.15
+    return max(nb_lines(left), nb_lines(middle), nb_lines(right), 0) * LINE_HEIGHT * 1.15
+
+
+# Substitution des macros `${...}` de l'en-tête/pied de page : reprend
+# ``eval('`' + header_left.value + '`')`` du code original (index.html
+# ~5838-5863, ~6260-6280), qui interpole les variables issues des champs
+# d'information. Les macros inconnues sont laissées telles quelles (le code
+# original n'en définit pas davantage pour l'en-tête et le pied de page).
+_HEADER_MACROS = {
+    "university": "establishment",
+    "college": "institute",
+    "department": "formation",
+    "year": "year",
+    "semester": "semester",
+    "course_unit": "teaching_unit",
+    "course_long": "module_full",
+    "course_short": "module_short",
+    "name_long": "evaluation_full",
+    "name_short": "evaluation_short",
+    "authors_short": "teachers",
+    "date": "date",
+    "duration": "duration",
+}
+
+
+def _substitute(text: str, settings: ProjectSettings) -> str:
+    """Remplace les macros ``${name}`` par la valeur du champ de paramètre associé."""
+    for macro, field_name in _HEADER_MACROS.items():
+        text = text.replace("${" + macro + "}", str(getattr(settings, field_name, "") or ""))
+    return text
 
 
 def build_layout(settings: ProjectSettings, orientation: str) -> Layout:
@@ -211,15 +238,14 @@ def build_layout(settings: ProjectSettings, orientation: str) -> Layout:
     layout.margin_bottom = float(settings.margin_bottom)
     layout.page_center = (layout.margin_left + layout.page_width - layout.margin_right) / 2
 
-    header_h, footer_h = _header_footer_height(settings)
-    layout.header_height = header_h
-    layout.footer_height = footer_h
-    layout.header_left = settings.header_left
-    layout.header_middle = settings.header_middle
-    layout.header_right = settings.header_right
-    layout.footer_left = settings.footer_left
-    layout.footer_middle = settings.footer_middle
-    layout.footer_right = settings.footer_right
+    layout.header_left = _substitute(settings.header_left, settings)
+    layout.header_middle = _substitute(settings.header_middle, settings)
+    layout.header_right = _substitute(settings.header_right, settings)
+    layout.footer_left = _substitute(settings.footer_left, settings)
+    layout.footer_middle = _substitute(settings.footer_middle, settings)
+    layout.footer_right = _substitute(settings.footer_right, settings)
+    layout.header_height = _header_footer_height(layout.header_left, layout.header_middle, layout.header_right)
+    layout.footer_height = _header_footer_height(layout.footer_left, layout.footer_middle, layout.footer_right)
 
     # Repères d'alignement (5 cercles noirs).
     layout.shapes_x = [
