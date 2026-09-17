@@ -334,9 +334,9 @@ L'interface est organisée en onglets :
 Une interface complémentaire existe dans le navigateur : édition, génération,
 correction et sauvegarde. Elle utilise Python avec `.[web]`, sans GTK.
 L'éditeur de structure applique les mêmes règles que l'interface GTK, y compris
-la suppression et le déplacement des exercices et des questions. Le choix du
-dossier d'enregistrement reste propre à GTK : le navigateur télécharge les
-fichiers dans son dossier habituel.
+la suppression et le déplacement des exercices et des questions. Dans le
+navigateur, les fichiers sont téléchargés dans le dossier habituel ; dans
+Tauri, les boîtes de dialogue natives permettent de choisir leur destination.
 
 ```bash
 uv sync --extra web
@@ -353,15 +353,46 @@ uv run qcm-papier serve -p math/2026/OML1_bis.json   # avec un projet ouvert
   les résultats (projet, PDF, notes, sauvegarde) sont téléchargés.
 - La sauvegarde de correction est une archive `.zip` qui contient l'état, les
   copies corrigées en images, **le projet et les fichiers de copies** : on peut la
-  recharger plus tard, même sur une autre machine.
+  recharger plus tard, même sur une autre machine. Elle conserve aussi les copies
+  en attente, leur sélection et le seuil de détection.
 - Dans le tableau des résultats, un clic affiche la page, un double-clic
   l'ouvre en grand (zoom, n° étudiant, alignement manuel).
+
+### Sauvegarde et vérification des copies
+
+- L'en-tête distingue le **projet non enregistré** de la **correction non
+  sauvegardée**. Enregistrer le JSON ne sauvegarde pas les résultats de correction.
+- Avant de remplacer le projet, une confirmation propose d'enregistrer,
+  d'abandonner les changements ou d'annuler. Une correction en cours doit se terminer.
+  La fermeture d'un onglet utilise l'avertissement du navigateur.
+- Après une modification du sujet, **Générer les variantes** doit être relancé
+  avant l'export PDF ou l'aperçu : l'application bloque les variantes périmées.
+  Le JSON peut toujours être enregistré comme brouillon ; l'indication de variantes
+  périmées est conservée lors de sa réouverture dans l'interface web/Tauri.
+- Après un export PDF, un dialogue rappelle que le JSON contient les réponses,
+  barèmes et informations nécessaires à la correction, et propose de l'enregistrer.
+- **Ctrl/Cmd + S** enregistre le projet. L'export groupé fournit une archive ZIP
+  contenant le PDF du sujet et le JSON correspondant.
+- Dans le navigateur, le lancement du téléchargement valide la sauvegarde côté
+  application : vérifiez le fichier téléchargé, car la page ne peut pas confirmer
+  son écriture sur disque.
+- Les filtres **À vérifier**, **Étudiant inconnu** et **Incomplètes** facilitent
+  la relecture. Un étudiant reste inconnu tant qu'il n'est pas associé à un
+  identifiant de la table des étudiants. **Anomalie suivante** parcourt aussi
+  les échecs et les numéros étudiant en doublon.
+- Avant l'export des notes, un bilan présente les anomalies et demande une
+  confirmation si nécessaire. Les catégories peuvent se recouper. Seules les
+  lignes correspondant à la table d'export sont renseignées ; en cas de doublon,
+  la première note est retenue. Relisez ces copies avant de poursuivre.
 
 ### Application de bureau (Tauri)
 
 Le dossier `src-tauri/` fait de l'interface web une application à
 double-cliquer : elle lance le serveur Python et ouvre une fenêtre dessus.
 Python avec `.[web]` doit encore être installé sur la machine.
+**Ouvrir**, **Enregistrer** et **Enregistrer sous** utilisent les boîtes de
+dialogue natives. Enregistrer réutilise le chemin choisi ; **Ctrl/Cmd + Maj + S**
+permet de le changer. La fermeture propose de sauvegarder le travail en attente.
 Voir [le guide Tauri](src-tauri/README.md).
 
 #### Levée d'anonymat (Scodoc)

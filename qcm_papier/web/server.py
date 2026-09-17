@@ -7,6 +7,7 @@ compilation.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import tempfile
 import threading
@@ -49,6 +50,7 @@ def _attachment(data: bytes, filename: str, media_type: str, headers: dict[str, 
 def create_app(session: Session | None = None) -> FastAPI:
     app = FastAPI(title="QCM-Papier", docs_url="/api/docs", redoc_url=None)
     app.state.session = session or Session()
+    request_lock = asyncio.Lock()
 
     def s() -> Session:
         return app.state.session
@@ -67,7 +69,43 @@ def create_app(session: Session | None = None) -> FastAPI:
             or request.headers.get("sec-fetch-site") == "cross-site"
         ):
             return JSONResponse(status_code=403, content={"detail": "Accès réservé à cette application locale."})
-        return await call_next(request)
+        async with request_lock:
+            return await tracked_request(request, call_next)
+
+    async def tracked_request(request: Request, call_next):
+        path = request.url.path
+        modifying = request.method in {"POST", "PUT", "PATCH", "DELETE"}
+        if s().job.running and (
+            modifying
+            and not path.startswith("/api/settings/scodoc")
+            and path not in {"/api/scodoc/api/login", "/api/scodoc/api/logout"}
+            or path in {"/api/state/save", "/api/generate/bundle"}
+        ):
+            return JSONResponse(
+                status_code=409, content={"detail": "Attendez la fin de la correction avant cette action."}
+            )
+        changes_subject = modifying and (path == "/api/settings" or path.startswith("/api/structure/"))
+        previous = s().project_token() if changes_subject else None
+        response = await call_next(request)
+        if changes_subject and response.status_code < 400 and previous != s().project_token():
+            with s().lock:
+                s().variants_stale = bool(s().variant_ids())
+                s().preview_pdf = None
+        if modifying and response.status_code < 400:
+            with s().lock:
+                if path in {"/api/project/new", "/api/project/open"}:
+                    s().saved_project_token = s().project_token()
+                    s().correction_revision += 1
+                    s().saved_correction_revision = s().correction_revision
+                    s().copies = []
+                    s().pages = []
+                    s().notes = {}
+                elif path.startswith(("/api/copies", "/api/pages/", "/api/correction/")) or path in {
+                    "/api/scodoc/students",
+                    "/api/scodoc/api/students",
+                }:
+                    s().correction_revision += 1
+        return response
 
     @app.exception_handler(ScoDocError)
     @app.exception_handler(ValueError)
@@ -113,6 +151,22 @@ def create_app(session: Session | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="Capture d'écran absente.")
         return FileResponse(path)
 
+    @app.get("/api/work")
+    def work_state() -> dict[str, Any]:
+        return s().work_state()
+
+    @app.post("/api/work/saved")
+    def work_saved(data: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        s().acknowledge_save(data.get("project_token"), data.get("correction_token"))
+        return s().work_state()
+
+    def save_headers(correction: bool = False) -> dict[str, str]:
+        state = s().work_state()
+        headers = {"X-Project-Token": state["project_token"]}
+        if correction:
+            headers["X-Correction-Token"] = str(state["correction_token"])
+        return headers
+
     # -- Projet ------------------------------------------------------------
     @app.get("/api/project")
     def project_state() -> dict[str, Any]:
@@ -146,7 +200,8 @@ def create_app(session: Session | None = None) -> FastAPI:
     def project_download() -> Response:
         sess = s()
         name = sess.project.settings.evaluation_short or "qcm_papier"
-        return _attachment(sess.project_json().encode("utf-8"), f"{name}.json", "application/json")
+        with sess.lock:
+            return _attachment(sess.project_json().encode("utf-8"), f"{name}.json", "application/json", save_headers())
 
     @app.put("/api/settings")
     def settings_update(form: dict[str, Any] = Body(...)) -> dict[str, Any]:
@@ -235,6 +290,11 @@ def create_app(session: Session | None = None) -> FastAPI:
     @app.get("/api/generate/preview/{i}")
     def generate_preview_page(i: int, dpi: int = pdf_preview.DPI_DEFAULT) -> Response:
         return Response(content=s().preview_image(i, dpi), media_type="image/png")
+
+    @app.get("/api/generate/bundle")
+    def subject_bundle() -> Response:
+        with s().lock:
+            return _attachment(s().subject_bundle(), "sujet_et_projet.zip", "application/zip", save_headers())
 
     # -- Correction ------------------------------------------------------
     @app.get("/api/correction")
@@ -381,7 +441,8 @@ def create_app(session: Session | None = None) -> FastAPI:
 
     @app.get("/api/state/save")
     def state_save() -> Response:
-        return _attachment(s().save_state_zip(), "correction.zip", "application/zip")
+        with s().lock:
+            return _attachment(s().save_state_zip(), "correction.zip", "application/zip", save_headers(True))
 
     @app.post("/api/state/load")
     async def state_load(file: UploadFile = File(...)) -> dict[str, Any]:

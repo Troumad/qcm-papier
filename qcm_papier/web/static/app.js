@@ -4,7 +4,7 @@
 
 const $ = (selector, root = document) => root.querySelector(selector);
 
-async function api(method, url, body) {
+async function api(method, url, body, { raw = false } = {}) {
   const options = { method };
   if (body instanceof FormData) {
     options.body = body;
@@ -12,15 +12,23 @@ async function api(method, url, body) {
     options.headers = { "Content-Type": "application/json" };
     options.body = JSON.stringify(body);
   }
+  const tracking = method !== "GET" && !url.startsWith("/api/work");
+  const draftVersion = tracking ? window.QCMSave?.beginMutation() : null;
+  let succeeded = false;
+  try {
   const response = await fetch(url, options);
   if (!response.ok) {
     let detail = `Erreur ${response.status}`;
     try { detail = (await response.json()).detail || detail; } catch { /* réponse non JSON */ }
     throw new Error(detail);
   }
+  succeeded = true;
   const type = response.headers.get("Content-Type") || "";
-  if (type.includes("application/json")) return response.json();
+  if (!raw && type.includes("application/json")) return response.json();
   return response;
+  } finally {
+    if (tracking) await window.QCMSave?.endMutation(succeeded, draftVersion);
+  }
 }
 
 let toastTimer;
@@ -39,15 +47,10 @@ async function guard(action) {
 }
 
 async function download(url, fallbackName) {
-  const response = await api("GET", url);
-  const disposition = response.headers.get("Content-Disposition") || "";
-  const match = disposition.match(/filename="([^"]+)"/);
-  const blob = await response.blob();
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = match ? match[1] : fallbackName;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+  await window.QCMSave.settle();
+  const response = await api("GET", url, undefined, { raw: true });
+  if (!(await window.QCMSave.deliver(response, fallbackName))) return null;
+  if (url === "/api/generate/pdf") await window.QCMSave.remindProjectSave();
   return response;
 }
 
@@ -86,7 +89,7 @@ let selected = null; // { e } ou { e, q }
 function applyProject(data) {
   project = data;
   $("#project-name").textContent = data.name || data.settings.evaluation_short || "Projet non enregistré";
-  $("#btn-save").hidden = !data.path;
+  $("#btn-save").hidden = false;
   fillForm($("#info-form"), data.settings);
   fillForm($("#gen-form"), data.settings);
   renderTree();
@@ -118,27 +121,30 @@ function bindSettingsForm(form) {
 // Fichier
 // ---------------------------------------------------------------------------
 $("#btn-new").addEventListener("click", () => guard(async () => {
+  if (!(await window.QCMSave.beforeReplace())) return;
   selected = null;
   applyProject(await api("POST", "/api/project/new"));
+  await window.QCMSave.resetPath();
   $("#file-status").textContent = "Projet nouveau (non enregistré).";
   document.dispatchEvent(new CustomEvent("project-reset"));
 }));
-$("#btn-open").addEventListener("click", () => $("#input-project").click());
+$("#btn-open").addEventListener("click", () => guard(() => window.QCMSave.openProject()));
 $("#input-project").addEventListener("change", (event) => guard(async () => {
   const file = event.target.files[0];
   if (!file) return;
+  if (!(await window.QCMSave.beforeReplace())) { event.target.value = ""; return; }
   const body = new FormData();
   body.append("file", file);
   selected = null;
   applyProject(await api("POST", "/api/project/open", body));
+  await window.QCMSave.resetPath();
+  document.dispatchEvent(new CustomEvent("project-reset"));
   $("#file-status").textContent = `Projet chargé : ${file.name}`;
   event.target.value = "";
 }));
-$("#btn-save").addEventListener("click", () => guard(async () => {
-  const { path } = await api("POST", "/api/project/save");
-  $("#file-status").textContent = `Projet enregistré : ${path}`;
-}));
-$("#btn-download").addEventListener("click", () => guard(() => download("/api/project/download", "qcm_papier.json")));
+$("#btn-save").addEventListener("click", () => guard(() => window.QCMSave.saveProject(false)));
+$("#btn-save-as").addEventListener("click", () => guard(() => window.QCMSave.saveProject(true)));
+$("#btn-download").addEventListener("click", () => guard(() => window.QCMSave.saveProject(true)));
 
 // ---------------------------------------------------------------------------
 // Structure
@@ -321,7 +327,7 @@ function renderProps() {
     el("label", {}, "Nom", textInput(question.name, (v) => patch({ name: v }))),
     el("div", { class: "row wrap" },
       el("label", {}, "Gain", numberInput(question.gain, (v) => patch({ gain: v }))),
-      el("label", {}, "Malus", numberInput(question.penalty, (v) => patch({ penalty: v }))),
+      el("label", {}, question.type === "multiple_progressive" ? "Malus par réponse fausse" : "Malus de la question", numberInput(question.penalty, (v) => patch({ penalty: v }))),
       el("button", { onclick: () => guard(() => structureCall("POST", `${qUrl}/choices`)) }, "Ajouter un choix"),
       el("button", { onclick: () => guard(() => structureCall("DELETE", `${qUrl}/choices`)) }, "Enlever un choix")),
     el("label", {}, "Type de question", typeSelect),
@@ -383,14 +389,15 @@ $("#phantom-fields").append(
 
 $("#btn-gen-variants").addEventListener("click", () => guard(async () => {
   $("#generate-status").textContent = "Génération…";
+  await window.QCMSave.settle();
   const data = await api("POST", "/api/generate/variants");
   applyProject(data);
   $("#generate-status").textContent = data.message;
 }));
+$("#btn-gen-bundle").addEventListener("click", () => guard(() => download("/api/generate/bundle", "sujet_et_projet.zip")));
 $("#btn-gen-pdf").addEventListener("click", () => guard(async () => {
   $("#generate-status").textContent = "Création du PDF…";
   await download("/api/generate/pdf", "sujet.pdf");
-  $("#generate-status").textContent = "PDF généré.";
 }));
 
 // ---------------------------------------------------------------------------
@@ -407,5 +414,5 @@ onTab("help", () => guard(async () => {
 // ---------------------------------------------------------------------------
 bindSettingsForm($("#info-form"));
 bindSettingsForm($("#gen-form"));
-window.QCM = { $, api, guard, toast, download, el, onTab, showTab, get project() { return project; } };
+window.QCM = { $, api, guard, toast, download, el, onTab, showTab, applyProject, get project() { return project; } };
 guard(async () => applyProject(await api("GET", "/api/project")));

@@ -48,6 +48,25 @@ Sans cette variable, le lanceur utilise `python3` (`python` sous Windows).
 Sauvegardez ou téléchargez votre travail avant de fermer l'application :
 la fermeture arrête le serveur local.
 
+## Ouverture, sauvegarde et fermeture
+
+Les commandes **Ouvrir**, **Enregistrer** et **Enregistrer sous** utilisent les
+boîtes de dialogue natives (`rfd`). Enregistrer réutilise le chemin du JSON ouvert
+ou précédemment enregistré ; Enregistrer sous permet de choisir un autre fichier.
+Les raccourcis sont **Ctrl/Cmd + S** et **Ctrl/Cmd + Maj + S**.
+
+Les exports PDF, ZIP et notes proposent également une destination native.
+L'écriture passe par un fichier temporaire dans le dossier de destination, puis
+son remplacement. Une annulation ou un échec d'écriture conserve l'indication
+« non enregistré ». Avant de fermer, l'application propose de sauvegarder le
+projet ou l'archive de correction ; une correction en cours bloque la fermeture.
+
+Les commandes natives sont autorisées uniquement depuis la fenêtre principale
+et l'origine locale exacte du serveur lancé par Tauri (port compris).
+
+La compilation et Clippy sont vérifiés sur macOS. Les dialogues et le parcours
+visuel complet restent à valider manuellement, ainsi que Windows et Linux.
+
 ## Connexion à ScoDoc
 
 L'onglet **Réglages** enregistre le compte ScoDoc avec le même mécanisme que

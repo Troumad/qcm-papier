@@ -9,6 +9,7 @@
   let current = -1; // page affichée
   let sort = { key: null, dir: 1 };
   let pollTimer = null;
+  let filter = "all";
 
   // -------------------------------------------------------------------------
   // Chargement et affichage
@@ -18,6 +19,8 @@
     renderCopies();
     renderResults();
     renderStatus();
+    await window.QCMSave.refresh();
+    $("#btn-export").disabled = Boolean(state.job.running);
     if (document.activeElement !== $("#clair")) $("#clair").value = state.clair;
     if (state.job.running) schedulePoll();
   }
@@ -61,7 +64,7 @@
   }
 
   function sortedResults() {
-    const rows = state.results.slice();
+    const rows = state.results.filter((row) => window.QCMReview.matches(row, filter, state.results));
     if (!sort.key) return rows;
     return rows.sort((a, b) => {
       const va = sort.key === "note" ? (a.note ?? -Infinity) : String(a[sort.key] ?? "");
@@ -75,6 +78,11 @@
   }
 
   function renderResults() {
+    const previous = current;
+    const visible = sortedResults();
+    $("#result-count").textContent = `${visible.length} / ${state.results.length} page(s)`;
+    $("#btn-next-issue").disabled = window.QCMReview.nextIssue(state.results, current) === null;
+    if (!visible.some((row) => row.index === current)) current = visible[0]?.index ?? -1;
     const body = $("#results tbody");
     body.replaceChildren(...sortedResults().map((r) => {
       const row = el("tr", { onclick: () => showPage(r.index), ondblclick: () => openViewer(r.index) },
@@ -91,10 +99,12 @@
       th.classList.toggle("desc", sort.key === th.dataset.sort && sort.dir === -1);
     });
     const select = $("#page-select");
-    select.replaceChildren(...state.results.map((r) => el("option", { value: r.index, selected: r.index === current }, pageLabel(r))));
-    if (!state.results.length) {
+    select.replaceChildren(...visible.map((r) => el("option", { value: r.index, selected: r.index === current }, pageLabel(r))));
+    if (!visible.length) {
       current = -1;
       $("#page-preview").hidden = true;
+    } else if (previous !== current) {
+      showPage(current);
     }
   }
 
@@ -119,8 +129,24 @@
     renderResults();
   }));
   $("#page-select").addEventListener("change", (ev) => showPage(Number(ev.target.value)));
-  $("#btn-prev").addEventListener("click", () => showPage(Math.max(0, current - 1)));
-  $("#btn-next").addEventListener("click", () => showPage(Math.min(state.results.length - 1, current + 1)));
+  $("#btn-prev").addEventListener("click", () => showPage(adjacent(current, -1)));
+  $("#btn-next").addEventListener("click", () => showPage(adjacent(current, 1)));
+  function adjacent(index, delta) {
+    const rows = sortedResults();
+    const position = rows.findIndex((row) => row.index === index);
+    return rows[Math.max(0, Math.min(rows.length - 1, position + delta))]?.index ?? -1;
+  }
+  $("#result-filter").addEventListener("change", () => {
+    filter = $("#result-filter").value;
+    renderResults();
+    if (current >= 0) showPage(current);
+  });
+  $("#btn-next-issue").addEventListener("click", () => {
+    const index = window.QCMReview.nextIssue(state.results, current);
+    if (index === null) return;
+    filter = "review"; $("#result-filter").value = filter;
+    renderResults(); showPage(index); openViewer(index);
+  });
   $("#btn-enlarge").addEventListener("click", () => current >= 0 && openViewer(current));
 
   // -------------------------------------------------------------------------
@@ -129,10 +155,15 @@
   function uploadFiles(input, url, field, after) {
     input.addEventListener("change", () => guard(async () => {
       if (!input.files.length) return;
+      if (url === "/api/state/load" && !(await window.QCMSave.beforeReplace())) { input.value = ""; return; }
       const body = new FormData();
       for (const file of input.files) body.append(field, file);
       input.value = "";
       const data = await api("POST", url, body);
+      if (url === "/api/state/load") {
+        await window.QCMSave.resetPath();
+        window.QCM.applyProject(await api("GET", "/api/project"));
+      }
       await after(data);
     }));
   }
@@ -143,7 +174,6 @@
   $("#clair").addEventListener("change", (ev) => guard(async () => refresh(await api("PUT", "/api/correction/clair", { clair: Number(ev.target.value) }))));
   $("#btn-save-state").addEventListener("click", () => guard(async () => {
     await download("/api/state/save", "correction.zip");
-    toast("État de correction sauvegardé.");
   }));
   $("#btn-load-state").addEventListener("click", () => $("#input-state").click());
   uploadFiles($("#input-state"), "/api/state/load", "file", refresh);
@@ -255,17 +285,43 @@
     if (current >= 0) showPage(current);
   });
 
-  $("#btn-export").addEventListener("click", () => {
-    if (!state.notes) {
-      toast("Aucune note à exporter : corrigez d'abord.", true);
-      return;
+  let reviewedResults = "";
+  function exportSummary() {
+    const recap = window.QCMReview.summary(state.results);
+    $("#export-summary").textContent = `${recap.pages} page(s), ${state.notes} note(s) disponible(s). ` +
+      `${recap.failed} échec(s), ${recap.unknown} étudiant(s) non identifié(s), ` +
+      `${recap.incomplete} page(s) incomplète(s), ${recap.negative} note(s) négative(s), ` +
+      `${recap.duplicates} numéro(s) étudiant en doublon. ` +
+      "Seules les notes correspondant à une ligne du tableur seront exportées ; pour un doublon, la première note est conservée.";
+    $("#export-review-label").hidden = !(recap.review || recap.duplicates);
+    return Boolean(recap.review || recap.duplicates);
+  }
+  $("#btn-export").addEventListener("click", () => guard(async () => {
+    await refresh();
+    if (!state.notes || state.job.running) {
+      toast("Aucune note disponible, ou correction encore en cours.", true); return;
     }
     loadScodocImages($("#dlg-export"));
     $("#export-status").textContent = "";
+    $("#export-reviewed").checked = false;
+    reviewedResults = JSON.stringify(state.results);
+    exportSummary();
     $("#dlg-export").showModal();
-  });
+  }));
   $("#btn-do-export").addEventListener("click", () => guard(async () => {
+    await refresh();
     const status = $("#export-status");
+    if (state.job.running) throw new Error("Correction encore en cours.");
+    if (reviewedResults !== JSON.stringify(state.results)) {
+      reviewedResults = JSON.stringify(state.results);
+      $("#export-reviewed").checked = false;
+      exportSummary();
+      status.textContent = "Les résultats ont changé : vérifiez le récapitulatif avant de poursuivre.";
+      return;
+    }
+    if (exportSummary() && !$("#export-reviewed").checked) {
+      status.textContent = "Vérifiez les anomalies puis cochez la confirmation."; return;
+    }
     const file = $("#input-export").files[0];
     if (!file) {
       status.className = "status error";
@@ -277,8 +333,7 @@
     body.append("min0", $("#export-min0").checked ? "true" : "false");
     const response = await fetch("/api/scodoc/export", { method: "POST", body });
     if (!response.ok) throw new Error((await response.json()).detail);
-    const link = el("a", { href: URL.createObjectURL(await response.blob()), download: "notes_scodoc.xlsx" });
-    link.click();
+    if (!(await window.QCMSave.deliver(response, "notes_scodoc.xlsx"))) return;
     status.className = "status ok";
     status.textContent = `${response.headers.get("X-Notes-Count")} note(s) exportée(s) → notes_scodoc.xlsx`;
   }));
@@ -370,16 +425,17 @@
     $("#v-status").textContent = `Statut : ${info.status}`;
     $("#v-status").className = info.failed || !info.complete ? "status error" : "status ok";
     $("#v-student-id").value = info.student_id || "";
-    $("#v-prev").disabled = index <= 0;
-    $("#v-next").disabled = index >= state.results.length - 1;
+    $("#v-prev").disabled = adjacent(index, -1) === index;
+    $("#v-next").disabled = adjacent(index, 1) === index;
     vImg.onload = layoutStage;
     vImg.src = imageUrl(index);
   }
 
   async function afterPageChange(index) {
     await refresh();
-    showPage(index);
-    await loadViewer(index);
+    if (current < 0) { $("#dlg-viewer").close(); return; }
+    showPage(current);
+    await loadViewer(current);
   }
 
   function openViewer(index) {
@@ -395,8 +451,8 @@
     ev.preventDefault();
     setZoom(viewer.zoom - Math.sign(ev.deltaY) * 0.25);
   }, { passive: false });
-  $("#v-prev").addEventListener("click", () => guard(async () => { await loadViewer(viewer.index - 1); showPage(viewer.index); }));
-  $("#v-next").addEventListener("click", () => guard(async () => { await loadViewer(viewer.index + 1); showPage(viewer.index); }));
+  $("#v-prev").addEventListener("click", () => guard(async () => { await loadViewer(adjacent(viewer.index, -1)); showPage(viewer.index); }));
+  $("#v-next").addEventListener("click", () => guard(async () => { await loadViewer(adjacent(viewer.index, 1)); showPage(viewer.index); }));
   $("#v-apply-student").addEventListener("click", () => guard(async () => {
     await api("POST", `/api/pages/${viewer.index}/student`, { student_id: $("#v-student-id").value });
     await afterPageChange(viewer.index);
@@ -440,5 +496,9 @@
   // Démarrage
   // -------------------------------------------------------------------------
   onTab("correct", () => guard(() => refresh()));
-  document.addEventListener("project-reset", () => guard(() => refresh()));
+  document.addEventListener("project-reset", () => guard(async () => {
+    clearTimeout(pollTimer); current = -1;
+    $("#dlg-viewer").close();
+    await refresh();
+  }));
 })();
