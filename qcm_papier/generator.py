@@ -831,8 +831,12 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         )
 
     # --- NOUVELLE LOGIQUE DE PLACEMENT DES EXERCICES ---
-    # Détermine si on va vers la droite ou vers le bas
-    go_right = (exercise_dir and variant.layout == "p") or (not exercise_dir and variant.layout == "l")
+    # Détermine si on va vers la droite ou vers le bas.
+    # exercise_dir True  = ↓ puis → (haut vers le bas)  -> go_right False
+    # exercise_dir False = → puis ↓ (gauche vers la droite) -> go_right True
+    # Le sens de lecture choisi par l'utilisateur s'applique quelle que soit
+    # l'orientation de la page (comportement identique au HTML d'origine).
+    go_right = not exercise_dir
     # Limites de la page (réserve une marge pour ne pas toucher les repères
     # d'alignement placés à page_width - margin_right - 2, rayon 2).
     shapes_right = max(layout.shapes_x) if layout.shapes_x else layout.page_width - layout.margin_right
