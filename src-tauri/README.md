@@ -9,6 +9,43 @@ avec l'option `web` doivent être installés sur la machine, y compris pour
 utiliser une application construite avec `cargo tauri build`.
 La distribution autonome et les essais Windows/Linux restent à réaliser.
 
+## Lancement simple sous Linux ou macOS
+
+Depuis la racine du dépôt :
+
+```bash
+bash lancer-tauri.sh -p math/2026/OML1_2026.json
+```
+
+Le script installe les dépendances Python verrouillées dans `.venv-tauri`,
+installe Rust s'il manque, puis compile et ouvre Tauri. Le premier lancement
+nécessite Internet et peut prendre plusieurs minutes ; les suivants réutilisent
+les installations et la compilation. L'environnement Python de GTK reste séparé.
+Aucune CLI Tauri ni installation Node.js n'est nécessaire pour ce script.
+
+Sur Debian/Ubuntu ou Fedora, si les bibliothèques système manquent :
+
+```bash
+bash lancer-tauri.sh --install-system -p math/2026/OML1_2026.json
+```
+
+Cette option appelle le gestionnaire de paquets avec `sudo` et peut demander le
+mot de passe administrateur. Sur macOS elle demande les outils Xcode manquants ;
+terminer leur installation puis relancer le script. Pour une autre distribution
+Linux, installer les [prérequis officiels](https://v2.tauri.app/start/prerequisites/)
+puis lancer le script sans `--install-system` depuis une session graphique.
+Python 3.10 minimum est requis. `--help` affiche les options sans rien installer.
+
+Le chemin donné à `-p` est relatif au répertoire depuis lequel vous lancez le
+script, et peut contenir des espaces. Le JSON est ouvert au démarrage ; son dossier
+sert de destination initiale aux sauvegardes. Sans `-p`, utilisez **Ouvrir**.
+Les choix verticaux restent disponibles dans les paramètres de génération.
+Le script ne change pas de branche et ne fait pas de `git pull`.
+
+Ce lanceur utilise `cargo run` sans surveillance des sources : les changements du
+dépôt ne redémarrent pas l'application pendant votre travail. Pour le développement
+avec rechargement automatique, les commandes `cargo tauri dev` restent ci-dessous.
+
 ## Prérequis
 
 - Python 3.10 ou plus récent.

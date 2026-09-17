@@ -395,6 +395,15 @@ dialogue natives. Enregistrer réutilise le chemin choisi ; **Ctrl/Cmd + Maj + S
 permet de le changer. La fermeture propose de sauvegarder le travail en attente.
 Voir [le guide Tauri](src-tauri/README.md).
 
+Pour installer les dépendances et lancer Tauri sous Linux ou macOS :
+
+```bash
+bash lancer-tauri.sh -p math/2026/OML1_2026.json
+```
+
+Si les bibliothèques système manquent sous Debian/Ubuntu ou Fedora, ajouter
+`--install-system`. Le script conserve un environnement Python séparé de GTK.
+
 #### Levée d'anonymat (Scodoc)
 
 Après la correction, les copies sont identifiées par un numéro « p******* ».

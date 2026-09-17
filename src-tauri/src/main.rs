@@ -170,7 +170,7 @@ fn free_port() -> u16 {
         .expect("aucun port local disponible")
 }
 
-fn spawn_server(port: u16) -> std::io::Result<Child> {
+fn spawn_server(port: u16, project: Option<&std::path::Path>) -> std::io::Result<Child> {
     let port = port.to_string();
     // --exit-with-parent : le serveur s'arrête même si l'application est tuée
     // sans passer par la fermeture normale de la fenêtre.
@@ -181,15 +181,21 @@ fn spawn_server(port: u16) -> std::io::Result<Child> {
         "--port",
         port.as_str(),
     ];
-    if let Ok(server) = std::env::var("QCM_PAPIER_SERVER") {
-        return Command::new(server).args(serve_args).spawn();
+    let mut command = if let Ok(server) = std::env::var("QCM_PAPIER_SERVER") {
+        Command::new(server)
+    } else {
+        let default_python = if cfg!(windows) { "python" } else { "python3" };
+        let python =
+            std::env::var("QCM_PAPIER_PYTHON").unwrap_or_else(|_| default_python.to_string());
+        let mut command = Command::new(python);
+        command.args(["-m", "qcm_papier"]);
+        command
+    };
+    command.args(serve_args);
+    if let Some(path) = project {
+        command.arg("--project").arg(path);
     }
-    let default_python = if cfg!(windows) { "python" } else { "python3" };
-    let python = std::env::var("QCM_PAPIER_PYTHON").unwrap_or_else(|_| default_python.to_string());
-    Command::new(python)
-        .args(["-m", "qcm_papier"])
-        .args(serve_args)
-        .spawn()
+    command.spawn()
 }
 
 fn wait_for_server(port: u16, timeout: Duration) -> bool {
@@ -205,14 +211,22 @@ fn wait_for_server(port: u16, timeout: Duration) -> bool {
 
 fn main() {
     let port = free_port();
-    let child = spawn_server(port).unwrap_or_else(|error| {
+    let project_path = std::env::var_os("QCM_PAPIER_PROJECT")
+        .filter(|path| !path.is_empty())
+        .map(|path| std::fs::canonicalize(PathBuf::from(path)))
+        .transpose()
+        .unwrap_or_else(|error| {
+            eprintln!("Projet introuvable : {error}");
+            std::process::exit(1);
+        });
+    let child = spawn_server(port, project_path.as_deref()).unwrap_or_else(|error| {
         eprintln!("Impossible de lancer le serveur Python : {error}");
         std::process::exit(1);
     });
 
     let app = tauri::Builder::default()
         .manage(Server(Mutex::new(Some(child))))
-        .manage(Desktop { port, project_path: Mutex::new(None), pending_path: Mutex::new(None), ready: AtomicBool::new(false), exiting: AtomicBool::new(false) })
+        .manage(Desktop { port, project_path: Mutex::new(project_path), pending_path: Mutex::new(None), ready: AtomicBool::new(false), exiting: AtomicBool::new(false) })
         .invoke_handler(tauri::generate_handler![save_document, reset_document, close_document, desktop_ready, open_document, accept_document])
         .setup(move |app| {
             if !wait_for_server(port, Duration::from_secs(30)) {
