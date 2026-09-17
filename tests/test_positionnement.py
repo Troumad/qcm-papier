@@ -205,3 +205,69 @@ def test_repositionnement_paysage():
             f"L'en-tête {text!r} (bas={bbox[3]/MM:.2f} mm) chevauche "
             f"le cadre d'identification paysage (haut={id_rect.y0/MM:.2f} mm)"
         )
+
+
+def _project_full_page():
+    """Page avec pied de page à plusieurs lignes (modèle par défaut).
+
+    Sert à vérifier le rendu multi-lignes du pied de page au bas de la page.
+    """
+    p = Project()
+    ex = Exercise(name="Exercice 1", index=0)
+    q = Question(name="Q1", gain=1.0, penalty=0.5, single=True, index=0)
+    q.choices = [
+        Choice(name="A", correct=True, neutral=False, index=0),
+        Choice(name="B", correct=False, neutral=False, penalty=True, index=1),
+    ]
+    ex.questions = [q]
+    p.structure = [ex]
+    p.settings.generate_count = 1
+    p.settings.generate_variants = ""
+    # Champs vides -> modèles par défaut (footer_middle sur 2 lignes).
+    p.settings.header_left = ""
+    p.settings.header_middle = ""
+    p.settings.header_right = ""
+    p.settings.footer_left = ""
+    p.settings.footer_middle = ""
+    p.settings.footer_right = ""
+    return p
+
+
+def test_pied_de_page_multiligne_rendu_sur_lignes_distinctes():
+    """Le pied de page par défaut (2 lignes) est rendu sur deux lignes
+    verticalement distinctes, et non collées sur une seule ligne avec un
+    glyphe parasite (le ``\n`` n'est pas un saut de ligne pour ReportLab).
+
+    Reproduit le bug : ``_reverse_lines`` concaténait les lignes inversées
+    avec un ``\n`` passé à ``drawCentredString``, qui les affichait sur une
+    seule ligne avec un carré noir au milieu.
+    """
+    p = _project_full_page()
+    editing.apply_info_defaults(p.settings)
+    generator.generate_all(p, retry=True)
+    p = _reload(p)
+
+    data = pdf_writer.generate_pdf(p)
+    doc = pymupdf.open(stream=data, filetype="pdf")
+    page = doc.load_page(0)
+    # Lignes du pied de page (en bas, y PyMuPDF grand).
+    ph = page.rect.height
+    footer_spans = []
+    for b in page.get_text("dict")["blocks"]:
+        for line in b.get("lines", []):
+            for s in line.get("spans", []):
+                if s["bbox"][1] > ph - 20 * MM:
+                    footer_spans.append((s["bbox"], s["text"]))
+    doc.close()
+
+    assert footer_spans, "Le pied de page par défaut devrait être rendu"
+    texts = [t for _, t in footer_spans]
+    # Les deux lignes du pied de page par défaut, sur des lignes distinctes.
+    assert any("code barre" in t for t in texts), f"Premiere ligne du pied de page absente : {texts!r}"
+    assert any("de la page des cadres" in t for t in texts), f"Deuxieme ligne du pied de page absente : {texts!r}"
+    # Les deux lignes ont des y différents (lignes verticalement distinctes).
+    ys = sorted({round(bbox[1]) for bbox, _ in footer_spans})
+    assert len(ys) >= 2, (
+        f"Le pied de page 2 lignes est rendu sur une seule ligne (y={ys}) : "
+        f"le \n est traité comme un glyphe et non un saut de ligne"
+    )
