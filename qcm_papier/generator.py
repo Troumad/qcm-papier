@@ -85,6 +85,10 @@ def _choice_to_dict(c) -> dict:
 # Hauteur de ligne en mm (12 pt → mm). Reprend ``line_height = 12 / 2.835``.
 LINE_HEIGHT = 12 / 2.835
 
+# Marge (mm) entre le pied de page et le code-barres : les descendantes
+# (p, g...) descendent sous la ligne de base et toucheraient le code-barres.
+FOOTER_BARCODE_GAP = 2.0
+
 # Bits utilisés par ``pseudoRandom`` (index.html ~6270-6290).
 BIT_IDENT_DIR = 1
 BIT_EXERCISE_DIR = 2
@@ -213,7 +217,7 @@ _HEADER_MACROS = {
 # ~792-802, ~852-859). Quand un champ est vide, c'est ce modèle qui est
 # substitué (comportement du bouton « Valeur par défaut » de l'original).
 HEADER_LEFT_DEFAULT = "${university} - ${college} - ${department}\nAnnée ${year} - Semestre ${semester}"
-HEADER_MIDDLE_DEFAULT = "${name_short} ${course_short}\nCette page est à rendre pour corrections"
+HEADER_MIDDLE_DEFAULT = "\n${name_short} ${course_short}\nCette page est à rendre pour corrections"
 HEADER_RIGHT_DEFAULT = "${date}\n${authors_short}"
 FOOTER_LEFT_DEFAULT = ""
 FOOTER_MIDDLE_DEFAULT = "Toute détérioration du code barre et/ou des 5 ronds situés en périphérie\nde la page des cadres entraîne un malus sur votre note"
@@ -824,9 +828,10 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
     shapes_right = max(layout.shapes_x) if layout.shapes_x else layout.page_width - layout.margin_right
     max_width = shapes_right - 2
     # Le pied de page se dessine au-dessus du code-barres (qui est fixe) :
-    # il limite l'espace disponible pour les exercices.
+    # il limite l'espace disponible pour les exercices (footer_height plus la
+    # marge FOOTER_BARCODE_GAP pour les descendantes du pied de page).
 
-    max_height = layout.barcode_top - layout.footer_height
+    max_height = layout.barcode_top - layout.footer_height - FOOTER_BARCODE_GAP
     x_max = layout.margin_left
     y_max = variant.id_y + variant.id_height
     x_line_start = variant.id_x

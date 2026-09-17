@@ -75,7 +75,7 @@ def _draw_header_footer(c: canvaslib.Canvas, layout: Layout) -> None:
     # Interligne identique à la hauteur réservée par build_layout
     # (LINE_HEIGHT * 1.15 = 12/2.835 * 1.15 ≈ 4.87 mm), sinon l'en-tête dessiné
     # déborde sur la hauteur réservée et chevauche les cadres.
-    from .generator import LINE_HEIGHT
+    from .generator import FOOTER_BARCODE_GAP, LINE_HEIGHT
 
     line_height_mm = LINE_HEIGHT * 1.15
 
@@ -97,24 +97,25 @@ def _draw_header_footer(c: canvaslib.Canvas, layout: Layout) -> None:
             c.drawRightString((page_w - margin_right) * mm, y, line.strip())
 
     # Pied de page : dessiné au-dessus du code-barres (qui est fixe, indépendant
-    # du pied de page). La dernière ligne touche le haut du code-barres et les
-    # précédentes montent vers le haut, comme footer_height le suppose.
-    # ``barcode_top`` est en mm depuis le haut de la page ; en coordonnées ReportLab
-    # (y depuis le bas), le haut du code-barres est à ``page_h - barcode_top``.
+    # du pied de page). La dernière ligne est à FOOTER_BARCODE_GAP du haut du
+    # code-barres (marge pour les descendantes : p, g...) et les précédentes
+    # montent vers le haut, comme footer_height le suppose. ``barcode_top`` est
+    # en mm depuis le haut de la page ; en coordonnées ReportLab (y depuis le
+    # bas), le haut du code-barres est à ``page_h - barcode_top``.
     if layout.footer_left:
         lines = _footer_lines(layout.footer_left)
         for i, line in enumerate(lines):
-            y = (page_h - layout.barcode_top + (len(lines) - 1 - i) * line_height_mm) * mm
+            y = (page_h - layout.barcode_top + FOOTER_BARCODE_GAP + (len(lines) - 1 - i) * line_height_mm) * mm
             c.drawString(margin_left * mm, y, line)
     if layout.footer_middle:
         lines = _footer_lines(layout.footer_middle)
         for i, line in enumerate(lines):
-            y = (page_h - layout.barcode_top + (len(lines) - 1 - i) * line_height_mm) * mm
+            y = (page_h - layout.barcode_top + FOOTER_BARCODE_GAP + (len(lines) - 1 - i) * line_height_mm) * mm
             c.drawCentredString(center * mm, y, line)
     if layout.footer_right:
         lines = _footer_lines(layout.footer_right)
         for i, line in enumerate(lines):
-            y = (page_h - layout.barcode_top + (len(lines) - 1 - i) * line_height_mm) * mm
+            y = (page_h - layout.barcode_top + FOOTER_BARCODE_GAP + (len(lines) - 1 - i) * line_height_mm) * mm
             c.drawRightString((page_w - margin_right) * mm, y, line)
 
 
