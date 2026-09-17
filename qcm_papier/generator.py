@@ -215,6 +215,36 @@ def _substitute(text: str, settings: ProjectSettings) -> str:
     return text
 
 
+def _refresh_header_footer(layout: Layout, settings: ProjectSettings) -> None:
+    """Recalcule l'en-tête/pied de page et leurs hauteurs sur le layout.
+
+    Reprend ``eval('`' + header_left.value + '`')`` du code original à chaque
+    génération : l'en-tête reflète toujours les champs d'information courants,
+    même quand le layout est réutilisé depuis le projet JSON. Les hauteurs
+    modifiant la position des repères et du code-barres, on les recalcule
+    aussi, comme dans ``build_layout``.
+    """
+    layout.header_left = _substitute(settings.header_left, settings)
+    layout.header_middle = _substitute(settings.header_middle, settings)
+    layout.header_right = _substitute(settings.header_right, settings)
+    layout.footer_left = _substitute(settings.footer_left, settings)
+    layout.footer_middle = _substitute(settings.footer_middle, settings)
+    layout.footer_right = _substitute(settings.footer_right, settings)
+    layout.header_height = _header_footer_height(layout.header_left, layout.header_middle, layout.header_right)
+    layout.footer_height = _header_footer_height(layout.footer_left, layout.footer_middle, layout.footer_right)
+
+    layout.shapes_y = [
+        layout.margin_top + layout.header_height + 12,
+        layout.margin_top + layout.header_height + 37,
+        layout.page_height - layout.margin_bottom - layout.footer_height - 8,
+        layout.page_height - layout.margin_bottom - layout.footer_height - 3,
+        layout.margin_top + layout.header_height + 7,
+    ]
+    layout.barcode_top = layout.page_height - layout.margin_bottom - layout.footer_height - layout.barcode_height
+    layout.barcode_prefix = settings.module_short + settings.evaluation_short + settings.year + "-"
+    layout.barcode_length = len(layout.barcode_prefix) + 6
+
+
 def build_layout(settings: ProjectSettings, orientation: str) -> Layout:
     """Construit un layout portrait ('p') ou paysage ('l').
 
@@ -718,6 +748,12 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
     if layout is None:
         layout = build_layout(settings, variant.layout)
         project.variants[variant.layout] = layout
+
+    # L'en-tête/pied de page est recalculé à chaque génération (macros ${...}
+    # substituées avec les champs d'information courants), même si le layout
+    # est réutilisé depuis le projet JSON : il reflète toujours les infos du
+    # projet, comme le fait l'original à chaque FileGenerate.
+    _refresh_header_footer(layout, settings)
 
     # Code-barres.
     variant.barcode_text = barcode_text(layout.barcode_prefix, variant_id)
