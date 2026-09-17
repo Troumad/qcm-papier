@@ -250,13 +250,12 @@ def test_pied_de_page_multiligne_rendu_sur_lignes_distinctes():
     data = pdf_writer.generate_pdf(p)
     doc = pymupdf.open(stream=data, filetype="pdf")
     page = doc.load_page(0)
-    # Lignes du pied de page (en bas, y PyMuPDF grand).
-    ph = page.rect.height
+    # Lignes du pied de page (reconnues par leur contenu).
     footer_spans = []
     for b in page.get_text("dict")["blocks"]:
         for line in b.get("lines", []):
             for s in line.get("spans", []):
-                if s["bbox"][1] > ph - 20 * MM:
+                if "code barre" in s["text"] or "de la page des cadres" in s["text"]:
                     footer_spans.append((s["bbox"], s["text"]))
     doc.close()
 
@@ -270,4 +269,77 @@ def test_pied_de_page_multiligne_rendu_sur_lignes_distinctes():
     assert len(ys) >= 2, (
         f"Le pied de page 2 lignes est rendu sur une seule ligne (y={ys}) : "
         f"le \n est traité comme un glyphe et non un saut de ligne"
+    )
+
+
+def test_code_barres_fixe_independant_du_pied_de_page():
+    """Le code-barres et les repères du bas ne changent pas de place quand le
+    pied de page change : ils sont fixes (indépendants de footer_height).
+    Le pied de page se dessine au-dessus du code-barres sans le déplacer.
+    """
+    # Pied de page court (1 ligne) puis pied de page par défaut (2 lignes).
+    for footer in ("x\n", None):
+        p = _project_full_page()
+        p.settings.header_left = "x"
+        p.settings.header_middle = "x"
+        p.settings.header_right = "x"
+        if footer is None:
+            p.settings.footer_left = ""
+            p.settings.footer_middle = ""
+            p.settings.footer_right = ""
+            editing.apply_info_defaults(p.settings)
+        else:
+            p.settings.footer_left = footer
+            p.settings.footer_middle = footer
+            p.settings.footer_right = footer
+        generator.generate_all(p, retry=True)
+        p = _reload(p)
+        if footer is None:
+            editing.apply_info_defaults(p.settings)
+        pdf_writer.generate_pdf(p)
+        layout = p.variants.layout("p")
+        assert layout is not None
+        # barcode_top et repères du bas sont constants (la valeur de référence
+        # sans pied de page) : page_h - margin_bottom - barcode_height.
+        expected_top = layout.page_height - layout.margin_bottom - layout.barcode_height
+        assert layout.barcode_top == expected_top, (
+            f"barcode_top={layout.barcode_top} != {expected_top} : le code-barres " "dépend du pied de page"
+        )
+        assert layout.shapes_y[2] == layout.barcode_top + 2
+        assert layout.shapes_y[3] == layout.barcode_top + 7
+
+
+def test_pied_de_page_dessine_au_dessus_du_code_barres():
+    """Le pied de page se dessine au-dessus du code-barres (et non en bas de
+    page sous le code-barres) : sa dernière ligne est juste au-dessus du
+    code-barres fixe.
+    """
+    p = _project_full_page()
+    editing.apply_info_defaults(p.settings)
+    generator.generate_all(p, retry=True)
+    p = _reload(p)
+    editing.apply_info_defaults(p.settings)
+    data = pdf_writer.generate_pdf(p)
+    layout = p.variants.layout("p")
+    assert layout is not None
+
+    doc = pymupdf.open(stream=data, filetype="pdf")
+    page = doc.load_page(0)
+    # Texte du pied de page (y PyMuPDF des lignes du message par défaut).
+    footer_ys = []
+    for b in page.get_text("dict")["blocks"]:
+        for line in b.get("lines", []):
+            for s in line.get("spans", []):
+                if "code barre" in s["text"] or "de la page des cadres" in s["text"]:
+                    footer_ys.append(s["bbox"][1])
+    doc.close()
+    assert footer_ys, "Le pied de page par défaut devrait être rendu"
+    # Le pied de page est au-dessus du code-barres : en points PyMuPDF
+    # (origine haut-gauche), le footer est plus haut (y plus petit) que le
+    # haut du code-barres (barcode_top en mm depuis le haut).
+    barcode_top_pt = layout.barcode_top * MM
+    footer_bottom_pt = max(footer_ys)  # ligne la plus basse du footer
+    assert footer_bottom_pt <= barcode_top_pt, (
+        f"Le pied de page (bas y={footer_bottom_pt:.1f} pt) déborde sous le "
+        f"code-barres (haut y={barcode_top_pt:.1f} pt)"
     )
