@@ -69,7 +69,12 @@ def _draw_header_footer(c: canvaslib.Canvas, layout: Layout) -> None:
     margin_bottom = layout.margin_bottom
 
     c.setFont("Helvetica", 12)
-    line_height_mm = 7  # Espacement entre les lignes
+    # Interligne identique à la hauteur réservée par build_layout
+    # (LINE_HEIGHT * 1.15 = 12/2.835 * 1.15 ≈ 4.87 mm), sinon l'en-tête dessiné
+    # déborde sur la hauteur réservée et chevauche les cadres.
+    from .generator import LINE_HEIGHT
+
+    line_height_mm = LINE_HEIGHT * 1.15
 
     # En-tête (avec décalage vertical pour éviter la superposition)
     if layout.header_left:
