@@ -881,14 +881,6 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         exercise = exercise_list[exercise_index]
         exercise_list.pop(exercise_index)
 
-        questions_texts: list[dict] = []
-        questions_rects: list[dict] = []
-        questions_circles: list[dict] = []
-        questions_marks: list[dict] = []
-        questions_lines: list[dict] = []
-
-        # Nom de l'exercice.
-        questions_texts.append({"x": 2, "y": 5, "t": exercise.get("name", "")})
         # Introduction (header) en italique.
         header = exercise.get("header", "")
         choice_dir = rg.pseudo_random(
@@ -900,12 +892,8 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         if header:
             if choice_dir:
                 # Choix verticaux : l'introduction passe sous le nom.
-                questions_texts.append({"x": 2, "y": 11, "t": header, "i": True})
                 exercise_name_width = max(_text_width(exercise.get("name", "")), _text_width(header))
             else:
-                questions_texts.append(
-                    {"x": 2 + _text_width(exercise.get("name", "")) + 2, "y": 5, "t": header, "i": True}
-                )
                 exercise_name_width = _text_width(exercise.get("name", "")) + (2 + _text_width(header))
         else:
             exercise_name_width = _text_width(exercise.get("name", ""))
@@ -953,96 +941,157 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         # le code-barres. Sans cette distinction, les questions de la première
         # ligne s'étendaient plus bas que l'identification et le cadre devenait
         # plus haut que ceux des lignes suivantes.
-        if go_right and exercise_x >= variant.id_x + variant.id_width and exercise_y < variant.id_y + variant.id_height:
-            exercise_height_max = variant.id_y + variant.id_height - exercise_y
-        else:
-            exercise_height_max = layout.barcode_top - exercise_y
+        #
+        # On calcule les questions dans une boucle : si l'exercice ne tient pas
+        # à la position courante et doit retourner à la ligne/colonne, on
+        # recalcule les questions avec la nouvelle position. Sinon la largeur
+        # disponible (max_width - exercise_x) était calculée avec l'ancienne
+        # position et le cadre devenait plus haut (les questions faisaient un
+        # retour à la ligne inutile).
+        place_x, place_y = exercise_x, exercise_y
+        _question_list_saved = [dict(q) for q in question_list]
+        for _layout_pass in range(2):
+            if _layout_pass > 0:
+                question_list = [dict(q) for q in _question_list_saved]
+            questions_texts = []
+            questions_rects = []
+            questions_circles = []
+            questions_marks = []
+            questions_lines = []
+            # Nom de l'exercice (recalculé à chaque passe car les listes sont
+            # réinitialisées).
+            questions_texts.append({"x": 2, "y": 5, "t": exercise.get("name", "")})
+            if header:
+                if choice_dir:
+                    questions_texts.append({"x": 2, "y": 11, "t": header, "i": True})
+                else:
+                    questions_texts.append(
+                        {"x": 2 + _text_width(exercise.get("name", "")) + 2, "y": 5, "t": header, "i": True}
+                    )
 
-        question_x = 0.0
-        question_y = 12.0 if (header and choice_dir) else 6.0
-        question_y_first = question_y
-        exercise_height = 12.0 if (header and choice_dir) else 6.0
-        exercise_width = exercise_name_width + 4
-
-        question_iter = 0
-        while question_list:
-            if question_random:
-                question_index = rg.random_index(variant_id, len(question_list))
+            if (
+                go_right
+                and exercise_x >= variant.id_x + variant.id_width
+                and exercise_y < variant.id_y + variant.id_height
+            ):
+                exercise_height_max = variant.id_y + variant.id_height - exercise_y
             else:
-                question_index = 0
-            question = question_list[question_index]
-            question_list.pop(question_index)
+                exercise_height_max = layout.barcode_top - exercise_y
 
-            qt, qr, qc, qm, qw, qh = _place_choices(
-                variant,
-                variant_id,
-                exercise,
-                question,
-                exercise.get("index", -1),
-                question_iter,
-                question_name_width_max,
-                settings,
-            )
+            question_x = 0.0
+            question_y = 12.0 if (header and choice_dir) else 6.0
+            question_y_first = question_y
+            exercise_height = 12.0 if (header and choice_dir) else 6.0
+            exercise_width = exercise_name_width + 4
 
-            # Gestion du retour à la ligne/colonne selon la direction.
-            if question_dir:
-                # Espacement vertical avant la question, sauf la première de
-                # sa colonne (pour ne pas ajouter d'espace inutile en haut du
-                # cadre ni après la dernière question).
-                if question_y > question_y_first:
-                    question_y += QUESTION_GAP
-                if question_y + qh > exercise_height_max:
-                    question_x = exercise_width
-                    question_y = question_y_first
+            question_iter = 0
+            while question_list:
+                if question_random:
+                    question_index = rg.random_index(variant_id, len(question_list))
+                else:
+                    question_index = 0
+                question = question_list[question_index]
+                question_list.pop(question_index)
+
+                qt, qr, qc, qm, qw, qh = _place_choices(
+                    variant,
+                    variant_id,
+                    exercise,
+                    question,
+                    exercise.get("index", -1),
+                    question_iter,
+                    question_name_width_max,
+                    settings,
+                )
+
+                # Gestion du retour à la ligne/colonne selon la direction.
+                if question_dir:
+                    # Espacement vertical avant la question, sauf la première de
+                    # sa colonne (pour ne pas ajouter d'espace inutile en haut du
+                    # cadre ni après la dernière question).
+                    if question_y > question_y_first:
+                        question_y += QUESTION_GAP
+                    if question_y + qh > exercise_height_max:
+                        question_x = exercise_width
+                        question_y = question_y_first
+                else:
+                    if question_x + qw > max_width - exercise_x:
+                        # Retour à la ligne : espacement vertical + ligne pointillée.
+                        # La ligne n'est tracée que s'il y a déjà une question sur la
+                        # ligne courante (question_x > 0) : sinon la question est plus
+                        # large que le cadre et la ligne pointillée apparaîtrait sous
+                        # le titre de l'exercice sans séparer de questions.
+                        if question_x > 0:
+                            _line_w = exercise_width - 2
+                            if _line_w > 0:
+                                questions_lines.append(
+                                    {"x": 1, "y": exercise_height + QUESTION_GAP, "w": _line_w, "dash": True}
+                                )
+                        question_x = 0
+                        question_y = exercise_height + QUESTION_GAP
+
+                _merge_arrays(questions_texts, qt, question_x, question_y)
+                _merge_arrays(questions_rects, qr, question_x, question_y)
+                _merge_arrays(questions_circles, qc, question_x, question_y)
+                _merge_arrays(questions_marks, qm, question_x, question_y)
+
+                if question_dir:
+                    question_y += qh
+                    if exercise_height < question_y:
+                        exercise_height = question_y
+                    if exercise_width < question_x + qw:
+                        exercise_width = question_x + qw
+                else:
+                    question_x += qw
+                    if exercise_width < question_x:
+                        exercise_width = question_x
+                    if exercise_height < question_y + qh:
+                        exercise_height = question_y + qh
+                question_iter += 1
+
+            # Cadre de l'exercice.
+            # Garantie : le cadre doit contenir le nom et le header (italique)
+            # pour éviter tout débordement de l'introduction hors du cadre.
+            _name_w = _text_width(exercise.get("name", ""))
+            _header_w = _text_width(header) if header else 0.0
+            _min_w = _name_w + 2  # nom à x=2 + marge droite
+            if header:
+                if choice_dir:
+                    _min_w = max(_name_w, _header_w) + 2 + 2  # header sous le nom à x=2
+                else:
+                    _min_w = 2 + _name_w + 2 + _header_w + 2  # nom + header sur la même ligne
+            if exercise_width < _min_w:
+                exercise_width = _min_w
+            questions_rects.append({"x": 0, "y": 0, "w": exercise_width, "h": exercise_height})
+
+            # Test préalable de placement : si l'exercice ne tient pas à la
+            # position courante et doit retourner à la ligne/colonne, on met à
+            # jour la position et on recalcule les questions (deuxième passe de
+            # la boucle) pour que la largeur disponible (max_width - exercise_x)
+            # soit cohérente avec la position réelle. Sans cela, les questions
+            # étaient calculées avec l'ancienne position (souvent en bout de
+            # ligne, peu de largeur) et faisaient un retour à la ligne inutile,
+            # rendant le premier cadre de chaque ligne plus haut que les autres.
+            _need_new_pos = False
+            if go_right:
+                if (exercise_x + exercise_width > max_width) or (exercise_y + exercise_height > max_height):
+                    _need_new_pos = True
             else:
-                if question_x + qw > max_width - exercise_x:
-                    # Retour à la ligne : espacement vertical + ligne pointillée.
-                    # La ligne n'est tracée que s'il y a déjà une question sur la
-                    # ligne courante (question_x > 0) : sinon la question est plus
-                    # large que le cadre et la ligne pointillée apparaîtrait sous
-                    # le titre de l'exercice sans séparer de questions.
-                    if question_x > 0:
-                        _line_w = exercise_width - 2
-                        if _line_w > 0:
-                            questions_lines.append(
-                                {"x": 1, "y": exercise_height + QUESTION_GAP, "w": _line_w, "dash": True}
-                            )
-                    question_x = 0
-                    question_y = exercise_height + QUESTION_GAP
-
-            _merge_arrays(questions_texts, qt, question_x, question_y)
-            _merge_arrays(questions_rects, qr, question_x, question_y)
-            _merge_arrays(questions_circles, qc, question_x, question_y)
-            _merge_arrays(questions_marks, qm, question_x, question_y)
-
-            if question_dir:
-                question_y += qh
-                if exercise_height < question_y:
-                    exercise_height = question_y
-                if exercise_width < question_x + qw:
-                    exercise_width = question_x + qw
-            else:
-                question_x += qw
-                if exercise_width < question_x:
-                    exercise_width = question_x
-                if exercise_height < question_y + qh:
-                    exercise_height = question_y + qh
-            question_iter += 1
-
-        # Cadre de l'exercice.
-        # Garantie : le cadre doit contenir le nom et le header (italique)
-        # pour éviter tout débordement de l'introduction hors du cadre.
-        _name_w = _text_width(exercise.get("name", ""))
-        _header_w = _text_width(header) if header else 0.0
-        _min_w = _name_w + 2  # nom à x=2 + marge droite
-        if header:
-            if choice_dir:
-                _min_w = max(_name_w, _header_w) + 2 + 2  # header sous le nom à x=2
-            else:
-                _min_w = 2 + _name_w + 2 + _header_w + 2  # nom + header sur la même ligne
-        if exercise_width < _min_w:
-            exercise_width = _min_w
-        questions_rects.append({"x": 0, "y": 0, "w": exercise_width, "h": exercise_height})
+                if (exercise_x + exercise_width > max_width) or (exercise_y + exercise_height > max_height):
+                    _need_new_pos = True
+            if _need_new_pos and _layout_pass == 0:
+                if go_right:
+                    exercise_x = x_line_start
+                    exercise_y = y_max
+                else:
+                    exercise_x = x_max
+                    exercise_y = (
+                        variant.id_y
+                        if exercise_x >= variant.id_x + variant.id_width
+                        else variant.id_y + variant.id_height
+                    )
+                continue
+            break
 
         # --- PLACEMENT DE L'EXERCICE SELON LE MODE (CORRIGÉ) ---
         placed = False
