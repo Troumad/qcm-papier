@@ -9,6 +9,43 @@ avec l'option `web` doivent être installés sur la machine, y compris pour
 utiliser une application construite avec `cargo tauri build`.
 La distribution autonome et les essais Windows/Linux restent à réaliser.
 
+## Lancement simple sous Linux ou macOS
+
+Depuis la racine du dépôt :
+
+```bash
+bash lancer-tauri.sh -p math/2026/OML1_2026.json
+```
+
+Le script installe les dépendances Python verrouillées dans `.venv-tauri`,
+installe Rust s'il manque, puis compile et ouvre Tauri. Le premier lancement
+nécessite Internet et peut prendre plusieurs minutes ; les suivants réutilisent
+les installations et la compilation. L'environnement Python de GTK reste séparé.
+Aucune CLI Tauri ni installation Node.js n'est nécessaire pour ce script.
+
+Sur Debian/Ubuntu ou Fedora, si les bibliothèques système manquent :
+
+```bash
+bash lancer-tauri.sh --install-system -p math/2026/OML1_2026.json
+```
+
+Cette option appelle le gestionnaire de paquets avec `sudo` et peut demander le
+mot de passe administrateur. Sur macOS elle demande les outils Xcode manquants ;
+terminer leur installation puis relancer le script. Pour une autre distribution
+Linux, installer les [prérequis officiels](https://v2.tauri.app/start/prerequisites/)
+puis lancer le script sans `--install-system` depuis une session graphique.
+Python 3.10 minimum est requis. `--help` affiche les options sans rien installer.
+
+Le chemin donné à `-p` est relatif au répertoire depuis lequel vous lancez le
+script, et peut contenir des espaces. Le JSON est ouvert au démarrage ; son dossier
+sert de destination initiale aux sauvegardes. Sans `-p`, utilisez **Ouvrir**.
+Les choix verticaux restent disponibles dans les paramètres de génération.
+Le script ne change pas de branche et ne fait pas de `git pull`.
+
+Ce lanceur utilise `cargo run` sans surveillance des sources : les changements du
+dépôt ne redémarrent pas l'application pendant votre travail. Pour le développement
+avec rechargement automatique, les commandes `cargo tauri dev` restent ci-dessous.
+
 ## Prérequis
 
 - Python 3.10 ou plus récent.
@@ -47,6 +84,31 @@ Utiliser un chemin absolu évite de dépendre du répertoire de lancement.
 Sans cette variable, le lanceur utilise `python3` (`python` sous Windows).
 Sauvegardez ou téléchargez votre travail avant de fermer l'application :
 la fermeture arrête le serveur local.
+
+## Ouverture, sauvegarde et fermeture
+
+Les commandes **Ouvrir**, **Enregistrer** et **Enregistrer sous** utilisent les
+boîtes de dialogue natives (`rfd`). Enregistrer réutilise le chemin du JSON ouvert
+ou précédemment enregistré ; Enregistrer sous permet de choisir un autre fichier.
+Les raccourcis sont **Ctrl/Cmd + S** et **Ctrl/Cmd + Maj + S**.
+
+Les exports PDF, ZIP et notes proposent également une destination native.
+**Enregistrer sous** et tous ces exports s'ouvrent par défaut dans le dossier du
+JSON courant, indépendamment du dernier dossier utilisé par une autre application.
+Un export vers un autre dossier ne change pas cette préférence. Après un
+**Enregistrer sous** du JSON réussi, son nouveau dossier devient la référence.
+Pour un projet nouveau sans fichier JSON, le dialogue utilise le choix du système
+jusqu'au premier enregistrement du projet.
+L'écriture passe par un fichier temporaire dans le dossier de destination, puis
+son remplacement. Une annulation ou un échec d'écriture conserve l'indication
+« non enregistré ». Avant de fermer, l'application propose de sauvegarder le
+projet ou l'archive de correction ; une correction en cours bloque la fermeture.
+
+Les commandes natives sont autorisées uniquement depuis la fenêtre principale
+et l'origine locale exacte du serveur lancé par Tauri (port compris).
+
+La compilation et Clippy sont vérifiés sur macOS. Les dialogues et le parcours
+visuel complet restent à valider manuellement, ainsi que Windows et Linux.
 
 ## Connexion à ScoDoc
 

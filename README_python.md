@@ -87,6 +87,12 @@ Une instance correspond à une session de travail ; plusieurs onglets du même
 serveur partagent le projet et la correction. Les téléchargements et archives
 permettent de conserver le travail après l'arrêt du serveur.
 
+Le suivi des modifications distingue l'empreinte du projet et la révision de la
+correction. Une sauvegarde confirme uniquement l'instantané effectivement exporté.
+`web/static/persistence.js` gère les sauvegardes et confirmations, et `review.js`
+les filtres et le bilan des copies. Les archives de reprise incluent les copies
+en attente et les réglages de détection, avec lecture des anciennes archives.
+
 Le lanceur Rust est décrit dans [src-tauri/README.md](src-tauri/README.md).
 
 ### Interface graphique GTK

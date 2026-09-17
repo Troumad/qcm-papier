@@ -7,6 +7,7 @@ export Scodoc, alignement manuel, sauvegarde et reprise d'une correction.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -99,6 +100,43 @@ class Session:
         self.scodoc_client: scodoc_api.ScoDocClient | None = None
         # Sujet rendu pour l'aperçu, gardé entre deux pages affichées.
         self.preview_pdf: bytes | None = None
+        self.variants_stale = False
+        self.saved_project_token = self.project_token()
+        self.correction_revision = 0
+        self.saved_correction_revision = 0
+
+    def project_token(self) -> str:
+        return hashlib.sha256(self.project_json().encode("utf-8")).hexdigest()
+
+    def work_state(self) -> dict[str, Any]:
+        with self.lock:
+            token = self.project_token()
+            return {
+                "project_token": token,
+                "correction_token": self.correction_revision,
+                "project_dirty": token != self.saved_project_token,
+                "correction_dirty": self.correction_revision != self.saved_correction_revision,
+                "running": self.job.running,
+                "variants_stale": self.variants_stale,
+            }
+
+    def acknowledge_save(self, project_token: str | None, correction_token: int | None) -> None:
+        # Une sauvegarde ancienne ne valide pas les modifications faites pendant l'écriture.
+        with self.lock:
+            if project_token == self.project_token():
+                self.saved_project_token = project_token
+            if correction_token == self.correction_revision and not self.job.running:
+                self.saved_correction_revision = correction_token
+
+    def subject_bundle(self) -> bytes:
+        with self.lock:
+            pdf = self.generate_pdf()
+            name = _safe_name(self.project.settings.evaluation_short or "sujet")
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr(f"{name}.pdf", pdf)
+                archive.writestr(f"{name}.json", self.project_json())
+            return buf.getvalue()
 
     # ------------------------------------------------------------------
     # Projet
@@ -106,6 +144,7 @@ class Session:
     def new_project(self) -> None:
         with self.lock:
             self.project = Project()
+            self.variants_stale = False
             self.project_path = None
             self.copies = []
             self.pages = []
@@ -113,21 +152,29 @@ class Session:
             self.preview_pdf = None
 
     def load_project(self, path: str) -> None:
-        project = project_mod.load_project(path)
+        with open(path, encoding="utf-8") as stream:
+            data = json.load(stream)
+        project = project_mod.load_project(data)
         editing.apply_info_defaults(project.settings)
         with self.lock:
             self.project = project
+            self.variants_stale = bool(data.get("web_variants_stale", False))
             self.project_path = path
             self.preview_pdf = None
+            self.saved_project_token = self.project_token()
 
     def project_json(self) -> str:
-        return project_mod.project_to_json(self.project)
+        data = json.loads(project_mod.project_to_json(self.project))
+        if self.variants_stale:
+            data["web_variants_stale"] = True
+        return json.dumps(data, indent=2, ensure_ascii=False)
 
     def save_project(self) -> str:
         """Enregistre dans le fichier d'origine (projet ouvert depuis un chemin)."""
         if not self.project_path:
             raise ValueError("Projet sans fichier d'origine : utilisez « Télécharger ».")
-        project_mod.save_project(self.project, self.project_path)
+        with open(self.project_path, "w", encoding="utf-8") as stream:
+            stream.write(self.project_json())
         return self.project_path
 
     def variant_ids(self) -> list[str]:
@@ -137,9 +184,15 @@ class Session:
         with self.lock:
             success, failed = generator.generate_all(self.project, retry=True)
             self.project.settings.generate_variants = ";".join(str(i) for i in success + failed)
+            self.variants_stale = False
+            self.preview_pdf = None
         return success, failed
 
     def generate_pdf(self) -> bytes:
+        if self.variants_stale:
+            raise ValueError(
+                "Le sujet a été modifié : cliquez sur « Générer les variantes » avant d'exporter le PDF, puis enregistrez le JSON à jour."
+            )
         if not self.variant_ids():
             raise ValueError("Aucune variante : générez d'abord les variantes.")
         return pdf_writer.generate_pdf(self.project)
@@ -204,7 +257,12 @@ class Session:
             except Exception as e:  # noqa: BLE001 - l'erreur est affichée dans l'interface
                 self.job.error = str(e)
             finally:
-                self.job.running = False
+                with self.lock:
+                    self.correction_revision += 1
+                    if kind == "reprise" and not self.job.error:
+                        self.saved_project_token = self.project_token()
+                        self.saved_correction_revision = self.correction_revision
+                    self.job.running = False
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -274,6 +332,7 @@ class Session:
             "status": reason or ("complète" if page.complete else "incomplète"),
             "failed": reason is not None,
             "aligned": page.matrix_inv is not None,
+            "identified": bool(page.student_eid),
         }
 
     def results(self) -> list[dict[str, Any]]:
@@ -417,8 +476,6 @@ class Session:
     # ------------------------------------------------------------------
     def save_state_zip(self) -> bytes:
         with self.lock:
-            if not self.pages:
-                raise ValueError("Aucune correction à sauvegarder.")
             tmp = tempfile.mkdtemp(dir=self.work_dir)
             state_path = os.path.join(tmp, "correction.json")
             pages = [m.page for m in self.pages]
@@ -426,6 +483,16 @@ class Session:
             buf = io.BytesIO()
             with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
                 zf.writestr("project.json", self.project_json())
+                zf.writestr(
+                    "session.json",
+                    json.dumps(
+                        {
+                            "clair": self.clair,
+                            "checked": {copy.name: copy.checked for copy in self.copies},
+                            "restored_files": sorted({marked.file_name for marked in self.pages}),
+                        }
+                    ),
+                )
                 zf.write(state_path, "correction.json")
                 images = os.path.join(tmp, "correction_images")
                 for name in sorted(os.listdir(images)):
@@ -455,19 +522,35 @@ class Session:
         with open(state_path, "w", encoding="utf-8") as f:
             json.dump(state, f, ensure_ascii=False, indent=2)
         names = sorted(os.listdir(copies_dir)) if os.path.isdir(copies_dir) else []
+        metadata_path = os.path.join(folder, "session.json")
+        meta = {}
+        if os.path.exists(metadata_path):
+            with open(metadata_path, encoding="utf-8") as stream:
+                meta = json.load(stream)
+        clair = int(meta.get("clair", self.clair))
+        if not 50 <= clair <= 255:
+            raise ValueError("Seuil invalide dans la sauvegarde.")
         with self.lock:
             project_path = os.path.join(folder, "project.json")
             if os.path.exists(project_path):
-                self.project = project_mod.load_project(project_path)
+                self.load_project(project_path)
                 self.project_path = None
-            self.copies = [CopyFile(path=os.path.join(copies_dir, n), name=n, checked=False) for n in names]
-        self._start_job("reprise", len(self.copies), lambda: self._load_state(state_path))
+            self.clair = clair
+            self.copies = [
+                CopyFile(path=os.path.join(copies_dir, n), name=n, checked=bool(meta.get("checked", {}).get(n, False)))
+                for n in names
+            ]
+        restored_files = set(meta["restored_files"]) if "restored_files" in meta else None
+        self._start_job("reprise", len(self.copies), lambda: self._load_state(state_path, restored_files))
 
-    def _load_state(self, state_path: str) -> None:
+    def _load_state(self, state_path: str, restored_files: set[str] | None = None) -> None:
         with self.lock:
             self.pages = []
         n_ok = n_err = 0
         for i, copy in enumerate(self.copies, 1):
+            if restored_files is not None and copy.name not in restored_files:
+                self.job.done = i
+                continue
             self.job.message = f"Rechargement {i}/{len(self.copies)} : {copy.name}"
             pages = scanner.load_pages_from_file(copy.path, dpi=150)
             copy.n_pages, copy.n_ok, copy.n_err = len(pages), 0, 0
