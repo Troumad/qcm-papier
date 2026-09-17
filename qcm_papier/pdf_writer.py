@@ -191,6 +191,16 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None, per_st
     """Génère le PDF sujet pour toutes les variantes du projet."""
     from reportlab.lib.pagesizes import A4, landscape
 
+    # L'en-tête/pied de page est rafraîchi avant le rendu pour refléter les
+    # champs d'information courants, même si le projet a été chargé avec des
+    # layouts pré-générés (chemin `qcm-papier pdf` sans --regenerate, GTK, web).
+    from .generator import _refresh_header_footer
+
+    for orientation in ("p", "l"):
+        layout = project.variants.layout(orientation)
+        if layout is not None:
+            _refresh_header_footer(layout, project.settings)
+
     variant_ids = []
     for k in project.variants:
         if k not in ("p", "l"):
