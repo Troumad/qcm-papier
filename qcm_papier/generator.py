@@ -245,9 +245,14 @@ def _refresh_header_footer(layout: Layout, settings: ProjectSettings) -> None:
     layout.header_left = _substitute(settings.header_left or HEADER_LEFT_DEFAULT, settings)
     layout.header_middle = _substitute(settings.header_middle or HEADER_MIDDLE_DEFAULT, settings)
     layout.header_right = _substitute(settings.header_right or HEADER_RIGHT_DEFAULT, settings)
-    layout.footer_left = _substitute(settings.footer_left or FOOTER_LEFT_DEFAULT, settings)
-    layout.footer_middle = _substitute(settings.footer_middle or FOOTER_MIDDLE_DEFAULT, settings)
-    layout.footer_right = _substitute(settings.footer_right or FOOTER_RIGHT_DEFAULT, settings)
+    if getattr(settings, "footer_enabled", True):
+        layout.footer_left = _substitute(settings.footer_left or FOOTER_LEFT_DEFAULT, settings)
+        layout.footer_middle = _substitute(settings.footer_middle or FOOTER_MIDDLE_DEFAULT, settings)
+        layout.footer_right = _substitute(settings.footer_right or FOOTER_RIGHT_DEFAULT, settings)
+    else:
+        layout.footer_left = ""
+        layout.footer_middle = ""
+        layout.footer_right = ""
     layout.header_height = _header_footer_height(layout.header_left, layout.header_middle, layout.header_right)
     layout.footer_height = _header_footer_height(layout.footer_left, layout.footer_middle, layout.footer_right)
 
@@ -293,9 +298,14 @@ def build_layout(settings: ProjectSettings, orientation: str) -> Layout:
     layout.header_left = _substitute(settings.header_left or HEADER_LEFT_DEFAULT, settings)
     layout.header_middle = _substitute(settings.header_middle or HEADER_MIDDLE_DEFAULT, settings)
     layout.header_right = _substitute(settings.header_right or HEADER_RIGHT_DEFAULT, settings)
-    layout.footer_left = _substitute(settings.footer_left or FOOTER_LEFT_DEFAULT, settings)
-    layout.footer_middle = _substitute(settings.footer_middle or FOOTER_MIDDLE_DEFAULT, settings)
-    layout.footer_right = _substitute(settings.footer_right or FOOTER_RIGHT_DEFAULT, settings)
+    if getattr(settings, "footer_enabled", True):
+        layout.footer_left = _substitute(settings.footer_left or FOOTER_LEFT_DEFAULT, settings)
+        layout.footer_middle = _substitute(settings.footer_middle or FOOTER_MIDDLE_DEFAULT, settings)
+        layout.footer_right = _substitute(settings.footer_right or FOOTER_RIGHT_DEFAULT, settings)
+    else:
+        layout.footer_left = ""
+        layout.footer_middle = ""
+        layout.footer_right = ""
     layout.header_height = _header_footer_height(layout.header_left, layout.header_middle, layout.header_right)
     layout.footer_height = _header_footer_height(layout.footer_left, layout.footer_middle, layout.footer_right)
 
@@ -971,11 +981,16 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             else:
                 if question_x + qw > max_width - exercise_x:
                     # Retour à la ligne : espacement vertical + ligne pointillée.
-                    _line_w = exercise_width - 2
-                    if _line_w > 0:
-                        questions_lines.append(
-                            {"x": 1, "y": exercise_height + QUESTION_GAP, "w": _line_w, "dash": True}
-                        )
+                    # La ligne n'est tracée que s'il y a déjà une question sur la
+                    # ligne courante (question_x > 0) : sinon la question est plus
+                    # large que le cadre et la ligne pointillée apparaîtrait sous
+                    # le titre de l'exercice sans séparer de questions.
+                    if question_x > 0:
+                        _line_w = exercise_width - 2
+                        if _line_w > 0:
+                            questions_lines.append(
+                                {"x": 1, "y": exercise_height + QUESTION_GAP, "w": _line_w, "dash": True}
+                            )
                     question_x = 0
                     question_y = exercise_height + QUESTION_GAP
 
@@ -1081,7 +1096,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
 
     if has_error:
         raise GenerateError(
-            f"La variante {variant_id} ne tient pas dans le format " f"{layout.paper_format} ({layout.orientation})."
+            f"La variante {variant_id} ne tient pas dans le format {layout.paper_format} ({layout.orientation})."
         )
     return variant
 

@@ -204,7 +204,7 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant, layout: Layout, page_he
         x = line.get("x", 0) * mm
         y = to_pdf_y(line.get("y", 0))
         w = line.get("w", 0) * mm
-        c.setDash(0.5, 0.5)
+        c.setDash(1, 3)
         c.line(x, y, x + w, y)
     c.setDash()
 
