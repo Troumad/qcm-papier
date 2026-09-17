@@ -85,6 +85,10 @@ def _choice_to_dict(c) -> dict:
 # Hauteur de ligne en mm (12 pt → mm). Reprend ``line_height = 12 / 2.835``.
 LINE_HEIGHT = 12 / 2.835
 
+# Marge (mm) entre le pied de page et le code-barres : les descendantes
+# (p, g...) descendent sous la ligne de base et toucheraient le code-barres.
+FOOTER_BARCODE_GAP = 2.0
+
 # Bits utilisés par ``pseudoRandom`` (index.html ~6270-6290).
 BIT_IDENT_DIR = 1
 BIT_EXERCISE_DIR = 2
@@ -173,19 +177,92 @@ def _settings_tri_groups() -> dict[str, tuple[str, str, str]]:
 # ---------------------------------------------------------------------------
 
 
-def _header_footer_height(settings: ProjectSettings) -> tuple[float, float]:
-    """Calcule les hauteurs d'en-tête et de pied de page (en mm).
+def _header_footer_height(left: str, middle: str, right: str) -> float:
+    """Hauteur d'une zone (en-tête ou pied) en mm.
 
     Reprend ``layout.header_height = max(nb_lignes(gauche,milieu,droite)) *
-    line_height * 1.15`` du code original.
+    line_height * 1.15`` du code original, comptée sur le texte déjà substitué.
     """
 
     def nb_lines(text: str) -> int:
         return len(text.split("\n")) if text else 0
 
-    header_h = max(nb_lines(settings.header_left), nb_lines(settings.header_middle), nb_lines(settings.header_right), 0)
-    footer_h = max(nb_lines(settings.footer_left), nb_lines(settings.footer_middle), nb_lines(settings.footer_right), 0)
-    return header_h * LINE_HEIGHT * 1.15, footer_h * LINE_HEIGHT * 1.15
+    return max(nb_lines(left), nb_lines(middle), nb_lines(right), 0) * LINE_HEIGHT * 1.15
+
+
+# Substitution des macros `${...}` de l'en-tête/pied de page : reprend
+# ``eval('`' + header_left.value + '`')`` du code original (index.html
+# ~5838-5863, ~6260-6280), qui interpole les variables issues des champs
+# d'information. Les macros inconnues sont laissées telles quelles (le code
+# original n'en définit pas davantage pour l'en-tête et le pied de page).
+_HEADER_MACROS = {
+    "university": "establishment",
+    "college": "institute",
+    "department": "formation",
+    "year": "year",
+    "semester": "semester",
+    "course_unit": "teaching_unit",
+    "course_long": "module_full",
+    "course_short": "module_short",
+    "name_long": "evaluation_full",
+    "name_short": "evaluation_short",
+    "authors_short": "teachers",
+    "date": "date",
+    "duration": "duration",
+}
+
+
+# Modèles par défaut de l'en-tête et du pied de page : reprennent les
+# attributs ``placeholder`` des <textarea> du code original (index.html
+# ~792-802, ~852-859). Quand un champ est vide, c'est ce modèle qui est
+# substitué (comportement du bouton « Valeur par défaut » de l'original).
+HEADER_LEFT_DEFAULT = "${university} - ${college} - ${department}\nAnnée ${year} - Semestre ${semester}"
+HEADER_MIDDLE_DEFAULT = "\n${name_short} ${course_short}\nCette page est à rendre pour corrections"
+HEADER_RIGHT_DEFAULT = "${date}\n${authors_short}"
+FOOTER_LEFT_DEFAULT = ""
+FOOTER_MIDDLE_DEFAULT = "Toute détérioration du code barre et/ou des 5 ronds situés en périphérie\nde la page des cadres entraîne un malus sur votre note"
+FOOTER_RIGHT_DEFAULT = ""
+
+
+def _substitute(text: str, settings: ProjectSettings) -> str:
+    """Remplace les macros ``${name}`` par la valeur du champ de paramètre associé."""
+    for macro, field_name in _HEADER_MACROS.items():
+        text = text.replace("${" + macro + "}", str(getattr(settings, field_name, "") or ""))
+    return text
+
+
+def _refresh_header_footer(layout: Layout, settings: ProjectSettings) -> None:
+    """Recalcule l'en-tête/pied de page et leurs hauteurs sur le layout.
+
+    Reprend ``eval('`' + header_left.value + '`')`` du code original à chaque
+    génération : l'en-tête reflète toujours les champs d'information courants,
+    même quand le layout est réutilisé depuis le projet JSON. Les hauteurs
+    modifiant la position des repères et du code-barres, on les recalcule
+    aussi, comme dans ``build_layout``.
+    """
+    # Champs vides remplacés par les modèles par défaut de l'original
+    # (comportement du bouton « Valeur par défaut » / fallback placeholder).
+    layout.header_left = _substitute(settings.header_left or HEADER_LEFT_DEFAULT, settings)
+    layout.header_middle = _substitute(settings.header_middle or HEADER_MIDDLE_DEFAULT, settings)
+    layout.header_right = _substitute(settings.header_right or HEADER_RIGHT_DEFAULT, settings)
+    layout.footer_left = _substitute(settings.footer_left or FOOTER_LEFT_DEFAULT, settings)
+    layout.footer_middle = _substitute(settings.footer_middle or FOOTER_MIDDLE_DEFAULT, settings)
+    layout.footer_right = _substitute(settings.footer_right or FOOTER_RIGHT_DEFAULT, settings)
+    layout.header_height = _header_footer_height(layout.header_left, layout.header_middle, layout.header_right)
+    layout.footer_height = _header_footer_height(layout.footer_left, layout.footer_middle, layout.footer_right)
+
+    # Code-barres fixe (indépendant du pied de page) : recalculé avant shapes_y
+    # car les deux repères du bas sont dans le code-barres.
+    layout.barcode_top = layout.page_height - layout.margin_bottom - layout.barcode_height
+    layout.shapes_y = [
+        layout.margin_top + layout.header_height + 12,
+        layout.margin_top + layout.header_height + 37,
+        layout.barcode_top + 2,
+        layout.barcode_top + 7,
+        layout.margin_top + layout.header_height + 7,
+    ]
+    layout.barcode_prefix = settings.module_short + settings.evaluation_short + settings.year + "-"
+    layout.barcode_length = len(layout.barcode_prefix) + 6
 
 
 def build_layout(settings: ProjectSettings, orientation: str) -> Layout:
@@ -211,15 +288,16 @@ def build_layout(settings: ProjectSettings, orientation: str) -> Layout:
     layout.margin_bottom = float(settings.margin_bottom)
     layout.page_center = (layout.margin_left + layout.page_width - layout.margin_right) / 2
 
-    header_h, footer_h = _header_footer_height(settings)
-    layout.header_height = header_h
-    layout.footer_height = footer_h
-    layout.header_left = settings.header_left
-    layout.header_middle = settings.header_middle
-    layout.header_right = settings.header_right
-    layout.footer_left = settings.footer_left
-    layout.footer_middle = settings.footer_middle
-    layout.footer_right = settings.footer_right
+    # Champs vides remplacés par les modèles par défaut de l'original
+    # (comportement du bouton « Valeur par défaut » / fallback placeholder).
+    layout.header_left = _substitute(settings.header_left or HEADER_LEFT_DEFAULT, settings)
+    layout.header_middle = _substitute(settings.header_middle or HEADER_MIDDLE_DEFAULT, settings)
+    layout.header_right = _substitute(settings.header_right or HEADER_RIGHT_DEFAULT, settings)
+    layout.footer_left = _substitute(settings.footer_left or FOOTER_LEFT_DEFAULT, settings)
+    layout.footer_middle = _substitute(settings.footer_middle or FOOTER_MIDDLE_DEFAULT, settings)
+    layout.footer_right = _substitute(settings.footer_right or FOOTER_RIGHT_DEFAULT, settings)
+    layout.header_height = _header_footer_height(layout.header_left, layout.header_middle, layout.header_right)
+    layout.footer_height = _header_footer_height(layout.footer_left, layout.footer_middle, layout.footer_right)
 
     # Repères d'alignement (5 cercles noirs).
     layout.shapes_x = [
@@ -229,22 +307,25 @@ def build_layout(settings: ProjectSettings, orientation: str) -> Layout:
         layout.page_width - layout.margin_right - 2,
         layout.page_width - layout.margin_right - 2,
     ]
-    layout.shapes_y = [
-        layout.margin_top + layout.header_height + 12,
-        layout.margin_top + layout.header_height + 37,
-        layout.page_height - layout.margin_bottom - layout.footer_height - 8,
-        layout.page_height - layout.margin_bottom - layout.footer_height - 3,
-        layout.margin_top + layout.header_height + 7,
-    ]
-    layout.shapes_r = [2, 2, 2, 2, 2]
-
-    # Code-barres.
+    # Code-barres (fixe : indépendant du pied de page, qui se dessine au-dessus).
     layout.barcode_height = 10.0
     layout.barcode_resolution = 0.5
-    layout.barcode_top = layout.page_height - layout.margin_bottom - layout.footer_height - layout.barcode_height
+    layout.barcode_top = layout.page_height - layout.margin_bottom - layout.barcode_height
     layout.barcode_prefix = settings.module_short + settings.evaluation_short + settings.year + "-"
     # Longueur = préfixe + 6 ('*' + 4 chiffres + '*').
     layout.barcode_length = len(layout.barcode_prefix) + 6
+
+    # Repères d'alignement (5 cercles noirs). Les deux repères du bas sont
+    # dans le code-barres (à +2 et +7 mm sous son haut) : le scanner lit le
+    # code-barres entre ces deux repères.
+    layout.shapes_y = [
+        layout.margin_top + layout.header_height + 12,
+        layout.margin_top + layout.header_height + 37,
+        layout.barcode_top + 2,
+        layout.barcode_top + 7,
+        layout.margin_top + layout.header_height + 7,
+    ]
+    layout.shapes_r = [2, 2, 2, 2, 2]
     return layout
 
 
@@ -693,6 +774,12 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         layout = build_layout(settings, variant.layout)
         project.variants[variant.layout] = layout
 
+    # L'en-tête/pied de page est recalculé à chaque génération (macros ${...}
+    # substituées avec les champs d'information courants), même si le layout
+    # est réutilisé depuis le projet JSON : il reflète toujours les infos du
+    # projet, comme le fait l'original à chaque FileGenerate.
+    _refresh_header_footer(layout, settings)
+
     # Code-barres.
     variant.barcode_text = barcode_text(layout.barcode_prefix, variant_id)
     variant.barcode_width = code39_width(variant.barcode_text, layout.barcode_resolution)
@@ -740,9 +827,11 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
     # d'alignement placés à page_width - margin_right - 2, rayon 2).
     shapes_right = max(layout.shapes_x) if layout.shapes_x else layout.page_width - layout.margin_right
     max_width = shapes_right - 2
-    max_height = layout.barcode_top
+    # Le pied de page se dessine au-dessus du code-barres (qui est fixe) :
+    # il limite l'espace disponible pour les exercices (footer_height plus la
+    # marge FOOTER_BARCODE_GAP pour les descendantes du pied de page).
 
-    # Initialisation des variables pour les deux modes
+    max_height = layout.barcode_top - layout.footer_height - FOOTER_BARCODE_GAP
     x_max = layout.margin_left
     y_max = variant.id_y + variant.id_height
     x_line_start = variant.id_x
