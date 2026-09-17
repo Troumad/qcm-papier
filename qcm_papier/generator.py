@@ -946,6 +946,18 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             if question_name_width_max < qw:
                 question_name_width_max = qw
 
+        # Hauteur disponible pour les questions de cet exercice, selon sa
+        # position : à droite de la boîte d'identification (première ligne en
+        # mode « vers la droite »), la limite est le bas de l'identification
+        # (comme dans le HTML d'origine) ; sous l'identification, la limite est
+        # le code-barres. Sans cette distinction, les questions de la première
+        # ligne s'étendaient plus bas que l'identification et le cadre devenait
+        # plus haut que ceux des lignes suivantes.
+        if go_right and exercise_x >= variant.id_x + variant.id_width and exercise_y < variant.id_y + variant.id_height:
+            exercise_height_max = variant.id_y + variant.id_height - exercise_y
+        else:
+            exercise_height_max = layout.barcode_top - exercise_y
+
         question_x = 0.0
         question_y = 12.0 if (header and choice_dir) else 6.0
         question_y_first = question_y
@@ -979,7 +991,7 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
                 # cadre ni après la dernière question).
                 if question_y > question_y_first:
                     question_y += QUESTION_GAP
-                if question_y + qh > layout.barcode_top - exercise_y:
+                if question_y + qh > exercise_height_max:
                     question_x = exercise_width
                     question_y = question_y_first
             else:
