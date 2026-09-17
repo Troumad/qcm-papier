@@ -60,6 +60,7 @@
     updateControls();
     if (!dialog.open) dialog.showModal();
     try {
+      await window.QCMSave.settle();
       const data = await api("GET", "/api/generate/preview");
       pages = data.pages;
       select.replaceChildren(...Array.from({ length: pages }, (_, i) => {

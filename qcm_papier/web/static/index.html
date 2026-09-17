@@ -10,6 +10,7 @@
 <header class="topbar">
   <h1>QCM-Papier</h1>
   <span id="project-name" class="muted">Nouveau projet</span>
+  <span id="save-status" role="status" class="muted"></span>
   <nav class="tabs" role="tablist">
     <button data-tab="file" role="tab">Fichier</button>
     <button data-tab="info" role="tab">Informations</button>
@@ -28,7 +29,8 @@
     <div class="row">
       <button id="btn-new">Nouveau</button>
       <button id="btn-open">Ouvrir…</button>
-      <button id="btn-save" hidden>Enregistrer</button>
+      <button id="btn-save">Enregistrer</button>
+      <button id="btn-save-as" hidden>Enregistrer sous…</button>
       <button id="btn-download">Télécharger le projet</button>
       <input id="input-project" type="file" accept=".json,application/json" hidden>
     </div>
@@ -94,6 +96,7 @@
       <div class="row">
         <button type="button" id="btn-gen-variants">Générer les variantes</button>
         <button type="button" id="btn-gen-pdf">Générer le PDF</button>
+        <button type="button" id="btn-gen-bundle">Exporter le PDF + projet</button>
         <button type="button" id="btn-gen-preview">Aperçu du sujet…</button>
         <span id="generate-status" class="muted"></span>
       </div>
@@ -140,6 +143,16 @@
     </div>
     <ul id="copies" class="copies"></ul>
     <p id="marking-status" class="status"></p>
+    <div class="row wrap">
+      <label>Afficher <select id="result-filter">
+        <option value="all">Toutes les pages</option>
+        <option value="review">À vérifier</option>
+        <option value="unknown">Étudiant non identifié</option>
+        <option value="incomplete">Incomplètes</option>
+      </select></label>
+      <button id="btn-next-issue">Prochaine anomalie</button>
+      <span id="result-count" role="status" class="muted"></span>
+    </div>
     <div class="table-wrap">
       <table id="results">
         <thead><tr>
@@ -187,6 +200,16 @@
   </section>
 </main>
 
+<dialog id="dlg-unsaved" aria-labelledby="unsaved-title">
+  <h2 id="unsaved-title">Modifications non enregistrées</h2>
+  <p id="unsaved-message"></p>
+  <div class="row wrap">
+    <button id="unsaved-save">Enregistrer et continuer</button>
+    <button id="unsaved-discard">Continuer sans enregistrer</button>
+    <button id="unsaved-cancel">Annuler</button>
+  </div>
+</dialog>
+
 <div id="toast" class="toast" role="status" hidden></div>
 
 <!-- Levée d'anonymat -->
@@ -231,6 +254,10 @@
   <input id="input-export" type="file" accept=".xlsx,.xls">
   <p>Le fichier exporté peut ensuite être chargé dans Scodoc dans l'encadré suivant :</p>
   <img class="scodoc" data-src="Scodoc_eval_send.png" alt="Envoi du fichier de notes dans Scodoc">
+  <p id="export-summary" class="status"></p>
+  <label id="export-review-label" class="check" hidden>
+    <input type="checkbox" id="export-reviewed"> J'ai vérifié les anomalies et souhaite exporter les notes disponibles.
+  </label>
   <p id="export-status" class="status"></p>
   <div class="row end"><button id="btn-do-export">Exporter</button><button data-close>Fermer</button></div>
 </dialog>
@@ -275,6 +302,17 @@
   </div>
 </dialog>
 
+<dialog id="dlg-pdf-json">
+  <h2>Conserver le JSON pour la correction</h2>
+  <p>Le PDF seul ne permet pas de corriger les copies. Enregistrez aussi le projet
+    JSON à jour : il contient les réponses attendues, les barèmes et les informations
+    de chaque variante. Conservez-le avec ce PDF.</p>
+  <div class="row wrap">
+    <button id="pdf-json-save" type="button">Enregistrer le JSON</button>
+    <button id="pdf-json-later" type="button">Plus tard</button>
+  </div>
+</dialog>
+
 <!-- Page agrandie -->
 <dialog id="dlg-viewer" class="viewer">
   <div class="viewer-main">
@@ -312,6 +350,8 @@
 
 <script src="/static/markdown.js"></script>
 <script src="/static/app.js"></script>
+<script src="/static/persistence.js"></script>
+<script src="/static/review.js"></script>
 <script src="/static/correction.js"></script>
 <script src="/static/preview.js"></script>
 <script src="/static/settings.js"></script>
