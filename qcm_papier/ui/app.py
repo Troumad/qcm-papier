@@ -694,7 +694,8 @@ class QcmWindow(Gtk.ApplicationWindow):
         macros_box.append(macro_desc)
 
         self._macros_box = macros_box
-        self._refresh_macros()
+        self._macro_labels: dict[str, Gtk.Label] = {}
+        self._build_macros_flow()
         box.append(macros_frame)
 
         # ===== Pied de page (bas) =====
@@ -813,24 +814,36 @@ class QcmWindow(Gtk.ApplicationWindow):
         if getattr(self, "_header_footer_page", None) is not None and _page is self._header_footer_page:
             self._refresh_macros()
 
-    def _refresh_macros(self) -> None:
-        """Reconstruit la liste des macros avec les valeurs courantes du projet."""
+    def _build_macros_flow(self) -> None:
+        """Crée une seule fois le flot de macros et conserve les labels."""
         from ..generator import _HEADER_MACROS
 
         macros_box = getattr(self, "_macros_box", None)
         if macros_box is None:
             return
-        child = macros_box.get_first_child()
-        while child is not None:
-            nxt = child.get_next_sibling()
-            macros_box.remove(child)
-            child = nxt
+        # Construit les chips une seule fois (valeurs vides -> défauts affichés).
         settings = self.project.settings
         macros_map = {
             macro: str(getattr(settings, field_name, "") or "") for macro, field_name in _HEADER_MACROS.items()
         }
         defaults = {macro: _INFO_DEFAULTS.get(field_name, "") for macro, field_name in _HEADER_MACROS.items()}
-        macros_box.append(_make_macro_chips(macros_map, defaults, on_insert=self._insert_macro))
+        flow = _make_macro_chips(macros_map, defaults, on_insert=self._insert_macro, labels_out=self._macro_labels)
+        macros_box.append(flow)
+        self._macros_flow = flow
+
+    def _refresh_macros(self) -> None:
+        """Met à jour les valeurs affichées des macros sans reconstruire le flot."""
+        from ..generator import _HEADER_MACROS
+
+        labels = getattr(self, "_macro_labels", None)
+        if labels is None:
+            return
+        settings = self.project.settings
+        for macro, field_name in _HEADER_MACROS.items():
+            value = str(getattr(settings, field_name, "") or "") or _INFO_DEFAULTS.get(field_name, "")
+            label = labels.get(macro)
+            if label is not None:
+                label.set_label(f"${{{macro}}} = {value}")
 
     def _insert_macro(self, macro: str) -> None:
         """Insère ``${macro}`` dans la zone de texte en-tête/pied de page active, à la place du curseur."""
