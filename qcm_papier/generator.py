@@ -208,6 +208,20 @@ _HEADER_MACROS = {
 }
 
 
+# Modèles par défaut de l'en-tête et du pied de page : reprennent les
+# attributs ``placeholder`` des <textarea> du code original (index.html
+# ~792-802, ~852-859). Quand un champ est vide, c'est ce modèle qui est
+# substitué (comportement du bouton « Valeur par défaut » de l'original).
+HEADER_LEFT_DEFAULT = "${university} - ${college} - ${department}\nAnnée ${year} - Semestre ${semester}"
+HEADER_MIDDLE_DEFAULT = (
+    "\n${name_short} ${course_short}\nCette page est à détacher du sujet et à rendre pour corrections"
+)
+HEADER_RIGHT_DEFAULT = "${date}\n${authors_short}"
+FOOTER_LEFT_DEFAULT = ""
+FOOTER_MIDDLE_DEFAULT = "Toute détérioration du code barre et/ou des 5 ronds situés en périphérie\nde la page des cadres entraîne un malus sur votre note"
+FOOTER_RIGHT_DEFAULT = ""
+
+
 def _substitute(text: str, settings: ProjectSettings) -> str:
     """Remplace les macros ``${name}`` par la valeur du champ de paramètre associé."""
     for macro, field_name in _HEADER_MACROS.items():
@@ -224,12 +238,14 @@ def _refresh_header_footer(layout: Layout, settings: ProjectSettings) -> None:
     modifiant la position des repères et du code-barres, on les recalcule
     aussi, comme dans ``build_layout``.
     """
-    layout.header_left = _substitute(settings.header_left, settings)
-    layout.header_middle = _substitute(settings.header_middle, settings)
-    layout.header_right = _substitute(settings.header_right, settings)
-    layout.footer_left = _substitute(settings.footer_left, settings)
-    layout.footer_middle = _substitute(settings.footer_middle, settings)
-    layout.footer_right = _substitute(settings.footer_right, settings)
+    # Champs vides remplacés par les modèles par défaut de l'original
+    # (comportement du bouton « Valeur par défaut » / fallback placeholder).
+    layout.header_left = _substitute(settings.header_left or HEADER_LEFT_DEFAULT, settings)
+    layout.header_middle = _substitute(settings.header_middle or HEADER_MIDDLE_DEFAULT, settings)
+    layout.header_right = _substitute(settings.header_right or HEADER_RIGHT_DEFAULT, settings)
+    layout.footer_left = _substitute(settings.footer_left or FOOTER_LEFT_DEFAULT, settings)
+    layout.footer_middle = _substitute(settings.footer_middle or FOOTER_MIDDLE_DEFAULT, settings)
+    layout.footer_right = _substitute(settings.footer_right or FOOTER_RIGHT_DEFAULT, settings)
     layout.header_height = _header_footer_height(layout.header_left, layout.header_middle, layout.header_right)
     layout.footer_height = _header_footer_height(layout.footer_left, layout.footer_middle, layout.footer_right)
 
@@ -268,12 +284,14 @@ def build_layout(settings: ProjectSettings, orientation: str) -> Layout:
     layout.margin_bottom = float(settings.margin_bottom)
     layout.page_center = (layout.margin_left + layout.page_width - layout.margin_right) / 2
 
-    layout.header_left = _substitute(settings.header_left, settings)
-    layout.header_middle = _substitute(settings.header_middle, settings)
-    layout.header_right = _substitute(settings.header_right, settings)
-    layout.footer_left = _substitute(settings.footer_left, settings)
-    layout.footer_middle = _substitute(settings.footer_middle, settings)
-    layout.footer_right = _substitute(settings.footer_right, settings)
+    # Champs vides remplacés par les modèles par défaut de l'original
+    # (comportement du bouton « Valeur par défaut » / fallback placeholder).
+    layout.header_left = _substitute(settings.header_left or HEADER_LEFT_DEFAULT, settings)
+    layout.header_middle = _substitute(settings.header_middle or HEADER_MIDDLE_DEFAULT, settings)
+    layout.header_right = _substitute(settings.header_right or HEADER_RIGHT_DEFAULT, settings)
+    layout.footer_left = _substitute(settings.footer_left or FOOTER_LEFT_DEFAULT, settings)
+    layout.footer_middle = _substitute(settings.footer_middle or FOOTER_MIDDLE_DEFAULT, settings)
+    layout.footer_right = _substitute(settings.footer_right or FOOTER_RIGHT_DEFAULT, settings)
     layout.header_height = _header_footer_height(layout.header_left, layout.header_middle, layout.header_right)
     layout.footer_height = _header_footer_height(layout.footer_left, layout.footer_middle, layout.footer_right)
 
