@@ -5,7 +5,7 @@ il demande qu'on les mette à la main et après, il peut essayer de corriger la
 feuille en faisant une transformation affine de la page ».
 """
 
-import pymupdf
+import pytest
 
 from qcm_papier import generator, model, pdf_writer, scanner
 
@@ -48,13 +48,11 @@ def _project_and_page(tmp_path):
 def _layout_points_pixels(page, project):
     """Calcule les 5 positions des repères en pixels canvas (sans rotation),
     comme si l'utilisateur les cliquait sur l'image scannée alignée."""
-    matrix = scanner.compute_viewport(page, project.variants,
-                                       page.img.width, page.img.height)["matrix"]
+    matrix = scanner.compute_viewport(page, project.variants, page.img.width, page.img.height)["matrix"]
     p = scanner._layout_of(project.variants, "p")
     points = []
     for i in range(5):
-        adj = scanner.align_adjust_shape(page.img, matrix,
-                                          p.shapes_x[i], p.shapes_y[i], 30, 200)
+        adj = scanner.align_adjust_shape(page.img, matrix, p.shapes_x[i], p.shapes_y[i], 30, 200)
         points.append((adj["canvas_x"], adj["canvas_y"]))
     return points
 
@@ -111,12 +109,16 @@ def test_align_auto_global_recupere_page_mal_scannee():
     math/2026/correction3.pdf avec math/2026/OML1_bis.json).
     """
     import os
+
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     pdf = os.path.join(repo, "math", "2026", "correction3.pdf")
     jsonf = os.path.join(repo, "math", "2026", "OML1_bis.json")
     if not (os.path.exists(pdf) and os.path.exists(jsonf)):
-        return  # fichiers de test absents : on saute
+        # Signalé comme « ignoré » (et non comme réussi) : sans les copies de
+        # test, rien n'est vérifié.
+        pytest.skip("correction3.pdf ou OML1_bis.json absent : données de test indisponibles")
     from qcm_papier.project import load_project
+
     project = load_project(jsonf)
     pages = scanner.load_pages_from_file(pdf)
     assert len(pages) >= 6

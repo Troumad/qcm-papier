@@ -15,11 +15,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from openpyxl import load_workbook, Workbook
-from openpyxl.utils import get_column_letter
+from openpyxl import load_workbook
 
 from .model import Student
-
 
 # ---------------------------------------------------------------------------
 # Import de la table étudiants
@@ -30,6 +28,30 @@ _HEADER_EID = "etudid"
 _HEADER_NIP = "code_nip"
 _HEADER_NAME = "nom"
 _HEADER_FIRSTNAME = "prenom"
+
+
+def make_student(eid: Any, nip: Any, name: Any, firstname: Any) -> Student | None:
+    """Construit un étudiant de la table ``students`` (None si le NIP manque).
+
+    Règle commune à l'import Excel et à l'API ScoDoc.
+    """
+    if nip is None:
+        return None
+    nip_str = str(nip)
+    if not nip_str:
+        return None
+    # L'id étudiant est 'p' + nip sans son premier caractère, comme
+    # le code JS (id = 'p' + nip.substring(1)). Le nip Scodoc est
+    # numérique (ex: 12504873) : on enlève le 1er chiffre puis on ajoute
+    # 'p' -> 'p2504873', qui correspond à l'identifiant lu sur la copie.
+    student_id = "p" + nip_str[1:]
+    return Student(
+        id=student_id,
+        eid=str(eid if eid is not None else ""),
+        nip=nip_str,
+        name=str(name or ""),
+        firstname=str(firstname or ""),
+    )
 
 
 def load_students_table(path: str) -> dict[str, Student]:
@@ -56,32 +78,15 @@ def load_students_table(path: str) -> dict[str, Student]:
         elif value == _HEADER_FIRSTNAME:
             col_firstname = c
     if None in (col_eid, col_nip, col_name, col_firstname):
-        raise ValueError(
-            "La feuille doit contenir les colonnes 'etudid', 'code_nip', "
-            "'nom', 'prenom'."
-        )
+        raise ValueError("La feuille doit contenir les colonnes 'etudid', 'code_nip', " "'nom', 'prenom'.")
 
     students: dict[str, Student] = {}
     for row in rows:
         if col_eid >= len(row) or col_nip >= len(row):
             continue
-        eid = str(row[col_eid] or "")
-        nip = row[col_nip]
-        name = str(row[col_name] or "")
-        firstname = str(row[col_firstname] or "")
-        if nip is None:
-            continue
-        nip_str = str(nip)
-        if not nip_str:
-            continue
-        # L'id étudiant est 'p' + nip sans son premier caractère, comme
-        # le code JS (id = 'p' + nip.substring(1)). Le nip Scodoc est
-        # numérique (ex: 12504873) : on enlève le 1er chiffre puis on ajoute
-        # 'p' -> 'p2504873', qui correspond à l'identifiant lu sur la copie.
-        student_id = "p" + nip_str[1:]
-        students[student_id] = Student(
-            id=student_id, eid=eid, nip=nip_str, name=name, firstname=firstname,
-        )
+        student = make_student(row[col_eid] or "", row[col_nip], row[col_name], row[col_firstname])
+        if student is not None:
+            students[student.id] = student
     wb.close()
     return students
 
@@ -90,10 +95,16 @@ def load_students_table(path: str) -> dict[str, Student]:
 # Export des notes Scodoc
 # ---------------------------------------------------------------------------
 
-def export_scodoc_notes(path_input: str, path_output: str,
-                        notes: dict[str, float],
-                        note_max: float = 20.0, notemax: float = 20.0,
-                        header_row: int = 7, min0: bool = False) -> int:
+
+def export_scodoc_notes(
+    path_input: str,
+    path_output: str,
+    notes: dict[str, float],
+    note_max: float = 20.0,
+    notemax: float = 20.0,
+    header_row: int = 7,
+    min0: bool = False,
+) -> int:
     """Injecte les notes dans une feuille Scodoc et sauvegarde en XLS.
 
     Reprend ``MarkingScodocExportLoad`` (index.html ~7625-7710) :

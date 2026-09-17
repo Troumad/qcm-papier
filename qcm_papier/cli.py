@@ -14,7 +14,8 @@ import os
 import sys
 from pathlib import Path
 
-from . import generator, pdf_writer, project as project_mod, scanner, scodoc
+from . import generator, pdf_writer, scanner, scodoc
+from . import project as project_mod
 
 
 def _load_project(path: str):
@@ -24,8 +25,7 @@ def _load_project(path: str):
     return project_mod.load_project(path)
 
 
-def _maybe_open_gui(project_path: str, do_edit: bool,
-                    copies: list[str] | None = None) -> int:
+def _maybe_open_gui(project_path: str, do_edit: bool, copies: list[str] | None = None) -> int:
     """Ouvre l'interface graphique sur le projet si do_edit, sinon ne fait rien.
 
     Si ``copies`` est fourni, les copies sont chargées et corrigées
@@ -38,12 +38,10 @@ def _maybe_open_gui(project_path: str, do_edit: bool,
     try:
         from .ui.app import run as gui_run
     except ImportError as e:
-        print(f"Interface graphique indisponible ({e}) : --edit ignoré.",
-              file=sys.stderr)
+        print(f"Interface graphique indisponible ({e}) : --edit ignoré.", file=sys.stderr)
         return 0
     print(f"Ouverture de l'interface graphique : {project_path}")
     return gui_run(project_path=project_path, copies=copies)
-
 
 
 def cmd_open(args: argparse.Namespace) -> int:
@@ -86,14 +84,13 @@ def cmd_pdf(args: argparse.Namespace) -> int:
             print(f"Variantes en échec : {failed}", file=sys.stderr)
         print(f"Variantes régénérées : {ids}")
     if not any(k not in ("p", "l") for k in project.variants):
-        raise SystemExit("Le projet ne contient pas de variantes générées. "
-                         "Lancez d'abord 'qcm-papier variants'.")
+        raise SystemExit("Le projet ne contient pas de variantes générées. " "Lancez d'abord 'qcm-papier variants'.")
     out = args.output
     if not out:
         out = (project.settings.evaluation_short or "sujet") + ".pdf"
     # Forcer l'extension .pdf pour éviter d'écraser un fichier existant
-    if not out.endswith('.pdf'):
-        out += '.pdf'
+    if not out.endswith(".pdf"):
+        out += ".pdf"
     pdf_writer.generate_pdf(project, out, per_student=args.per_student)
     print(f"Sujet PDF généré : {out}")
     return _maybe_open_gui(args.project, getattr(args, "edit", False))
@@ -103,8 +100,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
     """Génère le sujet PDF à partir d'un projet (variantes + PDF en un appel)."""
     project = _load_project(args.project)
     # Génère les variantes si nécessaire ou si --regenerate est demandé.
-    need_gen = (not any(k not in ("p", "l") for k in project.variants)
-               or getattr(args, "regenerate", False))
+    need_gen = not any(k not in ("p", "l") for k in project.variants) or getattr(args, "regenerate", False)
     if need_gen:
         ids, failed = generator.generate_all(project, retry=args.retry)
         if failed:
@@ -115,8 +111,8 @@ def cmd_generate(args: argparse.Namespace) -> int:
     if not out:
         out = (project.settings.evaluation_short or "sujet") + ".pdf"
     # Forcer l'extension .pdf pour éviter d'écraser un fichier existant
-    if not out.endswith('.pdf'):
-        out += '.pdf'
+    if not out.endswith(".pdf"):
+        out += ".pdf"
     pdf_writer.generate_pdf(project, out, per_student=args.per_student)
     print(f"Sujet PDF généré : {out}")
     # Sauvegarde le projet mis à jour (variantes + ids).
@@ -130,8 +126,7 @@ def cmd_correct(args: argparse.Namespace) -> int:
     """Corrige un lot de copies et exporte les notes."""
     project = _load_project(args.project)
     if not any(k not in ("p", "l") for k in project.variants):
-        raise SystemExit("Le projet ne contient pas de variantes générées. "
-                         "Lancez d'abord 'qcm-papier generate'.")
+        raise SystemExit("Le projet ne contient pas de variantes générées. " "Lancez d'abord 'qcm-papier generate'.")
 
     # Table étudiants (optionnelle, pour la levée d'anonymat).
     if args.students:
@@ -150,7 +145,6 @@ def cmd_correct(args: argparse.Namespace) -> int:
         raise SystemExit("Aucune copie à corriger.")
 
     print(f"Correction de {len(copies)} fichier(s)...")
-    state_path = getattr(args, "load_state", None) or getattr(args, "save_state", None)
     notes: dict[str, float] = {}
     corrected_pages: list = []
     for copy_path in copies:
@@ -162,14 +156,11 @@ def cmd_correct(args: argparse.Namespace) -> int:
         for page_idx, page in enumerate(pages):
             restored = False
             if getattr(args, "load_state", None):
-                restored = scanner.load_correction_state(
-                    copy_path, page, args.load_state, page_index=page_idx)
+                restored = scanner.load_correction_state(copy_path, page, args.load_state, page_index=page_idx)
             if not restored:
-                ok = scanner.auto_check(page, project,
-                                        clair=getattr(args, "clair", 140))
+                ok = scanner.auto_check(page, project, clair=getattr(args, "clair", 140))
                 if not ok:
-                    print(f"  {copy_path} : correction échouée (alignement ?)",
-                          file=sys.stderr)
+                    print(f"  {copy_path} : correction échouée (alignement ?)", file=sys.stderr)
                     continue
             else:
                 print(f"  {copy_path} : état restauré depuis la sauvegarde")
@@ -178,9 +169,11 @@ def cmd_correct(args: argparse.Namespace) -> int:
             elif page.student_id is not None and page.value is not None:
                 notes[page.student_id] = page.value
             corrected_pages.append((copy_path, page))
-            print(f"  {copy_path} : variante {page.variant_id}, "
-                  f"étudiant {page.student_id}, note {page.value}/{page.total}"
-                  f" {'(complète)' if page.complete else '(incomplète)'}")
+            print(
+                f"  {copy_path} : variante {page.variant_id}, "
+                f"étudiant {page.student_id}, note {page.value}/{page.total}"
+                f" {'(complète)' if page.complete else '(incomplète)'}"
+            )
 
     # Rendu visuel des pages corrigées (overlay vert/rouge).
     if getattr(args, "render", None) is not None:
@@ -200,24 +193,24 @@ def cmd_correct(args: argparse.Namespace) -> int:
 
     # Sauvegarde de l'état de correction (optionnel).
     if getattr(args, "save_state", None):
-        scanner.save_correction_state(
-            [p for _, p in corrected_pages],
-            [c for c, _ in corrected_pages],
-            args.save_state)
+        scanner.save_correction_state([p for _, p in corrected_pages], [c for c, _ in corrected_pages], args.save_state)
         print(f"État de correction sauvegardé : {args.save_state}")
 
     # Export Scodoc (optionnel).
     if args.scodoc_input:
         out = args.output or "notes_scodoc.xlsx"
-        count = scodoc.export_scodoc_notes(args.scodoc_input, out, notes,
-                                          note_max=args.note_max,
-                                          notemax=project.settings.NOTEMAX
-                                          if hasattr(project.settings, "NOTEMAX")
-                                          else 20.0)
+        count = scodoc.export_scodoc_notes(
+            args.scodoc_input,
+            out,
+            notes,
+            note_max=args.note_max,
+            notemax=project.settings.NOTEMAX if hasattr(project.settings, "NOTEMAX") else 20.0,
+        )
         print(f"Notes exportées : {count} → {out}")
     elif args.output:
         # Export CSV simple.
         import csv
+
         with open(args.output, "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
             w.writerow(["eid", "note", "total"])
@@ -228,106 +221,218 @@ def cmd_correct(args: argparse.Namespace) -> int:
         print(f"\nRécapitulatif ({len(notes)} notes) :")
         for eid, note in notes.items():
             print(f"  {eid}: {note}")
-    return _maybe_open_gui(args.project, getattr(args, "edit", False),
-                          copies=copies)
+    return _maybe_open_gui(args.project, getattr(args, "edit", False), copies=copies)
 
 
 cmd_check = cmd_open  # alias rétro-compatible (l'ancienne commande 'check')
 
 
+def cmd_scodoc(args: argparse.Namespace) -> int:
+    """Compte ScoDoc dédié : état, test de connexion, copie des réponses de l'API."""
+    import json
+
+    try:
+        from . import scodoc_config
+        from .scodoc_api import ScoDocError
+    except ImportError as e:
+        raise SystemExit(f"Module indisponible ({e}).") from e
+    try:
+        if args.action == "status":
+            account = scodoc_config.load_account()
+            print(f"Adresse : {account.url or '—'}")
+            print(f"Identifiant : {account.username or '—'}")
+            print(f"Mot de passe dans le trousseau : {'oui' if account.has_password else 'non'}")
+            print(f"Trousseau : {scodoc_config.keyring_name()}")
+            return 0
+        client = scodoc_config.connect()
+        departements = client.departements()
+        if args.action == "test":
+            print(f"Connexion réussie : {len(departements)} département(s) visible(s).")
+            return 0
+        # dump : réponses brutes de l'API, pour vérifier leur forme exacte.
+        os.makedirs(args.output, mode=0o700, exist_ok=True)
+
+        def write(name: str, data) -> None:
+            path = os.path.join(args.output, name)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                if os.name != "nt":
+                    os.fchmod(f.fileno(), 0o600)
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            size = len(data) if isinstance(data, list) else 1
+            print(f"  {path} ({size} élément(s))")
+
+        print("Réponses de l'API ScoDoc :")
+        write("departements.json", departements)
+        semestres = client.formsemestres_courants(args.departement)
+        write(f"formsemestres_courants_{args.departement}.json", semestres)
+        sem_id = args.formsemestre
+        if sem_id is None and semestres:
+            first = semestres[0]
+            sem_id = first.get("id") or first.get("formsemestre_id")
+        if sem_id is not None:
+            write(f"formsemestre_{sem_id}_etudiants.json", client.formsemestre_etudiants(int(sem_id)))
+        print(
+            "⚠ Ces fichiers contiennent des données personnelles d'étudiants : "
+            "ne les versionnez pas et supprimez-les après usage."
+        )
+        return 0
+    except ScoDocError as e:
+        raise SystemExit(f"ScoDoc : {e}") from e
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Lance l'interface web locale (FastAPI) dans le navigateur."""
+    try:
+        from .web.server import run
+    except ImportError as e:
+        raise SystemExit(f"Interface web indisponible ({e}). " 'Installez-la avec : pip install -e ".[web]"') from e
+    if args.project and not os.path.exists(args.project):
+        raise SystemExit(f"Projet introuvable : {args.project}")
+    return run(
+        host=args.host,
+        port=args.port,
+        project_path=args.project,
+        open_browser=not args.no_browser,
+        exit_with_parent=args.exit_with_parent,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="qcm-papier",
-        description="Générateur/Correcteur de QCM papier (portage Python du "
-                    "code HTML+JS de l'Université Lyon 1).",
+        description="Générateur/Correcteur de QCM papier (portage Python du " "code HTML+JS de l'Université Lyon 1).",
     )
     sub = parser.add_subparsers(dest="command")
 
     # open : ouvrir/valider un projet JSON
     p_open = sub.add_parser("open", help="Ouvrir et valider un projet JSON")
-    p_open.add_argument("--project", "-p", required=True,
-                        help="Fichier projet JSON")
-    p_open.add_argument("--edit", action="store_true",
-                        help="Ouvrir l'interface graphique sur le projet")
+    p_open.add_argument("--project", "-p", required=True, help="Fichier projet JSON")
+    p_open.add_argument("--edit", action="store_true", help="Ouvrir l'interface graphique sur le projet")
     p_open.set_defaults(func=cmd_open)
 
     # variants : générer les variantes et les sauvegarder
-    p_var = sub.add_parser("variants",
-                           help="Générer les variantes et les sauvegarder dans le JSON")
-    p_var.add_argument("--project", "-p", required=True,
-                       help="Fichier projet JSON")
-    p_var.add_argument("--save-project", help="Sauvegarder le projet mis à jour "
-                       "(par défaut : le fichier d'entrée)")
-    p_var.add_argument("--retry", action="store_true", default=True,
-                       help="Réessayer avec un nouvel id si une variante échoue")
-    p_var.add_argument("--no-retry", dest="retry", action="store_false",
-                       help="Ne pas réessayer en cas d'échec")
-    p_var.add_argument("--edit", action="store_true",
-                       help="Ouvrir l'interface graphique sur le projet après génération des variantes")
+    p_var = sub.add_parser("variants", help="Générer les variantes et les sauvegarder dans le JSON")
+    p_var.add_argument("--project", "-p", required=True, help="Fichier projet JSON")
+    p_var.add_argument("--save-project", help="Sauvegarder le projet mis à jour " "(par défaut : le fichier d'entrée)")
+    p_var.add_argument(
+        "--retry", action="store_true", default=True, help="Réessayer avec un nouvel id si une variante échoue"
+    )
+    p_var.add_argument("--no-retry", dest="retry", action="store_false", help="Ne pas réessayer en cas d'échec")
+    p_var.add_argument(
+        "--edit", action="store_true", help="Ouvrir l'interface graphique sur le projet après génération des variantes"
+    )
     p_var.set_defaults(func=cmd_variants)
 
     # pdf : générer le PDF à partir des variantes existantes
     p_pdf = sub.add_parser("pdf", help="Générer le PDF à partir des variantes existantes")
-    p_pdf.add_argument("--project", "-p", required=True,
-                       help="Fichier projet JSON (avec variantes générées)")
+    p_pdf.add_argument("--project", "-p", required=True, help="Fichier projet JSON (avec variantes générées)")
     p_pdf.add_argument("--output", "-o", help="Fichier PDF de sortie")
-    p_pdf.add_argument("--per-student", action="store_true",
-                       help="Générer une copie par étudiant (au lieu d'une par variante)")
-    p_pdf.add_argument("--edit", action="store_true",
-                       help="Ouvrir l'interface graphique sur le projet après génération du PDF")
-    p_pdf.add_argument("--regenerate", action="store_true",
-                       help="Régénérer les variantes avant de générer le PDF")
+    p_pdf.add_argument(
+        "--per-student", action="store_true", help="Générer une copie par étudiant (au lieu d'une par variante)"
+    )
+    p_pdf.add_argument(
+        "--edit", action="store_true", help="Ouvrir l'interface graphique sur le projet après génération du PDF"
+    )
+    p_pdf.add_argument("--regenerate", action="store_true", help="Régénérer les variantes avant de générer le PDF")
     p_pdf.set_defaults(func=cmd_pdf)
 
     # generate : tout en un (rétro-compatible)
     p_gen = sub.add_parser("generate", help="Générer le sujet PDF (variantes + PDF en un appel)")
-    p_gen.add_argument("--project", "-p", required=True,
-                       help="Fichier projet JSON")
+    p_gen.add_argument("--project", "-p", required=True, help="Fichier projet JSON")
     p_gen.add_argument("--output", "-o", help="Fichier PDF de sortie")
-    p_gen.add_argument("--retry", action="store_true", default=True,
-                       help="Réessayer avec un nouvel id si une variante échoue")
-    p_gen.add_argument("--no-retry", dest="retry", action="store_false",
-                       help="Ne pas réessayer en cas d'échec")
-    p_gen.add_argument("--per-student", action="store_true",
-                       help="Générer une copie par étudiant (au lieu d'une par variante)")
+    p_gen.add_argument(
+        "--retry", action="store_true", default=True, help="Réessayer avec un nouvel id si une variante échoue"
+    )
+    p_gen.add_argument("--no-retry", dest="retry", action="store_false", help="Ne pas réessayer en cas d'échec")
+    p_gen.add_argument(
+        "--per-student", action="store_true", help="Générer une copie par étudiant (au lieu d'une par variante)"
+    )
     p_gen.add_argument("--save-project", help="Sauvegarder le projet mis à jour")
-    p_gen.add_argument("--edit", action="store_true",
-                       help="Ouvrir l'interface graphique sur le projet après génération du PDF")
-    p_gen.add_argument("--regenerate", action="store_true",
-                       help="Régénérer les variantes même si elles existent déjà")
+    p_gen.add_argument(
+        "--edit", action="store_true", help="Ouvrir l'interface graphique sur le projet après génération du PDF"
+    )
+    p_gen.add_argument("--regenerate", action="store_true", help="Régénérer les variantes même si elles existent déjà")
     p_gen.set_defaults(func=cmd_generate)
 
     # correct
     p_cor = sub.add_parser("correct", help="Corriger des copies scannées")
-    p_cor.add_argument("--project", "-p", required=True,
-                       help="Fichier projet JSON (avec variantes générées)")
-    p_cor.add_argument("--copies", "-c", nargs="+", required=True,
-                       help="Fichiers ou répertoires de copies (PDF/images)")
+    p_cor.add_argument("--project", "-p", required=True, help="Fichier projet JSON (avec variantes générées)")
+    p_cor.add_argument(
+        "--copies", "-c", nargs="+", required=True, help="Fichiers ou répertoires de copies (PDF/images)"
+    )
     p_cor.add_argument("--students", help="Table étudiants Scodoc (XLS/XLSX)")
     p_cor.add_argument("--scodoc-input", help="Feuille de notes Scodoc à remplir")
     p_cor.add_argument("--output", "-o", help="Fichier de sortie (notes)")
-    p_cor.add_argument("--dpi", type=int, default=150,
-                       help="Résolution de rendu des PDF (défaut 150)")
-    p_cor.add_argument("--note-max", type=float, default=20.0,
-                       help="Note maximale de l'échelle Scodoc (défaut 20)")
-    p_cor.add_argument("--save", dest="save_state", metavar="FICHIER",
-                       help="Sauvegarder l'état de correction dans un fichier JSON")
-    p_cor.add_argument("--load", dest="load_state", metavar="FICHIER",
-                       help="Recharger un état de correction sauvegardé (skip alignement)")
-    p_cor.add_argument("--clair", type=int, default=140,
-                       help="Seuil de détection des cases cochées (défaut 140 ; "
-                            "augmenter pour des scans plus sombres)")
-    p_cor.add_argument("--render", nargs="?", const="", default=None,
-                       help="Rendre les pages corrigées en PNG (overlay vert/rouge) ; "
-                            "valeur optionnelle = répertoire de sortie (défaut : répertoire des copies)")
-    p_cor.add_argument("--edit", action="store_true",
-                       help="Ouvrir l'interface graphique après correction (onglet Correction avec les pages corrigées)")
+    p_cor.add_argument("--dpi", type=int, default=150, help="Résolution de rendu des PDF (défaut 150)")
+    p_cor.add_argument("--note-max", type=float, default=20.0, help="Note maximale de l'échelle Scodoc (défaut 20)")
+    p_cor.add_argument(
+        "--save", dest="save_state", metavar="FICHIER", help="Sauvegarder l'état de correction dans un fichier JSON"
+    )
+    p_cor.add_argument(
+        "--load",
+        dest="load_state",
+        metavar="FICHIER",
+        help="Recharger un état de correction sauvegardé (skip alignement)",
+    )
+    p_cor.add_argument(
+        "--clair",
+        type=int,
+        default=140,
+        help="Seuil de détection des cases cochées (défaut 140 ; " "augmenter pour des scans plus sombres)",
+    )
+    p_cor.add_argument(
+        "--render",
+        nargs="?",
+        const="",
+        default=None,
+        help="Rendre les pages corrigées en PNG (overlay vert/rouge) ; "
+        "valeur optionnelle = répertoire de sortie (défaut : répertoire des copies)",
+    )
+    p_cor.add_argument(
+        "--edit",
+        action="store_true",
+        help="Ouvrir l'interface graphique après correction (onglet Correction avec les pages corrigées)",
+    )
     p_cor.set_defaults(func=cmd_correct)
 
     # check
     p_chk = sub.add_parser("check", help="Valider un projet")
     p_chk.add_argument("--project", "-p", required=True)
     p_chk.set_defaults(func=cmd_check)
+
+    # scodoc : compte ScoDoc dédié (réglé dans l'interface web, onglet Réglages)
+    p_sco = sub.add_parser("scodoc", help="Compte ScoDoc dédié : état, test, copie des réponses de l'API")
+    sco_sub = p_sco.add_subparsers(dest="action", required=True)
+    sco_sub.add_parser("status", help="Afficher le compte enregistré (sans le mot de passe)")
+    sco_sub.add_parser("test", help="Tester la connexion avec le compte enregistré")
+    p_dump = sco_sub.add_parser("dump", help="Enregistrer les réponses brutes de l'API dans des fichiers JSON")
+    p_dump.add_argument(
+        "--output", "-o", required=True, help="Dossier de sortie (hors dépôt Git : données personnelles)"
+    )
+    p_dump.add_argument("--departement", "-d", default="GEII", help="Acronyme du département (défaut GEII)")
+    p_dump.add_argument("--formsemestre", "-s", type=int, help="Id du semestre (défaut : premier semestre en cours)")
+    p_sco.set_defaults(func=cmd_scodoc)
+
+    # serve : interface web locale
+    p_srv = sub.add_parser("serve", help="Lancer l'interface web locale dans le navigateur")
+    p_srv.add_argument("--project", "-p", help="Projet JSON à ouvrir au démarrage")
+    p_srv.add_argument(
+        "--host",
+        default="127.0.0.1",
+        choices=("127.0.0.1", "localhost", "::1"),
+        help="Adresse d'écoute (défaut 127.0.0.1 : cette machine uniquement)",
+    )
+    p_srv.add_argument("--port", type=int, default=8060, help="Port (défaut 8060)")
+    p_srv.add_argument(
+        "--no-browser", action="store_true", help="Ne pas ouvrir le navigateur (utilisé par l'application Tauri)"
+    )
+    p_srv.add_argument(
+        "--exit-with-parent",
+        action="store_true",
+        help="S'arrêter quand le processus parent disparaît (utilisé par l'application Tauri)",
+    )
+    p_srv.set_defaults(func=cmd_serve)
 
     return parser
 

@@ -1,3 +1,4 @@
+# Les tirages random de ce module mélangent les sujets ; ils ne protègent aucun secret.
 """Génération des variantes d'un QCM.
 
 Reproduit la fonction ``FileGenerate`` du code JavaScript original
@@ -15,57 +16,78 @@ from __future__ import annotations
 
 import random
 
-import math
-from typing import Any
-
 from . import random_gen as rg
 from .code39 import code39_width
 from .model import (
-    Exercise,
     Layout,
     Project,
     ProjectSettings,
-    Question,
     Variant,
-    VariantStore,
 )
+
 
 def _exercise_to_dict(e) -> dict:
     """Convertit un Exercise (ou dict) en dict brut (format JS)."""
     if isinstance(e, dict):
         return dict(e)
     return {
-        "index": e.index, "name": e.name, "header": e.header,
-        "sum": e.sum, "sum_bias": e.sum_bias, "validation": e.validation,
-        "bias": e.bias, "threshold": e.threshold, "gain": e.gain,
-        "min0": e.min0, "nomin": e.nomin, "noscale": e.noscale,
-        "scale": e.scale, "max": e.max,
+        "index": e.index,
+        "name": e.name,
+        "header": e.header,
+        "sum": e.sum,
+        "sum_bias": e.sum_bias,
+        "validation": e.validation,
+        "bias": e.bias,
+        "threshold": e.threshold,
+        "gain": e.gain,
+        "min0": e.min0,
+        "nomin": e.nomin,
+        "noscale": e.noscale,
+        "scale": e.scale,
+        "max": e.max,
         "questions": [_question_to_dict(q) for q in e.questions],
     }
+
 
 def _question_to_dict(q) -> dict:
     if isinstance(q, dict):
         return dict(q)
     return {
-        "index": q.index, "name": q.name, "gain": q.gain,
-        "penalty": q.penalty, "manual": q.manual, "width": q.width,
-        "height": q.height, "dessin": q.dessin, "dessin_nom": q.dessin_nom,
-        "check": q.check, "single": q.single,
+        "index": q.index,
+        "name": q.name,
+        "gain": q.gain,
+        "penalty": q.penalty,
+        "manual": q.manual,
+        "width": q.width,
+        "height": q.height,
+        "dessin": q.dessin,
+        "dessin_nom": q.dessin_nom,
+        "check": q.check,
+        "single": q.single,
         "multiple_exact": q.multiple_exact,
         "multiple_progressive": q.multiple_progressive,
         "choices": [_choice_to_dict(c) for c in q.choices],
     }
 
+
 def _choice_to_dict(c) -> dict:
     if isinstance(c, dict):
         return dict(c)
     return {
-        "index": c.index, "name": c.name, "correct": c.correct,
-        "neutral": c.neutral, "penalty": c.penalty,
+        "index": c.index,
+        "name": c.name,
+        "correct": c.correct,
+        "neutral": c.neutral,
+        "penalty": c.penalty,
     }
+
 
 # Hauteur de ligne en mm (12 pt → mm). Reprend ``line_height = 12 / 2.835``.
 LINE_HEIGHT = 12 / 2.835
+
+# Marge (mm) entre le pied de page et le code-barres : les descendantes
+# (p, g...) descendent sous la ligne de base et toucheraient le code-barres.
+FOOTER_BARCODE_GAP = 2.0
 
 # Bits utilisés par ``pseudoRandom`` (index.html ~6270-6290).
 BIT_IDENT_DIR = 1
@@ -82,6 +104,7 @@ BIT_CHOICE_ORDER = 11
 
 # Espacement vertical ajouté entre deux questions empilées (mm).
 QUESTION_GAP = 1.0
+
 
 # ---------------------------------------------------------------------------
 # Helpers de boutons à 3 états (depuis les ProjectSettings)
@@ -116,15 +139,16 @@ def _tri(settings: ProjectSettings, base: str, alt: str, rand: str) -> rg.TriCho
             getattr(settings, alt, False),
             getattr(settings, rand, False),
         )
-    
+
     # Priorité : SOMETIMES ou (ALWAYS et NEVER) > ALWAYS > NEVER
     if rand_val or (alt_val and base_val):  # ← Gestion des conflits, ce serait un bug dans les données
         return rg.TriChoice.RANDOM
     elif alt_val:
         return rg.TriChoice.ALT
     else:  # si base_val ou aucun
-        return rg.TriChoice.BASE    
-    
+        return rg.TriChoice.BASE
+
+
 def _settings_tri_groups() -> dict[str, tuple[str, str, str]]:
     """Mappe chaque groupe aux 3 champs booléens.
     Ordre : (Jamais, Toujours, De temps en temps)"""
@@ -135,7 +159,11 @@ def _settings_tri_groups() -> dict[str, tuple[str, str, str]]:
         "question_dir": ("question_dir_left", "question_dir_top", "question_dir_both"),
         "choice_dir": ("choice_dir_left", "choice_dir_top", "choice_dir_both"),
         "exercise_new": ("exercise_new_never", "exercise_new_always", "exercise_new_sometimes"),
-        "question_new": ("question_new_never", "question_new_always", "question_new_sometimes"),  # ✅ ICI : "never" en premier
+        "question_new": (
+            "question_new_never",
+            "question_new_always",
+            "question_new_sometimes",
+        ),  # ✅ ICI : "never" en premier
         "choice_new": ("choice_new_never", "choice_new_always", "choice_new_sometimes"),
         "choice_checked": ("choice_checked_never", "choice_checked_always", "choice_checked_sometimes"),
         "exercise_order": ("exercise_order_never", "exercise_order_always", "exercise_order_sometimes"),
@@ -148,22 +176,99 @@ def _settings_tri_groups() -> dict[str, tuple[str, str, str]]:
 # Construction du layout (portrait/paysage)
 # ---------------------------------------------------------------------------
 
-def _header_footer_height(settings: ProjectSettings) -> tuple[float, float]:
-    """Calcule les hauteurs d'en-tête et de pied de page (en mm).
+
+def _header_footer_height(left: str, middle: str, right: str) -> float:
+    """Hauteur d'une zone (en-tête ou pied) en mm.
 
     Reprend ``layout.header_height = max(nb_lignes(gauche,milieu,droite)) *
-    line_height * 1.15`` du code original.
+    line_height * 1.15`` du code original, comptée sur le texte déjà substitué.
     """
+
     def nb_lines(text: str) -> int:
         return len(text.split("\n")) if text else 0
 
-    header_h = max(nb_lines(settings.header_left),
-                   nb_lines(settings.header_middle),
-                   nb_lines(settings.header_right), 0)
-    footer_h = max(nb_lines(settings.footer_left),
-                   nb_lines(settings.footer_middle),
-                   nb_lines(settings.footer_right), 0)
-    return header_h * LINE_HEIGHT * 1.15, footer_h * LINE_HEIGHT * 1.15
+    return max(nb_lines(left), nb_lines(middle), nb_lines(right), 0) * LINE_HEIGHT * 1.15
+
+
+# Substitution des macros `${...}` de l'en-tête/pied de page : reprend
+# ``eval('`' + header_left.value + '`')`` du code original (index.html
+# ~5838-5863, ~6260-6280), qui interpole les variables issues des champs
+# d'information. Les macros inconnues sont laissées telles quelles (le code
+# original n'en définit pas davantage pour l'en-tête et le pied de page).
+_HEADER_MACROS = {
+    "university": "establishment",
+    "college": "institute",
+    "department": "formation",
+    "year": "year",
+    "semester": "semester",
+    "course_unit": "teaching_unit",
+    "course_long": "module_full",
+    "course_short": "module_short",
+    "name_long": "evaluation_full",
+    "name_short": "evaluation_short",
+    "authors_short": "teachers",
+    "date": "date",
+    "duration": "duration",
+}
+
+
+# Modèles par défaut de l'en-tête et du pied de page : reprennent les
+# attributs ``placeholder`` des <textarea> du code original (index.html
+# ~792-802, ~852-859). Quand un champ est vide, c'est ce modèle qui est
+# substitué (comportement du bouton « Valeur par défaut » de l'original).
+HEADER_LEFT_DEFAULT = "${university} - ${college} - ${department}\nAnnée ${year} - Semestre ${semester}"
+HEADER_MIDDLE_DEFAULT = "\n${name_short} ${course_short}\nCette page est à rendre pour corrections"
+HEADER_RIGHT_DEFAULT = "${date}\n${authors_short}"
+FOOTER_LEFT_DEFAULT = ""
+FOOTER_MIDDLE_DEFAULT = "Toute détérioration du code barre et/ou des 5 ronds situés en périphérie\nde la page des cadres entraîne un malus sur votre note"
+FOOTER_RIGHT_DEFAULT = ""
+
+
+def _substitute(text: str, settings: ProjectSettings) -> str:
+    """Remplace les macros ``${name}`` par la valeur du champ de paramètre associé."""
+    for macro, field_name in _HEADER_MACROS.items():
+        text = text.replace("${" + macro + "}", str(getattr(settings, field_name, "") or ""))
+    return text
+
+
+def _refresh_header_footer(layout: Layout, settings: ProjectSettings) -> None:
+    """Recalcule l'en-tête/pied de page et leurs hauteurs sur le layout.
+
+    Reprend ``eval('`' + header_left.value + '`')`` du code original à chaque
+    génération : l'en-tête reflète toujours les champs d'information courants,
+    même quand le layout est réutilisé depuis le projet JSON. Les hauteurs
+    modifiant la position des repères et du code-barres, on les recalcule
+    aussi, comme dans ``build_layout``.
+    """
+    # Champs vides remplacés par les modèles par défaut de l'original
+    # (comportement du bouton « Valeur par défaut » / fallback placeholder).
+    layout.header_left = _substitute(settings.header_left or HEADER_LEFT_DEFAULT, settings)
+    layout.header_middle = _substitute(settings.header_middle or HEADER_MIDDLE_DEFAULT, settings)
+    layout.header_right = _substitute(settings.header_right or HEADER_RIGHT_DEFAULT, settings)
+    if getattr(settings, "footer_enabled", True):
+        layout.footer_left = _substitute(settings.footer_left or FOOTER_LEFT_DEFAULT, settings)
+        layout.footer_middle = _substitute(settings.footer_middle or FOOTER_MIDDLE_DEFAULT, settings)
+        layout.footer_right = _substitute(settings.footer_right or FOOTER_RIGHT_DEFAULT, settings)
+    else:
+        layout.footer_left = ""
+        layout.footer_middle = ""
+        layout.footer_right = ""
+    layout.header_height = _header_footer_height(layout.header_left, layout.header_middle, layout.header_right)
+    layout.footer_height = _header_footer_height(layout.footer_left, layout.footer_middle, layout.footer_right)
+
+    # Code-barres fixe (indépendant du pied de page) : recalculé avant shapes_y
+    # car les deux repères du bas sont dans le code-barres.
+    layout.barcode_top = layout.page_height - layout.margin_bottom - layout.barcode_height
+    layout.shapes_y = [
+        layout.margin_top + layout.header_height + 12,
+        layout.margin_top + layout.header_height + 37,
+        layout.barcode_top + 2,
+        layout.barcode_top + 7,
+        layout.margin_top + layout.header_height + 7,
+    ]
+    layout.barcode_prefix = settings.module_short + settings.evaluation_short + settings.year + "-"
+    layout.barcode_length = len(layout.barcode_prefix) + 6
+
 
 def build_layout(settings: ProjectSettings, orientation: str) -> Layout:
     """Construit un layout portrait ('p') ou paysage ('l').
@@ -186,18 +291,23 @@ def build_layout(settings: ProjectSettings, orientation: str) -> Layout:
     layout.margin_top = float(settings.margin_top)
     layout.margin_right = float(settings.margin_right)
     layout.margin_bottom = float(settings.margin_bottom)
-    layout.page_center = (layout.margin_left + layout.page_width
-                          - layout.margin_right) / 2
+    layout.page_center = (layout.margin_left + layout.page_width - layout.margin_right) / 2
 
-    header_h, footer_h = _header_footer_height(settings)
-    layout.header_height = header_h
-    layout.footer_height = footer_h
-    layout.header_left = settings.header_left
-    layout.header_middle = settings.header_middle
-    layout.header_right = settings.header_right
-    layout.footer_left = settings.footer_left
-    layout.footer_middle = settings.footer_middle
-    layout.footer_right = settings.footer_right
+    # Champs vides remplacés par les modèles par défaut de l'original
+    # (comportement du bouton « Valeur par défaut » / fallback placeholder).
+    layout.header_left = _substitute(settings.header_left or HEADER_LEFT_DEFAULT, settings)
+    layout.header_middle = _substitute(settings.header_middle or HEADER_MIDDLE_DEFAULT, settings)
+    layout.header_right = _substitute(settings.header_right or HEADER_RIGHT_DEFAULT, settings)
+    if getattr(settings, "footer_enabled", True):
+        layout.footer_left = _substitute(settings.footer_left or FOOTER_LEFT_DEFAULT, settings)
+        layout.footer_middle = _substitute(settings.footer_middle or FOOTER_MIDDLE_DEFAULT, settings)
+        layout.footer_right = _substitute(settings.footer_right or FOOTER_RIGHT_DEFAULT, settings)
+    else:
+        layout.footer_left = ""
+        layout.footer_middle = ""
+        layout.footer_right = ""
+    layout.header_height = _header_footer_height(layout.header_left, layout.header_middle, layout.header_right)
+    layout.footer_height = _header_footer_height(layout.footer_left, layout.footer_middle, layout.footer_right)
 
     # Repères d'alignement (5 cercles noirs).
     layout.shapes_x = [
@@ -207,29 +317,32 @@ def build_layout(settings: ProjectSettings, orientation: str) -> Layout:
         layout.page_width - layout.margin_right - 2,
         layout.page_width - layout.margin_right - 2,
     ]
+    # Code-barres (fixe : indépendant du pied de page, qui se dessine au-dessus).
+    layout.barcode_height = 10.0
+    layout.barcode_resolution = 0.5
+    layout.barcode_top = layout.page_height - layout.margin_bottom - layout.barcode_height
+    layout.barcode_prefix = settings.module_short + settings.evaluation_short + settings.year + "-"
+    # Longueur = préfixe + 6 ('*' + 4 chiffres + '*').
+    layout.barcode_length = len(layout.barcode_prefix) + 6
+
+    # Repères d'alignement (5 cercles noirs). Les deux repères du bas sont
+    # dans le code-barres (à +2 et +7 mm sous son haut) : le scanner lit le
+    # code-barres entre ces deux repères.
     layout.shapes_y = [
         layout.margin_top + layout.header_height + 12,
         layout.margin_top + layout.header_height + 37,
-        layout.page_height - layout.margin_bottom - layout.footer_height - 8,
-        layout.page_height - layout.margin_bottom - layout.footer_height - 3,
+        layout.barcode_top + 2,
+        layout.barcode_top + 7,
         layout.margin_top + layout.header_height + 7,
     ]
     layout.shapes_r = [2, 2, 2, 2, 2]
-
-    # Code-barres.
-    layout.barcode_height = 10.0
-    layout.barcode_resolution = 0.5
-    layout.barcode_top = (layout.page_height - layout.margin_bottom
-                          - layout.footer_height - layout.barcode_height)
-    layout.barcode_prefix = (settings.module_short + settings.evaluation_short
-                              + settings.year + "-")
-    # Longueur = préfixe + 6 ('*' + 4 chiffres + '*').
-    layout.barcode_length = len(layout.barcode_prefix) + 6
     return layout
+
 
 # ---------------------------------------------------------------------------
 # Texte du code-barres d'une variante
 # ---------------------------------------------------------------------------
+
 
 def barcode_text(prefix: str, variant_id: int) -> str:
     """Construit le texte Code 39 d'une variante (avec '*' de début/fin).
@@ -246,9 +359,11 @@ def barcode_text(prefix: str, variant_id: int) -> str:
         digits = str(variant_id)
     return "*" + prefix + digits + "*"
 
+
 # ---------------------------------------------------------------------------
 # Fusion de listes (mergeArrays du code original)
 # ---------------------------------------------------------------------------
+
 
 def _merge_arrays(target: list, source: list, delta_x: float, delta_y: float) -> None:
     for item in source:
@@ -257,18 +372,23 @@ def _merge_arrays(target: list, source: list, delta_x: float, delta_y: float) ->
         item["y"] = item.get("y", 0) + delta_y
         target.append(item)
 
+
 # ---------------------------------------------------------------------------
 # Boîte d'identification étudiant
 # ---------------------------------------------------------------------------
 
-def _build_identification(variant: Variant, layout: Layout,
-                          settings: ProjectSettings, variant_id: int) -> None:
+
+def _build_identification(variant: Variant, layout: Layout, settings: ProjectSettings, variant_id: int) -> None:
     """Construit la boîte d'identification (textes + cases pour le n° étudiant).
 
     Reprend la construction de la ``identification box`` (index.html ~6345-6390).
     """
-    alt = rg.pseudo_random(variant_id, 0, BIT_IDENT_DIR,
-                           _tri(settings, "identification_dir_left", "identification_dir_top", "identification_dir_both"))
+    alt = rg.pseudo_random(
+        variant_id,
+        0,
+        BIT_IDENT_DIR,
+        _tri(settings, "identification_dir_left", "identification_dir_top", "identification_dir_both"),
+    )
     variant.id_x = layout.margin_left + 10
     variant.id_y = layout.margin_top + layout.header_height + 5
     id_texts = [
@@ -283,26 +403,28 @@ def _build_identification(variant: Variant, layout: Layout,
         # de haut en bas puis de gauche à droite.
         variant.id_width = 130
         variant.id_height = 45
-        variant.id_columns = [c + variant.id_x for c in
-                              [65, 71, 77, 83, 89, 95, 101, 107, 113, 119, 125]]
-        variant.id_lines = [l + variant.id_y for l in
-                            [10, 15, 20, 25, 30, 35, 40]]
+        variant.id_columns = [c + variant.id_x for c in [65, 71, 77, 83, 89, 95, 101, 107, 113, 119, 125]]
+        variant.id_lines = [line + variant.id_y for line in [10, 15, 20, 25, 30, 35, 40]]
     else:
         # de gauche à droite puis de haut en bas.
         variant.id_width = 110
         variant.id_height = 60
-        variant.id_columns = [c + variant.id_x for c in
-                              [70, 76, 82, 88, 94, 100, 106]]
-        variant.id_lines = [l + variant.id_y for l in
-                            [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]]
-    variant.rects.append({
-        "x": variant.id_x, "y": variant.id_y,
-        "w": variant.id_width, "h": variant.id_height,
-    })
+        variant.id_columns = [c + variant.id_x for c in [70, 76, 82, 88, 94, 100, 106]]
+        variant.id_lines = [line + variant.id_y for line in [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]]
+    variant.rects.append(
+        {
+            "x": variant.id_x,
+            "y": variant.id_y,
+            "w": variant.id_width,
+            "h": variant.id_height,
+        }
+    )
+
 
 # ---------------------------------------------------------------------------
 # Largeur/hauteur d'un texte (approximation reportlab-like)
 # ---------------------------------------------------------------------------
+
 
 def _text_width(text: str, font_size: float = 12) -> float:
     """Largeur approximative d'un texte en mm (Helvetica 12 pt).
@@ -313,20 +435,28 @@ def _text_width(text: str, font_size: float = 12) -> float:
     """
     try:
         from reportlab.pdfbase.pdfmetrics import stringWidth
+
         # stringWidth renvoie la largeur en points ; conversion en mm.
         return stringWidth(text or "", "Helvetica", font_size) * 25.4 / 72
     except Exception:
         return len(text or "") * font_size * 0.5 * 25.4 / 72
 
+
 # ---------------------------------------------------------------------------
 # Placement des choix d'une question
 # ---------------------------------------------------------------------------
 
-def _place_choices(variant, variant_id,
-                   exercise, question,
-                   exercise_index: int, question_iter: int,
-                   question_name_width_max: float,
-                   settings: ProjectSettings) -> tuple[list, list, list, list, float, float]:
+
+def _place_choices(
+    variant,
+    variant_id,
+    exercise,
+    question,
+    exercise_index: int,
+    question_iter: int,
+    question_name_width_max: float,
+    settings: ProjectSettings,
+) -> tuple[list, list, list, list, float, float]:
     """Place les choix d'une question.
 
     Renvoie ``(texts, rects, circles, marks, width, height)`` (relatifs à la
@@ -337,7 +467,7 @@ def _place_choices(variant, variant_id,
     rects: list[dict] = []
     circles: list[dict] = []
     marks: list[dict] = []
-    
+
     texts.append({"x": 2, "y": 5, "t": question.get("name", "")})
     question_name_width = _text_width(question.get("name", ""))  # Largeur du nom de cette question
 
@@ -346,8 +476,16 @@ def _place_choices(variant, variant_id,
         height = float(question.get("height", 0))
         rects.append({"x": 2, "y": 6, "w": width, "h": height})
         if exercise.get("index", -1) >= 0 and question.get("index", -1) >= 0:
-            marks.append({"x": 2, "y": 6, "w": width, "h": height,
-                          "e": exercise.get("index", -1), "q": question.get("index", -1)})
+            marks.append(
+                {
+                    "x": 2,
+                    "y": 6,
+                    "w": width,
+                    "h": height,
+                    "e": exercise.get("index", -1),
+                    "q": question.get("index", -1),
+                }
+            )
         q_width = max(question_name_width, width) + 4
         q_height = height + 8
         return texts, rects, circles, marks, q_width, q_height
@@ -357,16 +495,33 @@ def _place_choices(variant, variant_id,
         return texts, rects, circles, marks, question_name_width + 4, 7
 
     # Choix de direction / ajout fantôme / pré-coche / ordre.
-    question_dir = rg.pseudo_random(variant_id, variant_id, BIT_QUESTION_DIR,
-                                     _tri(settings, "question_dir_left", "question_dir_top", "question_dir_both"))
-    choice_dir = rg.pseudo_random(variant_id, variant_id, BIT_CHOICE_DIR,
-                                   _tri(settings, "choice_dir_left", "choice_dir_top", "choice_dir_both"))
-    choice_new = rg.pseudo_random(variant_id, exercise_index*100+question_iter, BIT_CHOICE_NEW,
-                                  _tri(settings, "choice_new_never", "choice_new_always", "choice_new_sometimes"))
-    choice_checked = rg.pseudo_random(variant_id, exercise_index*100+question_iter, BIT_CHOICE_CHECKED,
-                                      _tri(settings, "choice_checked_never", "choice_checked_always", "choice_checked_sometimes"))
-    choice_random = rg.pseudo_random(variant_id, exercise_index*100+question_iter, BIT_CHOICE_ORDER,
-                                     _tri(settings, "choice_order_never", "choice_order_always", "choice_order_sometimes"))
+    question_dir = rg.pseudo_random(
+        variant_id,
+        variant_id,
+        BIT_QUESTION_DIR,
+        _tri(settings, "question_dir_left", "question_dir_top", "question_dir_both"),
+    )
+    choice_dir = rg.pseudo_random(
+        variant_id, variant_id, BIT_CHOICE_DIR, _tri(settings, "choice_dir_left", "choice_dir_top", "choice_dir_both")
+    )
+    choice_new = rg.pseudo_random(
+        variant_id,
+        exercise_index * 100 + question_iter,
+        BIT_CHOICE_NEW,
+        _tri(settings, "choice_new_never", "choice_new_always", "choice_new_sometimes"),
+    )
+    choice_checked = rg.pseudo_random(
+        variant_id,
+        exercise_index * 100 + question_iter,
+        BIT_CHOICE_CHECKED,
+        _tri(settings, "choice_checked_never", "choice_checked_always", "choice_checked_sometimes"),
+    )
+    choice_random = rg.pseudo_random(
+        variant_id,
+        exercise_index * 100 + question_iter,
+        BIT_CHOICE_ORDER,
+        _tri(settings, "choice_order_never", "choice_order_always", "choice_order_sometimes"),
+    )
 
     choice_list = [_choice_to_dict(ch) for ch in question.get("choices", [])]
     if choice_new:
@@ -377,10 +532,13 @@ def _place_choices(variant, variant_id,
             if additional < 0:
                 additional = 0
         if exercise.get("index", -1) >= 0 and question.get("index", -1) >= 0:
-            rg.insert_choices(variant_id + question_iter, choice_list, additional,
-                              new_choices_name=settings.choice_new_choices_name,
-                              new_choices_count=settings.choice_new_choices
-                              if exercise.get("index", -1) >= 0 else 1)
+            rg.insert_choices(
+                variant_id + question_iter,
+                choice_list,
+                additional,
+                new_choices_name=settings.choice_new_choices_name,
+                new_choices_count=settings.choice_new_choices if exercise.get("index", -1) >= 0 else 1,
+            )
 
     choice_x = 0.0
     choice_y = 0.0
@@ -417,56 +575,63 @@ def _place_choices(variant, variant_id,
         else:
             choice_x += 6
 
-        texts.append({"x": x, "y": y, "t": choice.get("name", ""),
-                      "center": True})
-        
-        # Déterminer le niveau de fantôme
+        texts.append({"x": x, "y": y, "t": choice.get("name", ""), "center": True})
+
+        # Déterminer le contexte fantôme
         exercice_fantome = exercise.get("index", -1) < 0
         question_fantome = question.get("index", -1) < 0
-        choix_fantome = choice.get("index", -1) < 0
-        niveau_fantome = sum([exercice_fantome, question_fantome, choix_fantome])
-        
+
         # Placer le cercle (pré-coché ou non)
         # les vraies cases à cocher et la première ligne des exercices fantomes
         if exercice_fantome:
             # Dans un EXERCICE FANTOME : TOUS les choix peuvent être pré-cochés
             if choice.get("index", -1) >= 0:
                 # Choix normal dans exercice fantôme : 50%
-                if random.randint(1, 3) == 1: # ligne fantôme
+                if (
+                    random.randint(1, 3) == 1  # nosec B311
+                ):  # ligne fantôme
                     circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
                 else:
                     circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
             else:
                 # Choix fantôme dans exercice fantôme : TOUJOURS pré-coché
-                circles.append({"x": x, "y": y, "r": -2.3*1.5, "index": choice.get("index", -1)})
+                circles.append({"x": x, "y": y, "r": -2.3 * 1.5, "index": choice.get("index", -1)})
         elif question_fantome:
             # Dans une QUESTION FANTOME (mais pas exercice fantôme)
             if choice.get("index", -1) >= 0:
                 # Choix normal dans question fantôme : 50%
-                if random.randint(1, 4) == 1:
+                if random.randint(1, 4) == 1:  # nosec B311
                     circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
                 else:
                     circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
             else:
                 # Choix fantôme dans question fantôme : TOUJOURS pré-coché
-                circles.append({"x": x, "y": y, "r": -2.3*1.5, "index": choice.get("index", -1)})
+                circles.append({"x": x, "y": y, "r": -2.3 * 1.5, "index": choice.get("index", -1)})
         else:
             # Contexte normal (pas de fantôme)
-            if choice_checked :
-                info={"index": choice.get("index", -1)}["index"]
-                if  info<0 and random.randint(1, 2) == 1 : # précoché sans jocker
+            if choice_checked:
+                info = choice.get("index", -1)
+                if (
+                    info < 0 and random.randint(1, 2) == 1  # nosec B311
+                ):  # précoché sans jocker
                     circles.append({"x": x, "y": y, "r": -2.3, "index": choice.get("index", -1)})
                 else:
                     circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
             else:
                 circles.append({"x": x, "y": y, "r": 2.3, "index": choice.get("index", -1)})
-        
+
         # je ne sais pas quand on peut passer ici !
-        if (exercise.get("index", -1) >= 0 and question.get("index", -1) >= 0
-                and choice.get("index", -1) >= 0):
-            marks.append({"x": x, "y": y, "r": 2.3,
-                          "e": exercise.get("index", -1), "q": question.get("index", -1),
-                          "c": choice.get("index", 0)})
+        if exercise.get("index", -1) >= 0 and question.get("index", -1) >= 0 and choice.get("index", -1) >= 0:
+            marks.append(
+                {
+                    "x": x,
+                    "y": y,
+                    "r": 2.3,
+                    "e": exercise.get("index", -1),
+                    "q": question.get("index", -1),
+                    "c": choice.get("index", 0),
+                }
+            )
         choice_iter += 1
 
     # Ajout « seconde chance » (joker) : duplication des choix en pointillés.
@@ -483,65 +648,64 @@ def _place_choices(variant, variant_id,
             delta_y = 6
         dup_texts = [dict(t) for t in texts[1:]]  # sans le nom de question
         dup_circles = []
-        
-        # Vérifier si la question a des choix fantômes (index < 0)
-        a_des_choix_fantomes = any(c.get("index", -1) < 0 for c in circles)
-        
+
         # Pour la PREMIÈRE LIGNE (circles existants) :
         # On modifie directement les circles originaux selon les règles
         # Vérifier le contexte fantôme
         exercice_fantome = exercise.get("index", -1) < 0
         question_fantome = question.get("index", -1) < 0
-        
-        for i, c in enumerate(circles):
+
+        for _i, c in enumerate(circles):
             choice_index = c.get("index", -1)
-            
+
             if exercice_fantome or question_fantome:
                 # Dans un contexte fantôme : TOUS les choix peuvent être pré-cochés
                 if choice_index >= 0:
                     # Choix normal dans contexte fantôme : 50%
-                    if random.randint(1, 3) == 1:
+                    if random.randint(1, 3) == 1:  # nosec B311
                         c["r"] = -2.3  # précoché exercice fantome ligne 1
                     else:
                         c["r"] = 2.3  # non précoché
                 else:
                     # Choix fantôme dans contexte fantôme : TOUJOURS pré-coché
-                    c["r"] = -2.3*2  # TOUJOURS précoché
+                    c["r"] = -2.3 * 2  # TOUJOURS précoché
             else:
                 # Contexte normal : seulement les fantômes peuvent être pré-cochés
                 if choice_index >= 0:
                     # Choix original de la première ligne : TOUJOURS cercle vide
-                    c["r"] = 2.3 
+                    c["r"] = 2.3
                 else:
                     # Choix fantôme : 33% de chance
-                    if random.randint(1, 3) <3:  # 2/3 ≈ 66%
+                    if (
+                        random.randint(1, 3) < 3  # nosec B311
+                    ):  # 2/3 ≈ 66%
                         c["r"] = -2.3  # première ligne xercice précoché
                     else:
                         c["r"] = 2.3  # non précoché
-        
+
         # Pour la SECONDE LIGNE (joker) : duplication avec pointillés
         # Dans un exercice/question fantôme, TOUS les choix de la seconde ligne peuvent être pré-cochés
         # Vérifier si on est dans un contexte fantôme
         exercice_fantome = exercise.get("index", -1) < 0
         question_fantome = question.get("index", -1) < 0
-        
-        for i, c in enumerate(circles):
+
+        for _i, c in enumerate(circles):
             cc = dict(c)
             cc["dash"] = True  # Trait pointillé pour le joker
-            
+
             # Cas 3: Seconde ligne (joker) - probabilités INDEPENDANTES
             choice_index = c.get("index", -1)
             if exercice_fantome or question_fantome:
                 # Dans un contexte fantôme (exercice ou question) : TOUS les choix peuvent être pré-cochés
                 if choice_index >= 0:
                     # Choix original dans contexte fantôme : 50%
-                    if random.randint(1, 6) == 1:
+                    if random.randint(1, 6) == 1:  # nosec B311
                         cc["r"] = -2.3  # précoché 2nde ligne fantôme
                     else:
                         cc["r"] = 2.3  # non précoché
                 else:
                     # Choix fantôme dans contexte fantôme : TOUJOURS pré-coché
-                    cc["r"] = -2.3*1.5  # TOUJOURS précoché
+                    cc["r"] = -2.3 * 1.5  # TOUJOURS précoché
             else:
                 # Contexte normal : seulement les fantômes peuvent être pré-cochés
                 if choice_index >= 0:
@@ -549,11 +713,11 @@ def _place_choices(variant, variant_id,
                     cc["r"] = 2.3  # toujours cercle vide
                 else:
                     # SEULEMENT les choix fantômes sur la ligne joker peuvent être pré-cochés : 33%
-                    if random.randint(1, 4) == 1:
+                    if random.randint(1, 4) == 1:  # nosec B311
                         cc["r"] = -2.3  # précoché de la ligne jocker des questions
                     else:
                         cc["r"] = 2.3  # non précoché
-            
+
             dup_circles.append(cc)
         dup_marks = []
         for m in marks:
@@ -586,6 +750,7 @@ def _place_choices(variant, variant_id,
     # (cas choice_dir) ; pour choice_x += 6 par choix puis ``+ question_name_width_max + 4``.
     return texts, rects, circles, marks, question_width, question_height
 
+
 def _max_choice_count(exercise) -> int:
     """Nombre maximum de choix parmi les questions réelles (index >= 0)."""
     m = 0
@@ -594,12 +759,15 @@ def _max_choice_count(exercise) -> int:
             m = len(q.get("choices", []))
     return m
 
+
 # ---------------------------------------------------------------------------
 # Génération d'une variante
 # ---------------------------------------------------------------------------
 
+
 class GenerateError(Exception):
     """Levée quand une variante ne tient pas dans le format de papier."""
+
 
 def generate_variant(project: Project, variant_id: int) -> Variant:
     """Génère une variante pour l'id donné."""
@@ -616,29 +784,44 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         layout = build_layout(settings, variant.layout)
         project.variants[variant.layout] = layout
 
+    # L'en-tête/pied de page est recalculé à chaque génération (macros ${...}
+    # substituées avec les champs d'information courants), même si le layout
+    # est réutilisé depuis le projet JSON : il reflète toujours les infos du
+    # projet, comme le fait l'original à chaque FileGenerate.
+    _refresh_header_footer(layout, settings)
+
     # Code-barres.
     variant.barcode_text = barcode_text(layout.barcode_prefix, variant_id)
-    variant.barcode_width = code39_width(variant.barcode_text,
-                                         layout.barcode_resolution)
+    variant.barcode_width = code39_width(variant.barcode_text, layout.barcode_resolution)
     variant.barcode_left = layout.page_center - variant.barcode_width / 2
 
     # Boîte d'identification.
     _build_identification(variant, layout, settings, variant_id)
 
     # Paramètres de disposition des exercices.
-    exercise_dir = rg.pseudo_random(variant_id, 0, BIT_EXERCISE_DIR,
-                                     _tri(settings, "exercise_dir_left", "exercise_dir_top", "exercise_dir_both"))
-    exercise_new = rg.pseudo_random(variant_id, 0, BIT_EXERCISE_NEW,
-                                     _tri(settings, "exercise_new_never", "exercise_new_always", "exercise_new_sometimes"))
-    exercise_random = rg.pseudo_random(variant_id, 0, BIT_EXERCISE_ORDER,
-                                       _tri(settings, "exercise_order_never", "exercise_order_always", "exercise_order_sometimes"))
+    exercise_dir = rg.pseudo_random(
+        variant_id, 0, BIT_EXERCISE_DIR, _tri(settings, "exercise_dir_left", "exercise_dir_top", "exercise_dir_both")
+    )
+    exercise_new = rg.pseudo_random(
+        variant_id,
+        0,
+        BIT_EXERCISE_NEW,
+        _tri(settings, "exercise_new_never", "exercise_new_always", "exercise_new_sometimes"),
+    )
+    exercise_random = rg.pseudo_random(
+        variant_id,
+        0,
+        BIT_EXERCISE_ORDER,
+        _tri(settings, "exercise_order_never", "exercise_order_always", "exercise_order_sometimes"),
+    )
 
     # On travaille sur des dicts (comme le JS) pour pouvoir mélanger avec les
     # exercices/questions/choix « fantômes » insérés par insert_*.
     exercise_list = [_exercise_to_dict(e) for e in project.structure]
     if exercise_new:
         rg.insert_exercises(
-            variant_id, exercise_list,
+            variant_id,
+            exercise_list,
             new_exercises=settings.exercise_new_exercises,
             new_questions=settings.exercise_new_questions,
             new_choices=settings.exercise_new_choices,
@@ -648,27 +831,31 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
         )
 
     # --- NOUVELLE LOGIQUE DE PLACEMENT DES EXERCICES ---
-    # Détermine si on va vers la droite ou vers le bas
-    go_right = ((exercise_dir and variant.layout == "p") or (not exercise_dir and variant.layout == "l"))
+    # Détermine si on va vers la droite ou vers le bas.
+    # exercise_dir True  = ↓ puis → (haut vers le bas)  -> go_right False
+    # exercise_dir False = → puis ↓ (gauche vers la droite) -> go_right True
+    # Le sens de lecture choisi par l'utilisateur s'applique quelle que soit
+    # l'orientation de la page (comportement identique au HTML d'origine).
+    go_right = not exercise_dir
     # Limites de la page (réserve une marge pour ne pas toucher les repères
     # d'alignement placés à page_width - margin_right - 2, rayon 2).
     shapes_right = max(layout.shapes_x) if layout.shapes_x else layout.page_width - layout.margin_right
     max_width = shapes_right - 2
-    max_height = layout.barcode_top
+    # Le pied de page se dessine au-dessus du code-barres (qui est fixe) :
+    # il limite l'espace disponible pour les exercices (footer_height plus la
+    # marge FOOTER_BARCODE_GAP pour les descendantes du pied de page).
 
-    # Initialisation des variables pour les deux modes
+    max_height = layout.barcode_top - layout.footer_height - FOOTER_BARCODE_GAP
     x_max = layout.margin_left
     y_max = variant.id_y + variant.id_height
     x_line_start = variant.id_x
-    y_column_start = variant.id_y
 
     # Initialisation des positions selon le mode
-    if go_right :
+    if go_right:
         # Mode "vers la droite" : première ligne commence après la boîte d'identification
         exercise_x = variant.id_x + variant.id_width
         exercise_y = variant.id_y
         y_max = variant.id_y + variant.id_height  # Point bas maximal initial (boîte d'identification)
-        #x_line_start = variant.id_x + variant.id_width  # Début de ligne (après la boîte)
     else:
         # Mode "vers le bas" : première colonne commence sous la boîte
         # d'identification, alignée sous celle-ci (x = id_x) pour ne pas
@@ -693,41 +880,47 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             exercise_index = 0
         exercise = exercise_list[exercise_index]
         exercise_list.pop(exercise_index)
-        
-        questions_texts: list[dict] = []
-        questions_rects: list[dict] = []
-        questions_circles: list[dict] = []
-        questions_marks: list[dict] = []
-        questions_lines: list[dict] = []
 
-        # Nom de l'exercice.
-        questions_texts.append({"x": 2, "y": 5, "t": exercise.get("name", "")})
         # Introduction (header) en italique.
         header = exercise.get("header", "")
-        choice_dir = rg.pseudo_random(variant_id, variant_id, BIT_CHOICE_DIR,
-                                       _tri(settings, "choice_dir_left", "choice_dir_top", "choice_dir_both"))
+        choice_dir = rg.pseudo_random(
+            variant_id,
+            variant_id,
+            BIT_CHOICE_DIR,
+            _tri(settings, "choice_dir_left", "choice_dir_top", "choice_dir_both"),
+        )
         if header:
             if choice_dir:
                 # Choix verticaux : l'introduction passe sous le nom.
-                questions_texts.append({"x": 2, "y": 11, "t": header, "i": True})
                 exercise_name_width = max(_text_width(exercise.get("name", "")), _text_width(header))
             else:
-                questions_texts.append({"x": 2 + _text_width(exercise.get("name", "")) + 2, "y": 5, "t": header, "i": True})
                 exercise_name_width = _text_width(exercise.get("name", "")) + (2 + _text_width(header))
         else:
             exercise_name_width = _text_width(exercise.get("name", ""))
 
-        question_dir = rg.pseudo_random(variant_id, variant_id, BIT_QUESTION_DIR,
-                                         _tri(settings, "question_dir_left", "question_dir_top", "question_dir_both"))
-        question_new = rg.pseudo_random(variant_id, exercise_iter, BIT_QUESTION_NEW,
-                                         _tri(settings, "question_new_never", "question_new_always", "question_new_sometimes"))
-        question_random = rg.pseudo_random(variant_id, exercise_iter,
-                                            BIT_QUESTION_ORDER,
-                                            _tri(settings, "question_order_never", "question_order_always", "question_order_sometimes"))
+        question_dir = rg.pseudo_random(
+            variant_id,
+            variant_id,
+            BIT_QUESTION_DIR,
+            _tri(settings, "question_dir_left", "question_dir_top", "question_dir_both"),
+        )
+        question_new = rg.pseudo_random(
+            variant_id,
+            exercise_iter,
+            BIT_QUESTION_NEW,
+            _tri(settings, "question_new_never", "question_new_always", "question_new_sometimes"),
+        )
+        question_random = rg.pseudo_random(
+            variant_id,
+            exercise_iter,
+            BIT_QUESTION_ORDER,
+            _tri(settings, "question_order_never", "question_order_always", "question_order_sometimes"),
+        )
         question_list = [_question_to_dict(q) for q in exercise.get("questions", [])]
         if question_new and exercise.get("index", -1) >= 0:
             rg.insert_questions(
-                variant_id + exercise_iter, question_list,
+                variant_id + exercise_iter,
+                question_list,
                 new_questions=settings.question_new_questions,
                 new_choices=settings.question_new_choices,
                 new_questions_name=settings.question_new_questions_name,
@@ -741,87 +934,170 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
             if question_name_width_max < qw:
                 question_name_width_max = qw
 
-        question_x = 0.0
-        question_y = 12.0 if (header and choice_dir) else 6.0
-        question_y_first = question_y
-        exercise_height = 12.0 if (header and choice_dir) else 6.0
-        exercise_width = exercise_name_width + 4
+        # Hauteur disponible pour les questions de cet exercice, selon sa
+        # position : à droite de la boîte d'identification (première ligne en
+        # mode « vers la droite »), la limite est le bas de l'identification
+        # (comme dans le HTML d'origine) ; sous l'identification, la limite est
+        # le code-barres. Sans cette distinction, les questions de la première
+        # ligne s'étendaient plus bas que l'identification et le cadre devenait
+        # plus haut que ceux des lignes suivantes.
+        #
+        # On calcule les questions dans une boucle : si l'exercice ne tient pas
+        # à la position courante et doit retourner à la ligne/colonne, on
+        # recalcule les questions avec la nouvelle position. Sinon la largeur
+        # disponible (max_width - exercise_x) était calculée avec l'ancienne
+        # position et le cadre devenait plus haut (les questions faisaient un
+        # retour à la ligne inutile).
+        place_x, place_y = exercise_x, exercise_y
+        _question_list_saved = [dict(q) for q in question_list]
+        for _layout_pass in range(2):
+            if _layout_pass > 0:
+                question_list = [dict(q) for q in _question_list_saved]
+            questions_texts = []
+            questions_rects = []
+            questions_circles = []
+            questions_marks = []
+            questions_lines = []
+            # Nom de l'exercice (recalculé à chaque passe car les listes sont
+            # réinitialisées).
+            questions_texts.append({"x": 2, "y": 5, "t": exercise.get("name", "")})
+            if header:
+                if choice_dir:
+                    questions_texts.append({"x": 2, "y": 11, "t": header, "i": True})
+                else:
+                    questions_texts.append(
+                        {"x": 2 + _text_width(exercise.get("name", "")) + 2, "y": 5, "t": header, "i": True}
+                    )
 
-        question_iter = 0
-        while question_list:
-            if question_random:
-                question_index = rg.random_index(variant_id, len(question_list))
+            if (
+                go_right
+                and exercise_x >= variant.id_x + variant.id_width
+                and exercise_y < variant.id_y + variant.id_height
+            ):
+                exercise_height_max = variant.id_y + variant.id_height - exercise_y
             else:
-                question_index = 0
-            question = question_list[question_index]
-            question_list.pop(question_index)
-            
-            qt, qr, qc, qm, qw, qh = _place_choices(
-                variant, variant_id, exercise, question,
-                exercise.get("index", -1), question_iter,
-                question_name_width_max, settings,
-            )
+                exercise_height_max = layout.barcode_top - exercise_y
 
-            # Gestion du retour à la ligne/colonne selon la direction.
-            if question_dir:
-                # Espacement vertical avant la question, sauf la première de
-                # sa colonne (pour ne pas ajouter d'espace inutile en haut du
-                # cadre ni après la dernière question).
-                if question_y > question_y_first:
-                    question_y += QUESTION_GAP
-                if question_y + qh > layout.barcode_top - exercise_y:
-                    question_x = exercise_width
-                    question_y = question_y_first
+            question_x = 0.0
+            question_y = 12.0 if (header and choice_dir) else 6.0
+            question_y_first = question_y
+            exercise_height = 12.0 if (header and choice_dir) else 6.0
+            exercise_width = exercise_name_width + 4
+
+            question_iter = 0
+            while question_list:
+                if question_random:
+                    question_index = rg.random_index(variant_id, len(question_list))
+                else:
+                    question_index = 0
+                question = question_list[question_index]
+                question_list.pop(question_index)
+
+                qt, qr, qc, qm, qw, qh = _place_choices(
+                    variant,
+                    variant_id,
+                    exercise,
+                    question,
+                    exercise.get("index", -1),
+                    question_iter,
+                    question_name_width_max,
+                    settings,
+                )
+
+                # Gestion du retour à la ligne/colonne selon la direction.
+                if question_dir:
+                    # Espacement vertical avant la question, sauf la première de
+                    # sa colonne (pour ne pas ajouter d'espace inutile en haut du
+                    # cadre ni après la dernière question).
+                    if question_y > question_y_first:
+                        question_y += QUESTION_GAP
+                    if question_y + qh > exercise_height_max:
+                        question_x = exercise_width
+                        question_y = question_y_first
+                else:
+                    if question_x + qw > max_width - exercise_x:
+                        # Retour à la ligne : espacement vertical + ligne pointillée.
+                        # La ligne n'est tracée que s'il y a déjà une question sur la
+                        # ligne courante (question_x > 0) : sinon la question est plus
+                        # large que le cadre et la ligne pointillée apparaîtrait sous
+                        # le titre de l'exercice sans séparer de questions.
+                        if question_x > 0:
+                            _line_w = exercise_width - 2
+                            if _line_w > 0:
+                                questions_lines.append(
+                                    {"x": 1, "y": exercise_height + QUESTION_GAP, "w": _line_w, "dash": True}
+                                )
+                        question_x = 0
+                        question_y = exercise_height + QUESTION_GAP
+
+                _merge_arrays(questions_texts, qt, question_x, question_y)
+                _merge_arrays(questions_rects, qr, question_x, question_y)
+                _merge_arrays(questions_circles, qc, question_x, question_y)
+                _merge_arrays(questions_marks, qm, question_x, question_y)
+
+                if question_dir:
+                    question_y += qh
+                    if exercise_height < question_y:
+                        exercise_height = question_y
+                    if exercise_width < question_x + qw:
+                        exercise_width = question_x + qw
+                else:
+                    question_x += qw
+                    if exercise_width < question_x:
+                        exercise_width = question_x
+                    if exercise_height < question_y + qh:
+                        exercise_height = question_y + qh
+                question_iter += 1
+
+            # Cadre de l'exercice.
+            # Garantie : le cadre doit contenir le nom et le header (italique)
+            # pour éviter tout débordement de l'introduction hors du cadre.
+            _name_w = _text_width(exercise.get("name", ""))
+            _header_w = _text_width(header) if header else 0.0
+            _min_w = _name_w + 2  # nom à x=2 + marge droite
+            if header:
+                if choice_dir:
+                    _min_w = max(_name_w, _header_w) + 2 + 2  # header sous le nom à x=2
+                else:
+                    _min_w = 2 + _name_w + 2 + _header_w + 2  # nom + header sur la même ligne
+            if exercise_width < _min_w:
+                exercise_width = _min_w
+            questions_rects.append({"x": 0, "y": 0, "w": exercise_width, "h": exercise_height})
+
+            # Test préalable de placement : si l'exercice ne tient pas à la
+            # position courante et doit retourner à la ligne/colonne, on met à
+            # jour la position et on recalcule les questions (deuxième passe de
+            # la boucle) pour que la largeur disponible (max_width - exercise_x)
+            # soit cohérente avec la position réelle. Sans cela, les questions
+            # étaient calculées avec l'ancienne position (souvent en bout de
+            # ligne, peu de largeur) et faisaient un retour à la ligne inutile,
+            # rendant le premier cadre de chaque ligne plus haut que les autres.
+            _need_new_pos = False
+            if go_right:
+                if (exercise_x + exercise_width > max_width) or (exercise_y + exercise_height > max_height):
+                    _need_new_pos = True
             else:
-                if question_x + qw > max_width - exercise_x:
-                    # Retour à la ligne : espacement vertical + ligne pointillée.
-                    _line_w = exercise_width - 2
-                    if _line_w > 0:
-                        questions_lines.append({
-                            "x": 1, "y": exercise_height + QUESTION_GAP,
-                            "w": _line_w, "dash": True})
-                    question_x = 0
-                    question_y = exercise_height + QUESTION_GAP
-
-            _merge_arrays(questions_texts, qt, question_x, question_y)
-            _merge_arrays(questions_rects, qr, question_x, question_y)
-            _merge_arrays(questions_circles, qc, question_x, question_y)
-            _merge_arrays(questions_marks, qm, question_x, question_y)
-
-            if question_dir:
-                question_y += qh
-                if exercise_height < question_y:
-                    exercise_height = question_y
-                if exercise_width < question_x + qw:
-                    exercise_width = question_x + qw
-            else:
-                question_x += qw
-                if exercise_width < question_x:
-                    exercise_width = question_x
-                if exercise_height < question_y + qh:
-                    exercise_height = question_y + qh
-            question_iter += 1
-
-        # Cadre de l'exercice.
-        # Garantie : le cadre doit contenir le nom et le header (italique)
-        # pour éviter tout débordement de l'introduction hors du cadre.
-        _name_w = _text_width(exercise.get("name", ""))
-        _header_w = _text_width(header) if header else 0.0
-        _min_w = _name_w + 2  # nom à x=2 + marge droite
-        if header:
-            if choice_dir:
-                _min_w = max(_name_w, _header_w) + 2 + 2  # header sous le nom à x=2
-            else:
-                _min_w = 2 + _name_w + 2 + _header_w + 2  # nom + header sur la même ligne
-        if exercise_width < _min_w:
-            exercise_width = _min_w
-        questions_rects.append({"x": 0, "y": 0, "w": exercise_width, "h": exercise_height})
+                if (exercise_x + exercise_width > max_width) or (exercise_y + exercise_height > max_height):
+                    _need_new_pos = True
+            if _need_new_pos and _layout_pass == 0:
+                if go_right:
+                    exercise_x = x_line_start
+                    exercise_y = y_max
+                else:
+                    exercise_x = x_max
+                    exercise_y = (
+                        variant.id_y
+                        if exercise_x >= variant.id_x + variant.id_width
+                        else variant.id_y + variant.id_height
+                    )
+                continue
+            break
 
         # --- PLACEMENT DE L'EXERCICE SELON LE MODE (CORRIGÉ) ---
         placed = False
         place_x, place_y = exercise_x, exercise_y  # Position par défaut
 
-        if go_right :
+        if go_right:
             # Mode "vers la droite"
             # 1. Essayer de placer à la position actuelle
             if (place_x + exercise_width <= max_width) and (place_y + exercise_height <= max_height):
@@ -856,8 +1132,9 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
                 # (y = id_y) pour utiliser l'espace libre à sa droite ;
                 # sinon elle commence sous l'identification.
                 place_x = x_max
-                place_y = (variant.id_y if place_x >= variant.id_x + variant.id_width
-                           else variant.id_y + variant.id_height)
+                place_y = (
+                    variant.id_y if place_x >= variant.id_x + variant.id_width else variant.id_y + variant.id_height
+                )
                 if (place_x + exercise_width <= max_width) and (place_y + exercise_height <= max_height):
                     placed = True
                 else:
@@ -884,18 +1161,17 @@ def generate_variant(project: Project, variant_id: int) -> Variant:
 
     if has_error:
         raise GenerateError(
-            f"La variante {variant_id} ne tient pas dans le format "
-            f"{layout.paper_format} ({layout.orientation})."
+            f"La variante {variant_id} ne tient pas dans le format {layout.paper_format} ({layout.orientation})."
         )
     return variant
+
 
 # ---------------------------------------------------------------------------
 # Génération de toutes les variantes d'un projet
 # ---------------------------------------------------------------------------
 
-def generate_all(project: Project,
-                retry: bool = True,
-                max_errors: int = 10) -> tuple[list[int], list[int]]:
+
+def generate_all(project: Project, retry: bool = True, max_errors: int = 10) -> tuple[list[int], list[int]]:
     """Génère les variantes demandées et complète aléatoirement si besoin.
 
     - Teste les IDs fournis dans ``generate_variants`` ; ne conserve que ceux
@@ -919,7 +1195,7 @@ def generate_all(project: Project,
     if raw:
         variant_ids = [int(x) for x in raw]
     else:
-        variant_ids = [random.randint(0, 4095) for _ in range(count)]
+        variant_ids = [random.randint(0, 4095) for _ in range(count)]  # nosec B311
 
     error_count = 0
     failed: list[int] = []
@@ -946,7 +1222,7 @@ def generate_all(project: Project,
     # 2) Compléter aléatoirement jusqu'à atteindre le compte souhaité.
     if retry and error_count < max_errors:
         while len(success) < count and error_count < max_errors:
-            variant_id = random.randint(0, 4095)
+            variant_id = random.randint(0, 4095)  # nosec B311
             if variant_id in seen:
                 continue
             seen.add(variant_id)

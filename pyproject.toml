@@ -5,8 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "qcm-papier"
 version = "0.1.0"
-description = "Générateur/Correcteur de QCM papier — portage Python/GTK3 depuis le code HTML+JS de l'Université Lyon 1"
-readme = "README_python.md"
+description = "Générateur/Correcteur de QCM papier — portage Python/GTK 4 depuis le code HTML+JS de l'Université Lyon 1"
+readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "GPL-3.0-or-later" }
 authors = [
@@ -24,8 +24,26 @@ dependencies = [
 gui = [
     "PyGObject>=3.42",
 ]
+web = [
+    "fastapi>=0.141",
+    "uvicorn>=0.53",
+    "python-multipart>=0.0.32",
+    "keyring>=25",
+]
 test = [
     "pytest>=7.0",
+    "coverage==7.16.1",
+    "httpx>=0.28",
+    "fastapi>=0.141",
+    "uvicorn>=0.53",
+    "python-multipart>=0.0.32",
+    "keyring>=25",
+]
+dev = [
+    "qcm-papier[test]",
+    "ruff==0.6.9",
+    "bandit[toml]==1.9.4",
+    "pre-commit>=3.5",
 ]
 
 [project.scripts]
@@ -36,4 +54,38 @@ where = ["."]
 include = ["qcm_papier*"]
 
 [tool.setuptools.package-data]
-qcm_papier = ["data/scodoc/*.png"]
+qcm_papier = ["data/scodoc/*.png", "web/static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM"]
+ignore = [
+    "E501",    # Le formateur gère les retours à la ligne au mieux.
+    "SIM105",  # Les blocs try/except explicites restent lisibles.
+    "SIM108",  # Les if/else explicites sont acceptés.
+]
+
+[tool.ruff.lint.per-file-ignores]
+# GTK exige gi.require_version avant les imports de gi.repository.
+"qcm_papier/ui/*.py" = ["E402"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Marqueurs FastAPI déclaratifs, évalués lors de la définition des routes.
+extend-immutable-calls = ["fastapi.File", "fastapi.Form", "fastapi.Body"]
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["qcm_papier"]
+
+[tool.coverage.report]
+precision = 1
+show_missing = true

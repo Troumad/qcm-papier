@@ -5,6 +5,37 @@ on:
   pull_request:
 
 jobs:
+  javascript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - name: Syntaxe JavaScript
+        run: |
+          for script in qcm_papier/web/static/*.js; do
+            node --check "$script"
+          done
+      - name: Tests du rendu de l'aide
+        run: node --test tests/js/*.cjs
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          enable-cache: true
+      - name: Installation de l'environnement (verrouillé)
+        run: uv sync --locked --extra dev
+      - name: Vérifications avant commit (dont Ruff bloquant)
+        run: uv run pre-commit run --all-files
+      - name: Recherche de secrets dans l’historique
+        run: uv run pre-commit run gitleaks-history --all-files --hook-stage manual
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -12,20 +43,23 @@ jobs:
       matrix:
         python-version: ["3.10", "3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v10.1.0
         with:
+          enable-cache: true
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies (sans GTK)
-        run: |
-          python -m pip install --upgrade pip
-          pip install .[test]
+      - name: Installation des dépendances (sans GTK, verrouillé)
+        run: uv sync --locked --extra test
 
       - name: Run tests (sans GTK)
         env:
           QCM_PAPIER_NO_GUI: "1"
-        run: |
-          python -m pytest tests/ -v
+        run: uv run coverage run -m pytest tests/ -v
+
+      - name: Couverture complète (GTK inclus)
+        run: uv run coverage report
+
+      - name: Seuil de couverture du code hors GTK
+        run: uv run coverage report --omit="qcm_papier/ui/*" --fail-under=80
