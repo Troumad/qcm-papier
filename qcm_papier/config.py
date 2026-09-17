@@ -8,11 +8,9 @@ Utilisation :
     - to_json_key(internal_key): Convertit une clé interne en clé JSON (ex: 'tolerance' -> 'pos_tolerance')
 """
 
-from typing import Dict
-
 # Mapping bidirectionnel entre les noms INTERNES (sans préfixe) et les noms JSON (avec préfixe pos_)
 # Format: {clé_interne: clé_json}
-POS_FIELD_MAPPING: Dict[str, str] = {
+POS_FIELD_MAPPING: dict[str, str] = {
     # Champs de direction
     "identification_dir_left": "pos_identification_dir_left",
     "identification_dir_top": "pos_identification_dir_top",
@@ -26,7 +24,6 @@ POS_FIELD_MAPPING: Dict[str, str] = {
     "choice_dir_left": "pos_choice_dir_left",
     "choice_dir_top": "pos_choice_dir_top",
     "choice_dir_both": "pos_choice_dir_both",
-    
     # Champs "new" (ajouts fantômes / seconde chance)
     "choice_joker_always": "pos_choice_joker_always",
     "choice_joker_never": "pos_choice_joker_never",
@@ -51,12 +48,10 @@ POS_FIELD_MAPPING: Dict[str, str] = {
     "choice_new_sometimes": "pos_choice_new_sometimes",
     "choice_new_choices": "pos_choice_new_choices",
     "choice_new_choices_name": "pos_choice_new_choices_name",
-    
     # Champs "checked"
     "choice_checked_never": "pos_choice_checked_never",
     "choice_checked_always": "pos_choice_checked_always",
     "choice_checked_sometimes": "pos_choice_checked_sometimes",
-    
     # Champs "order" (ordre aléatoire)
     "exercise_order_never": "pos_exercise_order_never",
     "exercise_order_always": "pos_exercise_order_always",
@@ -70,21 +65,25 @@ POS_FIELD_MAPPING: Dict[str, str] = {
 }
 
 # Mapping inverse pour une recherche rapide (clé JSON -> clé interne)
-_JSON_TO_INTERNAL_MAPPING: Dict[str, str] = {
+_JSON_TO_INTERNAL_MAPPING: dict[str, str] = {
     json_key: internal_key for internal_key, json_key in POS_FIELD_MAPPING.items()
 }
+
 
 def to_internal_key(json_key: str) -> str:
     """Convertit une clé JSON (ex: 'pos_tolerance') en clé interne (ex: 'tolerance')."""
     return _JSON_TO_INTERNAL_MAPPING.get(json_key, json_key)
 
+
 def to_json_key(internal_key: str) -> str:
     """Convertit une clé interne (ex: 'tolerance') en clé JSON (ex: 'pos_tolerance')."""
     return POS_FIELD_MAPPING.get(internal_key, internal_key)
 
+
 def get_all_json_keys() -> list[str]:
     """Retourne la liste de toutes les clés JSON avec préfixe."""
     return list(POS_FIELD_MAPPING.values())
+
 
 def get_all_internal_keys() -> list[str]:
     """Retourne la liste de toutes les clés internes sans préfixe."""

@@ -1,12 +1,17 @@
 """Éditeur de structure du QCM (exercices/questions/choix) en GTK 4."""
 
 from __future__ import annotations
-from typing import Callable
+
+from collections.abc import Callable
+
 import gi
-gi.require_version('Gtk', '4.0')
-gi.require_version('Gdk', '4.0')
-from gi.repository import Gtk, Gdk, GLib
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("Gdk", "4.0")
+from gi.repository import Gdk, GLib, Gtk
+
 from ..model import Choice, Exercise, Project, Question
+
 
 class StructureEditor(Gtk.Box):
     """Panneau d'édition de la structure du QCM."""
@@ -115,9 +120,7 @@ class StructureEditor(Gtk.Box):
         """)
 
         self.get_style_context().add_provider_for_display(
-            Gdk.Display.get_default(),
-            provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
 
         self._fill_tree()
@@ -144,7 +147,6 @@ class StructureEditor(Gtk.Box):
                 question.choices[0].penalty = False
             elif len(correct_choices) > 1:
                 # Plusieurs choix corrects → ne garder que le premier
-                first_correct = correct_choices[0]
                 for c in correct_choices[1:]:
                     c.correct = False
                     c.neutral = True
@@ -178,8 +180,7 @@ class StructureEditor(Gtk.Box):
                 ex_label = f"Exercice {i+1} : {exercise.name} {ex_min:.1f} 🡕 {ex_max:.1f}"
                 ex_up = '<span size="larger"><b>↑</b></span>' if i > 0 else ""
                 ex_down = '<span size="larger"><b>↓</b></span>' if i < n_ex - 1 else ""
-                ex_iter = self.store.append(
-                    None, [ex_label, "exercise", exercise, "", "", ex_up, ex_down])
+                ex_iter = self.store.append(None, [ex_label, "exercise", exercise, "", "", ex_up, ex_down])
 
                 if selected_obj is exercise:
                     selected_iter = ex_iter
@@ -189,9 +190,8 @@ class StructureEditor(Gtk.Box):
                     q_up = "↑" if j > 0 else ""
                     q_down = "↓" if j < n_q - 1 else ""
                     q_iter = self.store.append(
-                        ex_iter,
-                        [self._question_label(j, question), "question",
-                         question, q_up, q_down, "", ""])
+                        ex_iter, [self._question_label(j, question), "question", question, q_up, q_down, "", ""]
+                    )
 
                     if selected_obj is question:
                         selected_iter = q_iter
@@ -215,8 +215,9 @@ class StructureEditor(Gtk.Box):
     def _question_label(self, j, question):
         """Construit le label Pango d'une ligne de question (lettres colorées)."""
         q_min, q_max = question.get_mark_range()
-        choices_str = " ".join([f'<span foreground="{self._get_choice_color(c)}">({c.name})</span>'
-                               for c in question.choices])
+        choices_str = " ".join(
+            [f'<span foreground="{self._get_choice_color(c)}">({c.name})</span>' for c in question.choices]
+        )
         return f"  Q{j+1} : {question.name} {q_min} 🡕 {q_max} {choices_str}"
 
     def _choice_label_color(self, state_index):
@@ -237,7 +238,7 @@ class StructureEditor(Gtk.Box):
             return
         # Retrouver l'exercice et l'index de la question.
         q_index = None
-        for i, exercise in enumerate(self.project.structure):
+        for _i, exercise in enumerate(self.project.structure):
             if question in exercise.questions:
                 q_index = exercise.questions.index(question)
                 break
@@ -246,7 +247,7 @@ class StructureEditor(Gtk.Box):
         # Reconstruire le label à partir des états courants des menus déroulants.
         q_min, q_max = question.get_mark_range()
         parts = []
-        for d, c in zip(dropdowns, question.choices):
+        for d, c in zip(dropdowns, question.choices, strict=False):
             color = self._choice_label_color(d.get_selected())
             parts.append(f'<span foreground="{color}">({c.name})</span>')
         choices_str = " ".join(parts)
@@ -310,8 +311,7 @@ class StructureEditor(Gtk.Box):
 
     def _on_add_exercise(self, _btn):
         """Ajoute un nouvel exercice avec 8 choix par défaut."""
-        ex = Exercise(name=f"Exercice {len(self.project.structure)+1}",
-                      index=len(self.project.structure))
+        ex = Exercise(name=f"Exercice {len(self.project.structure)+1}", index=len(self.project.structure))
         q = Question(name="Question 1", gain=1.0, penalty=0.5, single=True, index=0)
         q.choices = [
             Choice(name="A", correct=True, neutral=False, index=0),
@@ -336,17 +336,23 @@ class StructureEditor(Gtk.Box):
             "Supprimer l'exercice ?",
             f"Voulez-vous vraiment supprimer \u00ab {exercise.name} \u00bb "
             "et toutes ses questions ? Cette action est irr\u00e9versible.",
-            lambda: self._do_remove_exercise(exercise))
+            lambda: self._do_remove_exercise(exercise),
+        )
 
     def add_question(self, exercise):
         """Ajoute une nouvelle question avec 8 choix par défaut."""
-        q = Question(name=f"Question {len(exercise.questions)+1}",
-                    gain=1.0, penalty=0.5, single=True, index=len(exercise.questions))
+        q = Question(
+            name=f"Question {len(exercise.questions)+1}",
+            gain=1.0,
+            penalty=0.5,
+            single=True,
+            index=len(exercise.questions),
+        )
         q.choices = [
             Choice(name="A", correct=True, neutral=False, index=0),
             Choice(name="B", correct=False, neutral=False, penalty=True, index=1),
             Choice(name="C", correct=False, neutral=True, index=2),
-                       Choice(name="D", correct=False, neutral=True, index=3),
+            Choice(name="D", correct=False, neutral=True, index=3),
             Choice(name="E", correct=False, neutral=True, index=4),
             Choice(name="F", correct=False, neutral=True, index=5),
             Choice(name="G", correct=False, neutral=True, index=6),
@@ -357,8 +363,7 @@ class StructureEditor(Gtk.Box):
 
     def add_choice(self, question):
         """Ajoute un nouveau choix."""
-        c = Choice(name=chr(ord("A") + len(question.choices)),
-                  correct=False, neutral=True, index=len(question.choices))
+        c = Choice(name=chr(ord("A") + len(question.choices)), correct=False, neutral=True, index=len(question.choices))
         question.choices.append(c)
         if question.single and len(question.choices) == 1:
             c.correct = True
@@ -386,10 +391,9 @@ class StructureEditor(Gtk.Box):
             message_type=Gtk.MessageType.QUESTION,
             buttons=Gtk.ButtonsType.NONE,
             text=title,
-            secondary_text=message)
-        dialog.add_buttons(
-            "Supprimer", Gtk.ResponseType.YES,
-            "Annuler", Gtk.ResponseType.CANCEL)
+            secondary_text=message,
+        )
+        dialog.add_buttons("Supprimer", Gtk.ResponseType.YES, "Annuler", Gtk.ResponseType.CANCEL)
         dialog.set_default_response(Gtk.ResponseType.CANCEL)
 
         def _on_response(_d, response):
@@ -407,9 +411,9 @@ class StructureEditor(Gtk.Box):
         question = exercise.questions[-1]
         self._confirm_remove(
             "Supprimer la question ?",
-            f"Voulez-vous vraiment supprimer \u00ab {question.name} \u00bb ? "
-            "Cette action est irr\u00e9versible.",
-            lambda: self._do_remove_question(exercise, question))
+            f"Voulez-vous vraiment supprimer \u00ab {question.name} \u00bb ? " "Cette action est irr\u00e9versible.",
+            lambda: self._do_remove_question(exercise, question),
+        )
 
     def _do_remove_question(self, exercise, question):
         """Effectue la suppression effective de la question."""
@@ -427,7 +431,8 @@ class StructureEditor(Gtk.Box):
             "Supprimer l'exercice ?",
             f"Voulez-vous vraiment supprimer \u00ab {exercise.name} \u00bb "
             "et toutes ses questions ? Cette action est irr\u00e9versible.",
-            lambda: self._do_remove_exercise(exercise))
+            lambda: self._do_remove_exercise(exercise),
+        )
 
     def _do_remove_exercise(self, exercise):
         """Effectue la suppression effective de l'exercice."""
@@ -547,16 +552,13 @@ class StructureEditor(Gtk.Box):
 
             state_dropdown = Gtk.DropDown.new_from_strings(["Correct", "Neutre", "Faux"])
             state_dropdown.set_selected(self._get_choice_state_index(choice))
-            state_dropdown.connect("notify::selected",
-                                   self._on_dropdown_in_popover_changed,
-                                   dropdowns, question)
+            state_dropdown.connect("notify::selected", self._on_dropdown_in_popover_changed, dropdowns, question)
             choice_box.append(state_dropdown)
             box.append(choice_box)
             dropdowns.append(state_dropdown)
 
         validate_btn = Gtk.Button(label="Valider")
-        validate_btn.connect("clicked", self._on_choice_menu_validate,
-                             question, dropdowns)
+        validate_btn.connect("clicked", self._on_choice_menu_validate, question, dropdowns)
         box.append(validate_btn)
 
         cell_area = treeview.get_cell_area(path, column)
@@ -598,9 +600,9 @@ class StructureEditor(Gtk.Box):
         selected = dropdown.get_selected()
         idx = dropdowns.index(dropdown)
         choice = question.choices[idx]
-        choice.correct = (selected == 0)
-        choice.neutral = (selected == 1)
-        choice.penalty = (selected == 2)
+        choice.correct = selected == 0
+        choice.neutral = selected == 1
+        choice.penalty = selected == 2
 
         if selected == 0 and question.single:
             # Appliquer l'unicité au MODÈLE immédiatement (les autres choix
@@ -611,6 +613,7 @@ class StructureEditor(Gtk.Box):
                     c.correct = False
                     c.neutral = True
                     c.penalty = False
+
             # Mettre à jour visuellement les menus déroulants des autres choix
             # hors du callback notify::selected (via idle) pour ne pas fermer le
             # popover ; le modèle est déjà corrigé ci-dessus.
@@ -624,6 +627,7 @@ class StructureEditor(Gtk.Box):
                     self._popover_updating = False
                 self._refresh_question_row(question, dropdowns)
                 return False
+
             GLib.idle_add(_deselect_others)
 
         # Couleurs des lettres mises à jour en temps réel dans l'arbre (sans
@@ -682,10 +686,10 @@ class StructureEditor(Gtk.Box):
         name.set_hexpand(True)
         name.connect("changed", lambda e: self._set_and_notify(exercise, "name", e.get_text(), update_tree=False))
         name.connect("activate", lambda e: (self._schedule_update(), self.tree.grab_focus()))
-        
+
         validate_btn = Gtk.Button(label="✓", tooltip_text="Valider (Entrée)")
         validate_btn.connect("clicked", lambda _: (self._schedule_update(), self.tree.grab_focus()))
-        
+
         self.props_box.append(Gtk.Label(label="<b>Exercice</b>", use_markup=True))
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         row.append(Gtk.Label(label="Nom :"))
@@ -693,7 +697,6 @@ class StructureEditor(Gtk.Box):
         row.append(validate_btn)
         self.props_box.append(row)
 
-        
         # Introduction (header) en italique
         header = Gtk.Entry(text=exercise.header or "")
         header.set_hexpand(True)
@@ -720,8 +723,7 @@ class StructureEditor(Gtk.Box):
 
         validation = Gtk.CheckButton(label="Validation par seuil")
         validation.set_active(exercise.validation)
-        validation.connect("toggled",
-                          lambda b: self._set_and_notify(exercise, "validation", b.get_active()))
+        validation.connect("toggled", lambda b: self._set_and_notify(exercise, "validation", b.get_active()))
         self.props_box.append(validation)
 
         # Gain et Seuil sur la même ligne
@@ -739,21 +741,19 @@ class StructureEditor(Gtk.Box):
         self.props_box.append(gain_threshold_row)
         min0 = Gtk.CheckButton(label="Note minimale 0 (pas de points négatifs)")
         min0.set_active(exercise.min0)
-        min0.connect("toggled",
-                    lambda b: self._set_and_notify(exercise, "min0", b.get_active()))
+        min0.connect("toggled", lambda b: self._set_and_notify(exercise, "min0", b.get_active()))
         self.props_box.append(min0)
 
     def _edit_question(self, question):
         """Affiche les propriétés d'une question."""
         name = Gtk.Entry(text=question.name)
         name.set_hexpand(True)
-        name.connect("changed",
-                    lambda e: self._set_and_notify(question, "name", e.get_text(), update_tree=False))
+        name.connect("changed", lambda e: self._set_and_notify(question, "name", e.get_text(), update_tree=False))
         name.connect("activate", lambda e: (self._schedule_update(), self.tree.grab_focus()))
-        
+
         validate_btn = Gtk.Button(label="✓", tooltip_text="Valider (Entrée)")
         validate_btn.connect("clicked", lambda _: (self._schedule_update(), self.tree.grab_focus()))
-        
+
         self.props_box.append(Gtk.Label(label="<b>Question</b>", use_markup=True))
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         row.append(Gtk.Label(label="Nom :"))
@@ -775,9 +775,7 @@ class StructureEditor(Gtk.Box):
         # Le malus est « par réponse fausse » uniquement pour les questions
         # à gain progressif ; pour les autres types, c'est le malus global de la
         # question.
-        penalty_text = ("Malus par réponse fausse :"
-                        if question.multiple_progressive
-                        else "Malus de la question :")
+        penalty_text = "Malus par réponse fausse :" if question.multiple_progressive else "Malus de la question :"
         penalty_label = Gtk.Label(label=penalty_text)
         penalty = Gtk.SpinButton.new_with_range(0, 1000, 0.5)
         penalty.set_value(question.penalty)
@@ -799,12 +797,14 @@ class StructureEditor(Gtk.Box):
         # 🔧 Type de question SUR LA MÊME LIGNE
         type_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         type_label = Gtk.Label(label="Type de question :")
-        type_dropdown = Gtk.DropDown.new_from_strings([
-            "Choix unique",
-            "Choix multiples à correspondance exacte (toute erreur ou omission entraîne le malus)",
-            "Choix multiples à gain progressif (gain dégressif en fonction des omissions, toute erreur entraîne le malus)",
-            "Correction manuelle (réponse libre)"
-        ])
+        type_dropdown = Gtk.DropDown.new_from_strings(
+            [
+                "Choix unique",
+                "Choix multiples à correspondance exacte (toute erreur ou omission entraîne le malus)",
+                "Choix multiples à gain progressif (gain dégressif en fonction des omissions, toute erreur entraîne le malus)",
+                "Correction manuelle (réponse libre)",
+            ]
+        )
 
         if question.manual:
             selected_index = 3
@@ -821,7 +821,6 @@ class StructureEditor(Gtk.Box):
         type_box.append(type_label)
         type_box.append(type_dropdown)
         self.props_box.append(type_box)
-    
 
     def _on_question_type_changed(self, dropdown, _pspec, question):
         """Gère le changement de type de question."""
@@ -846,7 +845,6 @@ class StructureEditor(Gtk.Box):
 
     def _set_and_notify(self, obj, attr, value, update_tree: bool = True):
         """Modifie un attribut et notifie les changements."""
-        old_value = getattr(obj, attr, None)
         setattr(obj, attr, value)
 
         if attr == "single" and value and isinstance(obj, Question):

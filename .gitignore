@@ -1,6 +1,10 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+.ruff_cache/
+.venv/
+.venv-tauri/
+.tauri-tools/
 *.egg-info/
 build/
 dist/
@@ -14,3 +18,15 @@ math/2026/OML1_2026.pdf
 
 # PDF de correction modifié à chaque correction.
 math/2026/correction3.pdf
+
+# Application Tauri : fichiers de compilation
+src-tauri/target/
+src-tauri/gen/
+
+# Sortie de test générée localement
+/test_output.pdf
+
+# Rapports de couverture
+.coverage*
+coverage.xml
+htmlcov/

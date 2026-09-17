@@ -19,18 +19,17 @@ La structure des ``marks`` d'une page suit le format du code original :
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from .model import Exercise, Project, Question
-
 
 # ---------------------------------------------------------------------------
 # Recherche d'une mark
 # ---------------------------------------------------------------------------
 
-def find_mark(marks: list[dict], e: int,
-              q: int | None = None, c: int | None = None,
-              joker: bool = False) -> dict | None:
+
+def find_mark(
+    marks: list[dict], e: int, q: int | None = None, c: int | None = None, joker: bool = False
+) -> dict | None:
     """Cherche une mark correspondant à (exercice, question, choix, joker).
 
     Reprend ``find_mark(e, q, c, joker)`` (index.html ~3381-3415). Les marks
@@ -46,10 +45,9 @@ def find_mark(marks: list[dict], e: int,
             continue
         if joker and mark.get("j"):
             return mark
-        if not joker and mark.get("j") is None and c is not None and mark.get("r") is not None:
+        if not joker and mark.get("j") is None and c is not None and mark.get("r") is not None and mark.get("c") == c:
             # mark de choix (a un rayon r)
-            if mark.get("c") == c:
-                return mark
+            return mark
         if not joker and mark.get("j") is None and c is None:
             # mark de question (pas de rayon r) ou d'exercice.
             if mark.get("r") is None and mark.get("w") is None and mark.get("q") is not None:
@@ -59,16 +57,14 @@ def find_mark(marks: list[dict], e: int,
     return None
 
 
-def find_choice_mark(marks: list[dict], e: int, q: int, c: int,
-                     joker: bool = False) -> dict | None:
+def find_choice_mark(marks: list[dict], e: int, q: int, c: int, joker: bool = False) -> dict | None:
     """Cherche la mark d'un choix (cases à cocher).
 
     Une mark de choix a un rayon ``r`` (et non une largeur ``w``). Les jokers
     ont ``j=True``.
     """
     for mark in marks:
-        if (mark.get("e") == e and mark.get("q") == q
-                and mark.get("c") == c and mark.get("r") is not None):
+        if mark.get("e") == e and mark.get("q") == q and mark.get("c") == c and mark.get("r") is not None:
             if joker and mark.get("j"):
                 return mark
             if not joker and mark.get("j") is None:
@@ -79,8 +75,7 @@ def find_choice_mark(marks: list[dict], e: int, q: int, c: int,
 def find_question_mark(marks: list[dict], e: int, q: int) -> dict | None:
     """Cherche la mark de score d'une question (manual ou synthèse)."""
     for mark in marks:
-        if (mark.get("e") == e and mark.get("q") == q
-                and mark.get("r") is None and mark.get("c") is None):
+        if mark.get("e") == e and mark.get("q") == q and mark.get("r") is None and mark.get("c") is None:
             return mark
     return None
 
@@ -97,8 +92,8 @@ def find_exercise_mark(marks: list[dict], e: int) -> dict | None:
 # Calcul du barème d'une question
 # ---------------------------------------------------------------------------
 
-def _question_score(question: Question, marks: list[dict],
-                    e: int, q: int) -> tuple[float, float, bool]:
+
+def _question_score(question: Question, marks: list[dict], e: int, q: int) -> tuple[float, float, bool]:
     """Calcule (value, total, ok) d'une question.
 
     ``ok`` indique si toutes les cases nécessaires ont été lues (False si une
@@ -161,26 +156,22 @@ def _question_score(question: Question, marks: list[dict],
             # Gain dégressif selon les omissions ; chaque erreur (case pénalité
             # cochée) soustrait la pénalité du gain progressif.
             # ex: gain=4, 1/2 justes -> 2, 2 erreurs x 0.5 -> 2-1 = 1.
-            progressive = float(question.gain) * (box_correct / q_correct) \
-                if (q_correct and box_correct > 0) else 0.0
+            progressive = float(question.gain) * (box_correct / q_correct) if (q_correct and box_correct > 0) else 0.0
             value = progressive - float(question.penalty) * box_penalty
         elif box_penalty > 0:
             value = -float(question.penalty)
-        elif question.single and box_correct > 0:
-            value = float(question.gain)
-        elif question.multiple_exact and box_correct == q_correct:
+        elif question.single and box_correct > 0 or question.multiple_exact and box_correct == q_correct:
             value = float(question.gain)
     else:
         # Cases joker (seconde chance).
         if question.multiple_progressive:
-            progressive = float(question.gain) * (joker_correct / q_correct) \
-                if (q_correct and joker_correct > 0) else 0.0
+            progressive = (
+                float(question.gain) * (joker_correct / q_correct) if (q_correct and joker_correct > 0) else 0.0
+            )
             value = progressive - float(question.penalty) * joker_penalty
         elif joker_penalty > 0:
             value = -float(question.penalty)
-        elif question.single and joker_correct > 0:
-            value = float(question.gain)
-        elif question.multiple_exact and joker_correct == q_correct:
+        elif question.single and joker_correct > 0 or question.multiple_exact and joker_correct == q_correct:
             value = float(question.gain)
 
     total = float(question.gain) if q_correct > 0 else 0.0
@@ -196,8 +187,7 @@ def _question_score(question: Question, marks: list[dict],
     return value, total, ok
 
 
-def _exercise_score(exercise: Exercise, marks: list[dict],
-                    e: int) -> tuple[float, float, bool]:
+def _exercise_score(exercise: Exercise, marks: list[dict], e: int) -> tuple[float, float, bool]:
     """Calcule (value, total, ok) d'un exercice.
 
     Reprend la logique ``if(exercise.validation) ... else if(exercise.sum_bias)
@@ -247,6 +237,7 @@ def _exercise_score(exercise: Exercise, marks: list[dict],
 # Calcul de la note d'une page
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PageScore:
     """Résultat du scoring d'une page (une copie)."""
@@ -257,10 +248,13 @@ class PageScore:
     marks: list[dict] = field(default_factory=list)
 
 
-def score_page(project: Project, marks: list[dict],
-               variant_id: int | None = None,
-               student_id: str | None = None,
-               check_manual_active: bool = False) -> PageScore:
+def score_page(
+    project: Project,
+    marks: list[dict],
+    variant_id: int | None = None,
+    student_id: str | None = None,
+    check_manual_active: bool = False,
+) -> PageScore:
     """Calcule la note d'une page à partir de ses marks.
 
     Reprend ``Page.scoreMarks()`` (index.html ~3378-3580). ``marks`` est la
@@ -292,8 +286,8 @@ def score_page(project: Project, marks: list[dict],
 # Note finale ramenée à un maximum (Scodoc /20 par défaut)
 # ---------------------------------------------------------------------------
 
-def scale_note(value: float, total: float, note_max: float = 20.0,
-               notemax: float = 20.0) -> float:
+
+def scale_note(value: float, total: float, note_max: float = 20.0, notemax: float = 20.0) -> float:
     """Ramène une note ``value/total`` à l'échelle ``/note_max``.
 
     Reprend ``Number.parseFloat(value*20/NOTEMAX)`` de l'export Scodoc

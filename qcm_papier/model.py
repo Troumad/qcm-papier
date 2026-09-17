@@ -24,12 +24,13 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass, field
 from typing import Any
-from . import config
 
+from . import config
 
 # ---------------------------------------------------------------------------
 # Choix
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Choice:
@@ -51,7 +52,7 @@ class Choice:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "ProjectSettings":
+    def from_dict(cls, d: dict[str, Any]) -> ProjectSettings:
         """Charge les paramètres depuis un dictionnaire.
         Gère les clés avec ou sans préfixe 'pos_'."""
         final_dict = {}
@@ -61,9 +62,11 @@ class Choice:
             final_dict[internal_key] = value
         return cls(**final_dict)
 
+
 # ---------------------------------------------------------------------------
 # Question
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Question:
@@ -105,7 +108,7 @@ class Question:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Question":
+    def from_dict(cls, d: dict[str, Any]) -> Question:
         return cls(
             index=int(d.get("index", 0)),
             name=str(d.get("name", "")),
@@ -131,7 +134,7 @@ class Question:
 
     def get_mark_range(self) -> tuple[float, float]:
         """Calcule l'intervalle de notes pour cette question (min, max).
-        
+
         - max = gain si la question a au moins un choix correct, sinon 0
         - min = pire score possible selon le type :
           * choix unique : -penalty (une seule erreur possible)
@@ -140,7 +143,7 @@ class Question:
         """
         has_correct = any(c.correct for c in self.choices)
         penalty_count = sum(1 for c in self.choices if c.penalty)
-        
+
         question_max = self.gain if has_correct else 0.0
         if penalty_count == 0:
             question_min = 0.0
@@ -150,13 +153,14 @@ class Question:
             # multiple_exact / multiple_progressive : chaque case pénalisante
             # cochée soustrait la pénalité (cf. marking._question_score).
             question_min = -self.penalty * penalty_count
-        
+
         return (question_min, question_max)
 
 
 # ---------------------------------------------------------------------------
 # Exercice
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Exercise:
@@ -184,7 +188,7 @@ class Exercise:
 
     def get_mark_range(self) -> tuple[float, float]:
         """Calcule l'intervalle de notes pour cet exercice (min, max).
-        
+
         Basé sur la logique du code original (index.html lignes ~5140-5180).
         Pour cet exercice :
         - max = somme des gains des questions QUI ONT des choix corrects (si sum=True)
@@ -194,33 +198,33 @@ class Exercise:
         """
         exercise_min = 0.0
         exercise_max = 0.0
-        
+
         # Calcul du max
         for question in self.questions:
             # Seules les questions avec au moins un choix correct contribuent
             if any(c.correct for c in question.choices):
                 exercise_max += question.gain
-        
+
         # Calcul du min : somme des pires scores possibles de chaque question
         # (tient compte du type de question, via Question.get_mark_range).
         for question in self.questions:
             q_min, _ = question.get_mark_range()
             exercise_min += q_min
-        
+
         # Appliquer sum_bias
         if self.sum_bias:
             exercise_max -= self.bias
             exercise_min -= self.bias
-        
+
         # Appliquer scale
         if self.scale and self.max > 0 and exercise_max > 0:
             exercise_min = exercise_min * self.max / exercise_max
             exercise_max = self.max
-        
+
         # Appliquer min0 (dernière étape, comme dans le code original)
         if self.min0:
             exercise_min = 0.0
-        
+
         return (exercise_min, exercise_max)
 
     def to_dict(self) -> dict[str, Any]:
@@ -243,7 +247,7 @@ class Exercise:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Exercise":
+    def from_dict(cls, d: dict[str, Any]) -> Exercise:
         return cls(
             index=int(d.get("index", 0)),
             name=str(d.get("name", "")),
@@ -266,6 +270,7 @@ class Exercise:
 # ---------------------------------------------------------------------------
 # Variante et layout
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Layout:
@@ -303,7 +308,7 @@ class Layout:
         return copy.deepcopy(self.__dict__)
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Layout":
+    def from_dict(cls, d: dict[str, Any]) -> Layout:
         # On accepte un dict incomplet (layouts stockés dans variants).
         kwargs = {k: copy.deepcopy(v) for k, v in d.items()}
         # On ne garde que les champs connus.
@@ -339,7 +344,7 @@ class Variant:
         return copy.deepcopy(self.__dict__)
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Variant":
+    def from_dict(cls, d: dict[str, Any]) -> Variant:
         kwargs = {k: copy.deepcopy(v) for k, v in d.items()}
         known = {f.name for f in cls.__dataclass_fields__.values()}
         kwargs = {k: v for k, v in kwargs.items() if k in known}
@@ -372,14 +377,14 @@ class VariantStore(dict):
     def to_plain_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {}
         for key, value in self.items():
-            if isinstance(value, (Layout, Variant)):
+            if isinstance(value, Layout | Variant):
                 out[key] = value.to_dict()
             else:
                 out[key] = copy.deepcopy(value)
         return out
 
     @classmethod
-    def from_plain_dict(cls, d: dict[str, Any]) -> "VariantStore":
+    def from_plain_dict(cls, d: dict[str, Any]) -> VariantStore:
         store = cls()
         for key, value in d.items():
             if key in ("p", "l"):
@@ -442,6 +447,7 @@ class ProjectSettings:
     header_left: str = ""
     header_middle: str = ""
     header_right: str = ""
+    footer_enabled: bool = True
     footer_left: str = ""
     footer_middle: str = ""
     footer_right: str = ""
@@ -542,46 +548,54 @@ class ProjectSettings:
             # Convertir les clés internes en clés JSON (avec préfixe pos_ si nécessaire)
             json_key = config.to_json_key(key)
             result[json_key] = copy.deepcopy(value)
-        return result        
+        return result
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "ProjectSettings":
+    def from_dict(cls, d: dict[str, Any]) -> ProjectSettings:
         s = cls()
         known = s.__dict__
 
         # Mapping des champs info_* vers les champs du modèle
         info_mapping = {
-            'info_university': 'establishment',
-            'info_college': 'institute',
-            'info_departement': 'formation',
-            'info_year': 'year',
-            'info_semester': 'semester',
-            'info_course_unit': 'teaching_unit',
-            'info_course_long': 'module_full',
-            'info_course_short': 'module_short',
-            'info_name_long': 'evaluation_full',
-            'info_name_short': 'evaluation_short',
-            'info_authors_short': 'teachers',
-            'info_date': 'date',
-            'info_duration': 'duration',
+            "info_university": "establishment",
+            "info_college": "institute",
+            "info_departement": "formation",
+            "info_year": "year",
+            "info_semester": "semester",
+            "info_course_unit": "teaching_unit",
+            "info_course_long": "module_full",
+            "info_course_short": "module_short",
+            "info_name_long": "evaluation_full",
+            "info_name_short": "evaluation_short",
+            "info_authors_short": "teachers",
+            "info_date": "date",
+            "info_duration": "duration",
         }
 
         # Champs à convertir en int (même s'ils sont stockés en string dans le JSON)
         int_fields = {
-            'generate_students', 'generate_count',
-            'exercise_new_exercises', 'exercise_new_questions', 'exercise_new_choices',
-            'question_new_questions', 'question_new_choices', 'choice_new_choices',
+            "generate_students",
+            "generate_count",
+            "exercise_new_exercises",
+            "exercise_new_questions",
+            "exercise_new_choices",
+            "question_new_questions",
+            "question_new_choices",
+            "choice_new_choices",
         }
         # Champs à convertir en float (même s'ils sont stockés en string dans le JSON)
         float_fields = {
-            'margin_left', 'margin_top', 'margin_right', 'margin_bottom',
+            "margin_left",
+            "margin_top",
+            "margin_right",
+            "margin_bottom",
         }
 
         def _coerce(value, is_int):
             # Conversion d'une chaîne en int/float ; chaîne vide -> valeur par défaut (10.0)
             if isinstance(value, str):
                 value = value.strip()
-                if value == '':
+                if value == "":
                     return 10.0
                 return int(value) if is_int else float(value)
             return value
@@ -589,7 +603,7 @@ class ProjectSettings:
         for key, value in d.items():
             # Convertir les clés JSON avec préfixe pos_ en clés internes
             internal_key = config.to_internal_key(key)
-            
+
             if internal_key in known:
                 # Conversion automatique pour les champs numériques
                 if internal_key in int_fields:
@@ -609,17 +623,19 @@ class ProjectSettings:
                         setattr(s, target_key, copy.deepcopy(value))
         return s
 
+
 # ---------------------------------------------------------------------------
 # Étudiant (table Scodoc)
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Student:
     """Un étudiant de la table Scodoc (levée d'anonymat)."""
 
-    id: str = ""       # 'p' + 7 chiffres (sans le 'p' initial de Scodoc)
-    eid: str = ""      # etudid
-    nip: str = ""      # code_nip (commence par 'p' dans Scodoc)
+    id: str = ""  # 'p' + 7 chiffres (sans le 'p' initial de Scodoc)
+    eid: str = ""  # etudid
+    nip: str = ""  # code_nip (commence par 'p' dans Scodoc)
     name: str = ""
     firstname: str = ""
 
@@ -633,7 +649,7 @@ class Student:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Student":
+    def from_dict(cls, d: dict[str, Any]) -> Student:
         return cls(
             id=str(d.get("id", "")),
             eid=str(d.get("eid", "")),
@@ -646,6 +662,7 @@ class Student:
 # ---------------------------------------------------------------------------
 # Projet complet
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Project:
@@ -665,29 +682,25 @@ class Project:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Project":
+    def from_dict(cls, d: dict[str, Any]) -> Project:
         # Gérer les anciens JSON où les champs sont à la racine
         settings_dict = d.get("settings", {})
 
         # Si pas de "settings" mais des champs info_* à la racine → ancien format
-        if not settings_dict and any(k.startswith("info_") for k in d.keys()):
+        if not settings_dict and any(k.startswith("info_") for k in d):
             # Extraire tous les champs connus + info_* pour le mapping
             known_fields = {f.name for f in ProjectSettings.__dataclass_fields__.values()}
-            settings_dict = {k: v for k, v in d.items()
-                        if k.startswith("info_") or k in known_fields}
+            settings_dict = {k: v for k, v in d.items() if k.startswith("info_") or k in known_fields}
 
         settings = ProjectSettings.from_dict(settings_dict)
         variants = VariantStore.from_plain_dict(d.get("variants", {}))
         structure = [Exercise.from_dict(e) for e in d.get("structure", [])]
-        students = {
-            k: Student.from_dict(v) for k, v in d.get("students", {}).items()
-        }
-        return cls(settings=settings, variants=variants,
-                structure=structure, students=students)
+        students = {k: Student.from_dict(v) for k, v in d.get("students", {}).items()}
+        return cls(settings=settings, variants=variants, structure=structure, students=students)
 
     def get_mark_range(self) -> tuple[float, float]:
         """Calcule l'intervalle de notes du QCM (min, max).
-        
+
         Basé sur la logique du code original (index.html lignes ~5140-5180).
         Pour chaque exercice :
         - max = somme des gains des questions QUI ONT des choix corrects (si sum=True)
@@ -697,7 +710,7 @@ class Project:
         """
         global_min = 0.0
         global_max = 0.0
-        
+
         for exercise in self.structure:
             # Exercise.get_mark_range tient compte du type de question
             # (pénalité × nombre de choix pénalisants en mode multiple) et
@@ -705,5 +718,5 @@ class Project:
             exercise_min, exercise_max = exercise.get_mark_range()
             global_min += exercise_min
             global_max += exercise_max
-        
+
         return (global_min, global_max)

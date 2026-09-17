@@ -14,7 +14,8 @@ Reproduit les méthodes de la classe ``Page`` du code JavaScript original
 * **Détection des cases cochées** (``autoMarks``).
 * **Calcul de la note** via :mod:`qcm_papier.marking`.
 
-Les accès pixels utilisent Pillow (mode ``RGBA``). La matrice de transformation
+Les accès pixels utilisent Pillow (mode ``RGBA``) ; les calculs sur des zones
+entières (repères, cases, recherche globale) utilisent numpy. La matrice de transformation
 est une matrice affine 2×3 (a, b, c, d, e, f) comme ``DOMMatrix`` du JS.
 """
 
@@ -23,13 +24,13 @@ from __future__ import annotations
 import math
 import os
 from dataclasses import dataclass, field
-from typing import Iterable
 
+import numpy as np
 from PIL import Image
 
 from .code39 import CODE39
-from .marking import score_page, PageScore
-from .model import Layout, Project, Variant, VariantStore
+from .marking import score_page
+from .model import Layout, Project, VariantStore
 
 CLAIR = 140  # variable globale du JS (index.html ligne 4)
 
@@ -48,10 +49,10 @@ def _layout_of(variants, orientation):
     return v if isinstance(v, Layout) else Layout.from_dict(v)
 
 
-
 # ---------------------------------------------------------------------------
 # Matrice affine 2×3 (équivalent DOMMatrix)
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Matrix:
@@ -68,10 +69,9 @@ class Matrix:
     f: float = 0.0
 
     def apply(self, x: float, y: float) -> tuple[float, float]:
-        return (self.a * x + self.c * y + self.e,
-                self.b * x + self.d * y + self.f)
+        return (self.a * x + self.c * y + self.e, self.b * x + self.d * y + self.f)
 
-    def inverse(self) -> "Matrix":
+    def inverse(self) -> Matrix:
         det = self.a * self.d - self.b * self.c
         if det == 0:
             return Matrix()
@@ -79,14 +79,12 @@ class Matrix:
         ib = -self.b / det
         ic = -self.c / det
         id_ = self.a / det
-        ie = -(ic * self.e - id_ * self.f) if False else (-self.c * self.e + self.a * self.f) / det
         ie = (self.c * self.f - self.d * self.e) / det
         if_ = (self.b * self.e - self.a * self.f) / det
         return Matrix(a=ia, b=ib, c=ic, d=id_, e=ie, f=if_)
 
     @staticmethod
-    def compose(cx2: float, cy2: float, scale: float, rotate_deg: float,
-                cx1: float, cy1: float) -> "Matrix":
+    def compose(cx2: float, cy2: float, scale: float, rotate_deg: float, cx1: float, cy1: float) -> Matrix:
         """Construit la matrice translate(cx2,cy2) * scale * rotate *
         translate(-cx1,-cy1) comme ``computeViewport`` du JS."""
         m = Matrix()
@@ -114,6 +112,7 @@ class Matrix:
 # ---------------------------------------------------------------------------
 # Accès pixels via Pillow
 # ---------------------------------------------------------------------------
+
 
 class PixelImage:
     """Encapsule un Pillow Image RGBA pour l'accès aux pixels (x, y)."""
@@ -158,13 +157,44 @@ class PixelImage:
         region = []
         for yy in range(y, y + h):
             for xx in range(x, x + w):
-                region.append(self.pixels[xx, yy] if 0 <= xx < self.width and 0 <= yy < self.height else (255, 255, 255, 255))
+                region.append(
+                    self.pixels[xx, yy] if 0 <= xx < self.width and 0 <= yy < self.height else (255, 255, 255, 255)
+                )
         return region
+
+    def region(self, left: int, top: int, w: int, h: int) -> np.ndarray:
+        """Pixels RGBA d'une région, tableau float64 de forme (h, w, 4).
+
+        Les pixels hors de l'image valent blanc opaque, comme dans
+        ``get_grey`` et ``get_mark_grey``. Seule la zone demandée est lue :
+        aucune copie de la page entière n'est gardée en mémoire.
+        """
+        out = np.full((max(h, 0), max(w, 0), 4), 255.0)
+        x0, y0 = max(left, 0), max(top, 0)
+        x1, y1 = min(left + w, self.width), min(top + h, self.height)
+        if x1 > x0 and y1 > y0:
+            crop = self.img.crop((x0, y0, x1, y1))
+            out[y0 - top : y1 - top, x0 - left : x1 - left] = np.asarray(crop, dtype=np.float64)
+        return out
+
+    def grey_region(self, left: int, top: int, w: int, h: int) -> tuple[np.ndarray, np.ndarray]:
+        """(gris, opaque) d'une région, avec la formule de ``get_grey``."""
+        px = self.region(left, top, w, h)
+        r, g, b = px[..., 0], px[..., 1], px[..., 2]
+        return 0.299 * r + 0.587 * g + 0.114 * b, px[..., 3] == 255
+
+    def mark_grey_region(self, left: int, top: int, w: int, h: int) -> tuple[np.ndarray, np.ndarray]:
+        """(gris, opaque) d'une région, avec la formule de ``get_mark_grey``."""
+        px = self.region(left, top, w, h)
+        r, g, b = px[..., 0], px[..., 1], px[..., 2]
+        grey = 2 * np.minimum(np.minimum(r, g), b) / 3 + (0.299 * r + 0.587 * g + 0.114 * b) / 3
+        return grey, px[..., 3] == 255
 
 
 # ---------------------------------------------------------------------------
 # Page corrigée
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ScannedPage:
@@ -211,8 +241,8 @@ class ScannedPage:
 # Calcul du viewport (matrice page→canvas)
 # ---------------------------------------------------------------------------
 
-def compute_viewport(page: ScannedPage, variants: dict,
-                     dest_x: int, dest_y: int) -> dict:
+
+def compute_viewport(page: ScannedPage, variants: dict, dest_x: int, dest_y: int) -> dict:
     """Calcule la matrice de transformation page→canvas.
 
     Reprend ``Page.computeViewport`` (index.html ~2200-2280).
@@ -227,14 +257,11 @@ def compute_viewport(page: ScannedPage, variants: dict,
     value: dict = {}
     layout = _layout_of(variants, orientation)
     if layout is not None:
-        value = {"width": layout.page_width, "height": layout.page_height,
-                  "rotate": page.rotate}
+        value = {"width": layout.page_width, "height": layout.page_height, "rotate": page.rotate}
     elif orientation == "p" and layout_l is not None:
-        value = {"width": layout_l.page_height, "height": layout_l.page_width,
-                  "rotate": page.rotate}
+        value = {"width": layout_l.page_height, "height": layout_l.page_width, "rotate": page.rotate}
     elif orientation == "l" and layout_p is not None:
-        value = {"width": layout_p.page_height, "height": layout_p.page_width,
-                  "rotate": page.rotate}
+        value = {"width": layout_p.page_height, "height": layout_p.page_width, "rotate": page.rotate}
     elif orientation == "p":
         value = {"width": 210, "height": 297, "rotate": page.rotate}
     else:
@@ -250,9 +277,7 @@ def compute_viewport(page: ScannedPage, variants: dict,
         value["cx2"] = page.adjust["center_x"]
         value["cy2"] = page.adjust["center_y"]
         rm = page.adjust["rotate_mean"]
-        if 0.25 * math.pi <= rm <= 0.75 * math.pi:
-            value["width"], value["height"] = value["height"], value["width"]
-        elif 1.25 * math.pi <= rm <= 1.75 * math.pi:
+        if 0.25 * math.pi <= rm <= 0.75 * math.pi or 1.25 * math.pi <= rm <= 1.75 * math.pi:
             value["width"], value["height"] = value["height"], value["width"]
     else:
         value["cx1"] = dest_x / 2
@@ -260,9 +285,9 @@ def compute_viewport(page: ScannedPage, variants: dict,
         value["cx2"] = value["width"] / 2
         value["cy2"] = value["height"] / 2
 
-    value["matrix"] = Matrix.compose(value["cx2"], value["cy2"],
-                                      value["scale"], value["rotate"],
-                                      value["cx1"], value["cy1"])
+    value["matrix"] = Matrix.compose(
+        value["cx2"], value["cy2"], value["scale"], value["rotate"], value["cx1"], value["cy1"]
+    )
     return value
 
 
@@ -270,9 +295,10 @@ def compute_viewport(page: ScannedPage, variants: dict,
 # Ajustement d'un repère (centrage sur le centre de gravité sombre)
 # ---------------------------------------------------------------------------
 
-def align_adjust_shape(pimg: PixelImage, matrix: Matrix,
-                       page_x: float, page_y: float, range_mm: float,
-                       clair: float) -> dict:
+
+def align_adjust_shape(
+    pimg: PixelImage, matrix: Matrix, page_x: float, page_y: float, range_mm: float, clair: float
+) -> dict:
     """Ajuste la position d'un repère en cherchant le centre de gravité sombre.
 
     Reprend ``Page.alignAdjustShape`` (index.html ~2284-2325).
@@ -289,16 +315,12 @@ def align_adjust_shape(pimg: PixelImage, matrix: Matrix,
     canvas_left = int(canvas_x - canvas_rect_w / 2)
     canvas_top = int(canvas_y - canvas_rect_h / 2)
 
-    sum_x = 0.0
-    sum_y = 0.0
-    sum_c = 0
-    for yy in range(canvas_top, canvas_top + canvas_rect_h):
-        for xx in range(canvas_left, canvas_left + canvas_rect_w):
-            grey, a = pimg.get_grey(xx, yy)
-            if a == 255 and grey < clair:  # pixel sombre opaque
-                sum_x += xx - canvas_left
-                sum_y += yy - canvas_top
-                sum_c += 1
+    grey, opaque = pimg.grey_region(canvas_left, canvas_top, canvas_rect_w, canvas_rect_h)
+    # Pixels sombres opaques ; (dy, dx) = décalage depuis le coin haut-gauche.
+    dy, dx = np.nonzero(opaque & (grey < clair))
+    sum_c = int(dx.size)
+    sum_x = float(dx.sum())
+    sum_y = float(dy.sum())
 
     canvas_radius = canvas_rect_w / shape_rect_w * 2 if shape_rect_w else 0
     if sum_c != 0:
@@ -323,6 +345,7 @@ def _score_ok(score: float) -> bool:
 # ---------------------------------------------------------------------------
 # Alignement automatique (recherche des 5 repères + orientation)
 # ---------------------------------------------------------------------------
+
 
 def align_auto(page: ScannedPage, variants: dict) -> bool:
     """Localise les 5 repères et détermine l'orientation/rotation.
@@ -363,7 +386,7 @@ def align_auto(page: ScannedPage, variants: dict) -> bool:
         return False
 
     p = _layout_of(variants, "p")
-    l = _layout_of(variants, "l")
+    landscape = _layout_of(variants, "l")
     if pimg.height > pimg.width:
         for clair in range(0, 220, 10):
             if not success and p is not None:
@@ -372,24 +395,24 @@ def align_auto(page: ScannedPage, variants: dict) -> bool:
                 sx = [p.page_width - x for x in p.shapes_x]
                 sy = [p.page_height - y for y in p.shapes_y]
                 success = test_shapes(sx, sy, clair)
-            if not success and l is not None:
-                sx = list(l.shapes_y)
-                sy = [l.page_width - x for x in l.shapes_x]
+            if not success and landscape is not None:
+                sx = list(landscape.shapes_y)
+                sy = [landscape.page_width - x for x in landscape.shapes_x]
                 success = test_shapes(sx, sy, clair)
-            if not success and l is not None:
-                sx = [l.page_height - y for y in l.shapes_y]
-                sy = list(l.shapes_x)
+            if not success and landscape is not None:
+                sx = [landscape.page_height - y for y in landscape.shapes_y]
+                sy = list(landscape.shapes_x)
                 success = test_shapes(sx, sy, clair)
             if success:
                 clair = 230
                 break
     else:
         for clair in range(0, 220, 10):
-            if not success and l is not None:
-                success = test_shapes(l.shapes_x, l.shapes_y, clair)
-            if not success and l is not None:
-                sx = [p.page_height - x for x in l.shapes_x] if p else [0] * 5
-                sy = [p.page_width - y for y in l.shapes_y] if p else [0] * 5
+            if not success and landscape is not None:
+                success = test_shapes(landscape.shapes_x, landscape.shapes_y, clair)
+            if not success and landscape is not None:
+                sx = [p.page_height - x for x in landscape.shapes_x] if p else [0] * 5
+                sy = [p.page_width - y for y in landscape.shapes_y] if p else [0] * 5
                 success = test_shapes(sx, sy, clair)
             if not success and p is not None:
                 sx = list(p.shapes_y)
@@ -416,6 +439,7 @@ def _connected_components(mask):
     (cx, cy) est le centroïde et area le nombre de pixels True.
     """
     from collections import deque
+
     sh, sw = mask.shape
     labels = {}
     out = []
@@ -449,12 +473,10 @@ def _connected_components(mask):
                         maxy = y
                     for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
                         ny, nx = y + dy, x + dx
-                        if 0 <= ny < sh and 0 <= nx < sw and mask[ny, nx] \
-                                and (ny, nx) not in labels:
+                        if 0 <= ny < sh and 0 <= nx < sw and mask[ny, nx] and (ny, nx) not in labels:
                             labels[(ny, nx)] = cur
                             q.append((ny, nx))
-                out.append((sumx / cnt, sumy / cnt, cnt,
-                            maxx - minx + 1, maxy - miny + 1))
+                out.append((sumx / cnt, sumy / cnt, cnt, maxx - minx + 1, maxy - miny + 1))
     return out
 
 
@@ -473,16 +495,6 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
     """
     if page.img is None:
         return False
-    try:
-        import numpy as np
-    except ImportError:
-        import warnings
-        warnings.warn(
-            "numpy n'est pas installé : la recherche globale des repères "
-            "(align_auto_global) est désactivée. Installez numpy pour "
-            "corriger les copies mal scannées.",
-            stacklevel=2)
-        return False
 
     layout_p = _layout_of(variants, "p")
     layout_l = _layout_of(variants, "l")
@@ -498,23 +510,19 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
     lh = layout_l.page_height if layout_l else 210
     models = []
     if layout_p is not None:
-        models.append(list(zip(layout_p.shapes_x, layout_p.shapes_y)))  # p0°
-        models.append([(pw - x, ph - y) for x, y in
-                       zip(layout_p.shapes_x, layout_p.shapes_y)])  # p180°
+        models.append(list(zip(layout_p.shapes_x, layout_p.shapes_y, strict=False)))  # p0°
+        models.append([(pw - x, ph - y) for x, y in zip(layout_p.shapes_x, layout_p.shapes_y, strict=False)])  # p180°
     if layout_l is not None:
-        models.append(list(zip(layout_l.shapes_y,
-                                [lw - x for x in layout_l.shapes_x])))  # l90°
-        models.append(list(zip([lh - y for y in layout_l.shapes_y],
-                               layout_l.shapes_x)))  # l270°
-        models.append(list(zip(layout_l.shapes_x, layout_l.shapes_y)))  # l0°
+        models.append(list(zip(layout_l.shapes_y, [lw - x for x in layout_l.shapes_x], strict=False)))  # l90°
+        models.append(list(zip([lh - y for y in layout_l.shapes_y], layout_l.shapes_x, strict=False)))  # l270°
+        models.append(list(zip(layout_l.shapes_x, layout_l.shapes_y, strict=False)))  # l0°
     if layout_l is not None and layout_p is not None:
-        models.append(list(zip([ph - x for x in layout_l.shapes_x],
-                                [pw - y for y in layout_l.shapes_y])))  # l180°
+        models.append(
+            list(zip([ph - x for x in layout_l.shapes_x], [pw - y for y in layout_l.shapes_y], strict=False))
+        )  # l180°
     if layout_p is not None:
-        models.append(list(zip(layout_p.shapes_y,
-                                [pw - x for x in layout_p.shapes_x])))  # p90°
-        models.append(list(zip([ph - y for y in layout_p.shapes_y],
-                               layout_p.shapes_x)))  # p270°
+        models.append(list(zip(layout_p.shapes_y, [pw - x for x in layout_p.shapes_x], strict=False)))  # p90°
+        models.append(list(zip([ph - y for y in layout_p.shapes_y], layout_p.shapes_x, strict=False)))  # p270°
     if not models:
         return False
 
@@ -524,7 +532,7 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
     # Échelle attendue (px/mm) et rayon des repères (2 mm).
     scale_ref = max(W, H) / max(pw, ph, lw, lh)
     # seuil de binarisation ; on prend un seuil modéré pour garder les repères
-    mask = (img < 140)
+    mask = img < 140
     # sous-échantillonnage pour accélérer l'étiquetage (facteur 2)
     step = 2 if min(W, H) > 800 else 1
     if step > 1:
@@ -556,6 +564,59 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
     best = None  # (mean_err, model_pts, blob_idx)
     tol = 18.0  # tolérance de position (px)
     n_blobs = len(blobs)
+
+    def try_match(model, ai, mv, ml, bi, bj):
+        """Teste la paire de blobs (bi, bj) comme image de la paire du modèle
+        d'origine ``model[ai]`` et de vecteur ``mv`` (longueur ``ml``).
+
+        Renvoie (erreur moyenne, appariement) ou None.
+        """
+        dv = blobs[bj] - blobs[bi]
+        dl = math.hypot(float(dv[0]), float(dv[1]))
+        if dl < 5:
+            return None
+        scale = dl / ml
+        if not (scale_ref * 0.4 <= scale <= scale_ref * 2.5):
+            return None
+        ang = math.atan2(float(dv[1]), float(dv[0])) - math.atan2(float(mv[1]), float(mv[0]))
+        cs, sn = math.cos(ang), math.sin(ang)
+        # similarité : pred = blobs[bi] + scale·R·(model - model[ai])
+        rel = model - model[ai]
+        pred = blobs[bi] + scale * (rel @ np.array([[cs, sn], [-sn, cs]]))
+        # appariement greedy au plus proche
+        used = set()
+        assign = []
+        for k in range(5):
+            d = np.hypot(blobs[:, 0] - pred[k, 0], blobs[:, 1] - pred[k, 1])
+            order = np.argsort(d)
+            found = False
+            for idx in order:
+                idx = int(idx)
+                if idx in used:
+                    continue
+                if d[idx] <= tol:
+                    used.add(idx)
+                    assign.append((k, idx, float(d[idx])))
+                    found = True
+                break
+            if not found:
+                return None
+        return sum(a[2] for a in assign) / 5, assign
+
+    # Pré-filtre vectorisé : pour chaque paire du modèle, on écarte d'un coup
+    # les paires de blobs qui ne peuvent pas réussir (distance trop courte,
+    # échelle hors plage, ou un repère prédit sans aucun blob à moins de
+    # ``tol``). Les candidats restants passent, dans le même ordre, par
+    # ``try_match`` qui refait le calcul d'origine : le résultat est identique
+    # à la boucle complète. La marge ``eps`` couvre les écarts d'arrondi entre
+    # calcul vectorisé et calcul scalaire.
+    eps = 1e-6
+    pair_bi, pair_bj = np.nonzero(~np.eye(n_blobs, dtype=bool))
+    pair_dv = blobs[pair_bj] - blobs[pair_bi]
+    pair_dl = np.hypot(pair_dv[:, 0], pair_dv[:, 1])
+    pair_angle = np.arctan2(pair_dv[:, 1], pair_dv[:, 0])
+    # Taille des lots : tableaux intermédiaires (lot × 5 × n_blobs) bornés.
+    chunk = max(1, 1_000_000 // (5 * n_blobs))
     for model_pts in models:
         model = np.array(model_pts, dtype=float)
         # pour chaque paire (i,j) du modèle comme ancre, on essaie chaque paire
@@ -568,50 +629,26 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
                 ml = math.hypot(float(mv[0]), float(mv[1]))
                 if ml < 1e-3:
                     continue
-                for bi in range(n_blobs):
-                    for bj in range(n_blobs):
-                        if bi == bj:
-                            continue
-                        dv = blobs[bj] - blobs[bi]
-                        dl = math.hypot(float(dv[0]), float(dv[1]))
-                        if dl < 5:
-                            continue
-                        scale = dl / ml
-                        if not (scale_ref * 0.4 <= scale <= scale_ref * 2.5):
-                            continue
-                        ang = math.atan2(float(dv[1]), float(dv[0])) \
-                            - math.atan2(float(mv[1]), float(mv[0]))
-                        cs, sn = math.cos(ang), math.sin(ang)
-                        # similarité : pred = blobs[bi] + scale·R·(model - model[ai])
-                        rel = model - model[ai]
-                        pred = blobs[bi] + scale * (
-                            rel @ np.array([[cs, sn], [-sn, cs]])
-                        )
-                        # appariement greedy au plus proche
-                        used = set()
-                        assign = []
-                        ok = True
-                        for k in range(5):
-                            d = np.hypot(blobs[:, 0] - pred[k, 0],
-                                         blobs[:, 1] - pred[k, 1])
-                            order = np.argsort(d)
-                            found = False
-                            for idx in order:
-                                idx = int(idx)
-                                if idx in used:
-                                    continue
-                                if d[idx] <= tol:
-                                    used.add(idx)
-                                    assign.append((k, idx, float(d[idx])))
-                                    found = True
-                                break
-                            if not found:
-                                ok = False
-                                break
-                        if ok and len(assign) == 5:
-                            err = sum(a[2] for a in assign) / 5
-                            if best is None or err < best[0]:
-                                best = (err, model_pts, assign)
+                pair_scale = pair_dl / ml
+                keep = np.nonzero(
+                    (pair_dl >= 5 - eps) & (pair_scale >= scale_ref * 0.4 - eps) & (pair_scale <= scale_ref * 2.5 + eps)
+                )[0]
+                rel = model - model[ai]
+                model_angle = math.atan2(float(mv[1]), float(mv[0]))
+                for start in range(0, len(keep), chunk):
+                    cand = keep[start : start + chunk]
+                    ang = pair_angle[cand] - model_angle
+                    cs = np.cos(ang)[:, None]
+                    sn = np.sin(ang)[:, None]
+                    s = pair_scale[cand][:, None]
+                    pred_x = blobs[pair_bi[cand], 0][:, None] + s * (rel[:, 0] * cs - rel[:, 1] * sn)
+                    pred_y = blobs[pair_bi[cand], 1][:, None] + s * (rel[:, 0] * sn + rel[:, 1] * cs)
+                    # Distance de chaque repère prédit au blob le plus proche.
+                    nearest = np.hypot(pred_x[:, :, None] - blobs[:, 0], pred_y[:, :, None] - blobs[:, 1]).min(axis=2)
+                    for c in cand[(nearest <= tol + eps).all(axis=1)]:
+                        res = try_match(model, ai, mv, ml, int(pair_bi[c]), int(pair_bj[c]))
+                        if res is not None and (best is None or res[0] < best[0]):
+                            best = (res[0], model_pts, res[1])
     if best is None:
         return False
     _err, model_pts, assign = best
@@ -620,9 +657,7 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
     for k, idx, _d in assign:
         order[k] = idx
     page.clear_marks()
-    page.shapes = [{"canvas_x": float(blobs[order[k]][0]),
-                    "canvas_y": float(blobs[order[k]][1])}
-                   for k in range(5)]
+    page.shapes = [{"canvas_x": float(blobs[order[k]][0]), "canvas_y": float(blobs[order[k]][1])} for k in range(5)]
     try:
         align_viewer(page, variants)
     except RuntimeError:
@@ -694,10 +729,18 @@ def align_viewer(page: ScannedPage, variants: dict) -> None:
         if d2 < d1:
             return  # invalid shapes
 
-    canvas_cx = (page.shapes[top_left]["canvas_x"] + page.shapes[top_right]["canvas_x"]
-                 + page.shapes[bottom_left]["canvas_x"] + page.shapes[bottom_right]["canvas_x"]) / 4
-    canvas_cy = (page.shapes[top_left]["canvas_y"] + page.shapes[top_right]["canvas_y"]
-                 + page.shapes[bottom_left]["canvas_y"] + page.shapes[bottom_right]["canvas_y"]) / 4
+    canvas_cx = (
+        page.shapes[top_left]["canvas_x"]
+        + page.shapes[top_right]["canvas_x"]
+        + page.shapes[bottom_left]["canvas_x"]
+        + page.shapes[bottom_right]["canvas_x"]
+    ) / 4
+    canvas_cy = (
+        page.shapes[top_left]["canvas_y"]
+        + page.shapes[top_right]["canvas_y"]
+        + page.shapes[bottom_left]["canvas_y"]
+        + page.shapes[bottom_right]["canvas_y"]
+    ) / 4
 
     def delta_angle(idx):
         dx = page.shapes[idx]["canvas_x"] - canvas_cx
@@ -706,8 +749,7 @@ def align_viewer(page: ScannedPage, variants: dict) -> None:
 
     angles = {}
     dists = {}
-    for name, idx in (("tl", top_left), ("tr", top_right),
-                       ("bl", bottom_left), ("br", bottom_right)):
+    for name, idx in (("tl", top_left), ("tr", top_right), ("bl", bottom_left), ("br", bottom_right)):
         angles[name], dists[name] = delta_angle(idx)
 
     def adjust_orientation(orientation):
@@ -763,11 +805,9 @@ def align_viewer(page: ScannedPage, variants: dict) -> None:
         page.adjust = ap
     elif ap is None:
         page.adjust = al
-    elif (ap["rotate_sigma"] < al["rotate_sigma"]
-          and ap["scale_sigma"] < al["scale_sigma"]):
+    elif ap["rotate_sigma"] < al["rotate_sigma"] and ap["scale_sigma"] < al["scale_sigma"]:
         page.adjust = ap
-    elif (al["rotate_sigma"] < ap["rotate_sigma"]
-          and al["scale_sigma"] < ap["scale_sigma"]):
+    elif al["rotate_sigma"] < ap["rotate_sigma"] and al["scale_sigma"] < ap["scale_sigma"]:
         page.adjust = al
     else:
         raise RuntimeError("Copie invalide.")
@@ -777,8 +817,8 @@ def align_viewer(page: ScannedPage, variants: dict) -> None:
 # Alignement manuel (placement des 5 repères à la main)
 # ---------------------------------------------------------------------------
 
-def align_manual(page: ScannedPage, variants: dict,
-                 points: list[tuple[float, float]]) -> bool:
+
+def align_manual(page: ScannedPage, variants: dict, points: list[tuple[float, float]]) -> bool:
     """Alignement manuel : l'utilisateur clique 5 repères sur l'image scannée.
 
     ``points`` est la liste des 5 positions (x, y) en pixels canvas. On
@@ -794,8 +834,7 @@ def align_manual(page: ScannedPage, variants: dict,
         return False
     page.clear_marks()
     # On conserve uniquement les positions cliquées (canvas_x, canvas_y).
-    page.shapes = [{"canvas_x": float(x), "canvas_y": float(y)}
-                   for (x, y) in points]
+    page.shapes = [{"canvas_x": float(x), "canvas_y": float(y)} for (x, y) in points]
     try:
         align_viewer(page, variants)
     except RuntimeError:
@@ -803,10 +842,13 @@ def align_manual(page: ScannedPage, variants: dict,
     return page.adjust is not None
 
 
-def correct_with_manual_align(page: ScannedPage, project: Project,
-                             points: list[tuple[float, float]],
-                             check_manual_active: bool = False,
-                             clair: float = CLAIR) -> bool:
+def correct_with_manual_align(
+    page: ScannedPage,
+    project: Project,
+    points: list[tuple[float, float]],
+    check_manual_active: bool = False,
+    clair: float = CLAIR,
+) -> bool:
     """Alignement manuel des 5 repères puis correction de la page.
 
     Utilisé quand l'alignement automatique échoue (repères introuvables) :
@@ -818,17 +860,17 @@ def correct_with_manual_align(page: ScannedPage, project: Project,
         return False
     if not align_manual(page, project.variants, points):
         return False
-    return _apply_correction(page, project,
-                             check_manual_active=check_manual_active,
-                             clair=clair)
+    return _apply_correction(page, project, check_manual_active=check_manual_active, clair=clair)
 
 
 # ---------------------------------------------------------------------------
 # Lecture du code-barres
 # ---------------------------------------------------------------------------
 
-def _bresenham_pixels(pimg: PixelImage, x1: int, y1: int, x2: int, y2: int,
-                      scale: float, origin_x: float, origin_y: float) -> list[dict]:
+
+def _bresenham_pixels(
+    pimg: PixelImage, x1: int, y1: int, x2: int, y2: int, scale: float, origin_x: float, origin_y: float
+) -> list[dict]:
     """Parcourt le segment (x1,y1)→(x2,y2) et collecte les pixels (x, g).
 
     Reprend l'algorithme de Bresenham du JS (index.html ~2890-3160) avec une
@@ -866,8 +908,7 @@ def _bresenham_pixels(pimg: PixelImage, x1: int, y1: int, x2: int, y2: int,
     return pixels
 
 
-def _correlate_character(pixels: list[dict], char: str, start: int,
-                         barcode_resolution: float) -> float:
+def _correlate_character(pixels: list[dict], char: str, start: int, barcode_resolution: float) -> float:
     """Corrélation d'un caractère Code 39 avec les pixels à partir de ``start``.
 
     Reprend ``correlate_character`` (index.html ~3140-3200).
@@ -902,9 +943,9 @@ def _correlate_character(pixels: list[dict], char: str, start: int,
     return value
 
 
-def read_barcode_line(pimg: PixelImage, matrix: Matrix, layout: Layout,
-                      left_x: float, left_y: float,
-                      right_x: float, right_y: float) -> str:
+def read_barcode_line(
+    pimg: PixelImage, matrix: Matrix, layout: Layout, left_x: float, left_y: float, right_x: float, right_y: float
+) -> str:
     """Lit une ligne de code-barres et renvoie le texte décodé.
 
     Reprend ``readBarcodeLine`` (index.html ~2806-3160) : tracé de Bresenham,
@@ -919,8 +960,6 @@ def read_barcode_line(pimg: PixelImage, matrix: Matrix, layout: Layout,
     cr_x, cr_y = mi.apply(right_x, right_y)
     cl_x, cl_y = round(cl_x), round(cl_y)
     cr_x, cr_y = round(cr_x), round(cr_y)
-    canvas_left = min(cl_x, cr_x)
-    canvas_top = min(cl_y, cr_y)
     canvas_w = abs(cr_x - cl_x) + 1
     canvas_h = abs(cr_y - cl_y) + 1
     canvas_dist = math.sqrt(canvas_w * canvas_w + canvas_h * canvas_h)
@@ -1040,7 +1079,7 @@ def read_barcode(page: ScannedPage, variants: dict, matrix: Matrix) -> bool:
                 return True
         return False
 
-    for (lx, ly, rx, ry) in [
+    for lx, ly, rx, ry in [
         (bl_x, bl_y, br_x, br_y),
         (bl_x, br_y, br_x, bl_y),
         (bl_x, bl_y, br_x, bl_y),
@@ -1055,9 +1094,8 @@ def read_barcode(page: ScannedPage, variants: dict, matrix: Matrix) -> bool:
 # Lecture d'une case (mark)
 # ---------------------------------------------------------------------------
 
-def read_mark(pimg: PixelImage, matrix_inv: Matrix,
-              page_x: float, page_y: float, radius: float,
-              clair: float) -> bool:
+
+def read_mark(pimg: PixelImage, matrix_inv: Matrix, page_x: float, page_y: float, radius: float, clair: float) -> bool:
     """Détermine si une case (cercle) est cochée.
 
     Reprend ``Page.readMark`` (index.html ~3220-3270). Compte les pixels
@@ -1071,41 +1109,30 @@ def read_mark(pimg: PixelImage, matrix_inv: Matrix,
     canvas_w = 2 * canvas_radius + 1
     canvas_h = 2 * canvas_radius + 1
 
-    dark = 0
-    medium = 0
-    bright = 0
-    for yy in range(canvas_top, canvas_top + canvas_h):
-        for xx in range(canvas_left, canvas_left + canvas_w):
-            grey, alpha = pimg.get_mark_grey(xx, yy)
-            if alpha == 255:
-                # Seuils du code original : sombre si grey < 2*clair/3,
-                # moyen si grey < clair, sinon clair.
-                if grey < 2 * clair / 3:
-                    dark += 1
-                elif grey < clair:
-                    medium += 1
-                else:
-                    bright += 1
-            else:
-                bright += 1
+    grey, opaque = pimg.mark_grey_region(canvas_left, canvas_top, canvas_w, canvas_h)
+    # Seuils du code original : sombre si grey < 2*clair/3, moyen si
+    # grey < clair, sinon clair ; un pixel non opaque compte comme clair.
+    is_dark = grey < 2 * clair / 3
+    dark = int(np.count_nonzero(opaque & is_dark))
+    medium = int(np.count_nonzero(opaque & ~is_dark & (grey < clair)))
+    bright = canvas_w * canvas_h - dark - medium
 
     total = dark + medium + bright
     if total == 0:
         return False
     if dark >= 0.28 * total:
         return True
-    if (dark + medium) >= 0.31 * total:
-        return True
-    return False
+    return (dark + medium) >= 0.31 * total
 
 
 # ---------------------------------------------------------------------------
 # Lecture du numéro étudiant
 # ---------------------------------------------------------------------------
 
-def read_student_id(page: ScannedPage, variants: dict,
-                    matrix_inv: Matrix, clair_start: int = 10,
-                    clair_max: int = 241) -> bool:
+
+def read_student_id(
+    page: ScannedPage, variants: dict, matrix_inv: Matrix, clair_start: int = 10, clair_max: int = 241
+) -> bool:
     """Lit le numéro étudiant (7 chiffres) à partir des cases d'identification.
 
     Reprend ``Page.readStudentId`` (index.html ~3294-3365).
@@ -1124,9 +1151,7 @@ def read_student_id(page: ScannedPage, variants: dict,
             found = False
             for clair in range(20, clair_max, 10):
                 for value in range(10):
-                    if read_mark(pimg, matrix_inv,
-                                  variant.id_columns[value + 1],
-                                  variant.id_lines[digit], 2.3, clair):
+                    if read_mark(pimg, matrix_inv, variant.id_columns[value + 1], variant.id_lines[digit], 2.3, clair):
                         if found:
                             return False
                         found = True
@@ -1145,9 +1170,7 @@ def read_student_id(page: ScannedPage, variants: dict,
             found = False
             for clair in range(clair_start, clair_max, 10):
                 for value in range(10):
-                    if read_mark(pimg, matrix_inv,
-                                  variant.id_columns[digit],
-                                  variant.id_lines[value + 1], 2.3, clair):
+                    if read_mark(pimg, matrix_inv, variant.id_columns[digit], variant.id_lines[value + 1], 2.3, clair):
                         if found:
                             return False
                         found = True
@@ -1172,8 +1195,8 @@ def read_student_id(page: ScannedPage, variants: dict,
 # Détection automatique des cases cochées
 # ---------------------------------------------------------------------------
 
-def auto_marks(page: ScannedPage, matrix_inv: Matrix,
-               clair: float = CLAIR) -> None:
+
+def auto_marks(page: ScannedPage, matrix_inv: Matrix, clair: float = CLAIR) -> None:
     """Détecte les cases cochées parmi les marks de la page.
 
     Reprend ``Page.autoMarks`` (index.html ~3365-3375).
@@ -1182,10 +1205,13 @@ def auto_marks(page: ScannedPage, matrix_inv: Matrix,
         return
     pimg = page.img
     for mark in page.marks:
-        if (mark.get("e") is not None and mark.get("q") is not None
-                and mark.get("c") is not None and mark.get("r") is not None):
-            mark["checked"] = read_mark(pimg, matrix_inv, mark["x"],
-                                        mark["y"], mark["r"], clair)
+        if (
+            mark.get("e") is not None
+            and mark.get("q") is not None
+            and mark.get("c") is not None
+            and mark.get("r") is not None
+        ):
+            mark["checked"] = read_mark(pimg, matrix_inv, mark["x"], mark["y"], mark["r"], clair)
 
 
 def show_marks(page: ScannedPage, project: Project) -> None:
@@ -1223,9 +1249,10 @@ def show_marks(page: ScannedPage, project: Project) -> None:
 # Correction automatique complète d'une page
 # ---------------------------------------------------------------------------
 
-def _apply_correction(page: ScannedPage, project: Project,
-                      check_manual_active: bool = False,
-                      clair: float = CLAIR) -> bool:
+
+def _apply_correction(
+    page: ScannedPage, project: Project, check_manual_active: bool = False, clair: float = CLAIR
+) -> bool:
     """Étape de correction post-alignement : calcule la matrice de
     transformation affine page→canvas (via ``compute_viewport`` à partir de
     ``page.adjust``), lit le code-barres, le n° étudiant, détecte les cases
@@ -1235,14 +1262,13 @@ def _apply_correction(page: ScannedPage, project: Project,
     Renvoie True si le code-barres a pu être lu.
     """
     vs = project.variants
-    matrix = compute_viewport(page, vs,
-                              page.img.width, page.img.height)["matrix"]
+    matrix = compute_viewport(page, vs, page.img.width, page.img.height)["matrix"]
     matrix_inv = matrix.inverse()
     page.matrix = matrix
     page.matrix_inv = matrix_inv
     if not read_barcode(page, vs, matrix):
         return False
-    read_student_id(page, vs, matrix_inv, 41,241)
+    read_student_id(page, vs, matrix_inv, 41, 241)
     if page.student_id is not None:
         student = project.students.get(page.student_id)
         if student is not None:
@@ -1251,18 +1277,20 @@ def _apply_correction(page: ScannedPage, project: Project,
             page.student_firstname = student.firstname
     show_marks(page, project)
     auto_marks(page, matrix_inv, clair=clair)
-    score = score_page(project, page.marks, variant_id=page.variant_id,
-                       student_id=page.student_id,
-                       check_manual_active=check_manual_active)
+    score = score_page(
+        project,
+        page.marks,
+        variant_id=page.variant_id,
+        student_id=page.student_id,
+        check_manual_active=check_manual_active,
+    )
     page.value = score.value
     page.total = score.total
     page.complete = score.complete
     return True
 
 
-def auto_check(page: ScannedPage, project: Project,
-               check_manual_active: bool = False,
-               clair: float = CLAIR) -> bool:
+def auto_check(page: ScannedPage, project: Project, check_manual_active: bool = False, clair: float = CLAIR) -> bool:
     """Corrige automatiquement une page : aligne, lit code-barres, n° étudiant,
     détecte les cases, calcule la note.
 
@@ -1273,9 +1301,7 @@ def auto_check(page: ScannedPage, project: Project,
         return False
     if not align_auto(page, project.variants):
         return False
-    return _apply_correction(page, project,
-                             check_manual_active=check_manual_active,
-                             clair=clair)
+    return _apply_correction(page, project, check_manual_active=check_manual_active, clair=clair)
 
 
 # ---------------------------------------------------------------------------
@@ -1323,7 +1349,8 @@ def render_marked_page(page: ScannedPage, max_width: int = 0):
     ``max_width`` (si > 0) limite la largeur de l'image renvoyée (pour
     l'affichage dans le GUI) en conservant les proportions.
     """
-    from PIL import ImageDraw, Image as PILImage
+    from PIL import Image as PILImage
+    from PIL import ImageDraw
 
     base = page.img.img if page.img is not None else None
     if base is None:
@@ -1361,14 +1388,14 @@ def render_marked_page(page: ScannedPage, max_width: int = 0):
 
     if max_width and max_width > 0 and img.width > max_width:
         ratio = max_width / img.width
-        img = img.resize((max_width, int(img.height * ratio)),
-                         PILImage.LANCZOS)
+        img = img.resize((max_width, int(img.height * ratio)), PILImage.LANCZOS)
     return img
 
 
 # ---------------------------------------------------------------------------
 # Chargement d'un fichier (PDF ou image)
 # ---------------------------------------------------------------------------
+
 
 def load_pages_from_file(path: str, dpi: int = 150) -> list[ScannedPage]:
     """Charge les pages d'un fichier PDF ou d'une image.
@@ -1384,6 +1411,7 @@ def load_pages_from_file(path: str, dpi: int = 150) -> list[ScannedPage]:
         # 1) PyMuPDF (préférable : pas de dépendance système).
         try:
             import pymupdf
+
             # Lire le fichier en bytes pour éviter tout cache de PyMuPDF ou
             # de l'OS : un PDF modifié entre deux corrections est bien relu.
             with open(path, "rb") as _f:
@@ -1391,8 +1419,7 @@ def load_pages_from_file(path: str, dpi: int = 150) -> list[ScannedPage]:
             doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
             for pdf_page in doc:
                 pix = pdf_page.get_pixmap(dpi=dpi)
-                img = Image.frombytes("RGB" if pix.alpha == 0 else "RGBA",
-                                      (pix.width, pix.height), pix.samples)
+                img = Image.frombytes("RGB" if pix.alpha == 0 else "RGBA", (pix.width, pix.height), pix.samples)
                 pages.append(ScannedPage(img=PixelImage(img)))
             doc.close()
             loaded = True
@@ -1402,6 +1429,7 @@ def load_pages_from_file(path: str, dpi: int = 150) -> list[ScannedPage]:
         if not loaded:
             try:
                 from pdf2image import convert_from_path
+
                 images = convert_from_path(path, dpi=dpi)
                 for img in images:
                     pages.append(ScannedPage(img=PixelImage(img)))
@@ -1412,11 +1440,12 @@ def load_pages_from_file(path: str, dpi: int = 150) -> list[ScannedPage]:
             raise RuntimeError(
                 "Aucune bibliothèque de rendu PDF disponible. Installez "
                 "PyMuPDF (``pip install --user pymupdf``) ou pdf2image + "
-                "poppler-utils (``urpmi python3-pdf2image poppler``).")
+                "poppler-utils (``urpmi python3-pdf2image poppler``)."
+            )
     else:
         img = Image.open(path)
         img.load()  # Forcer la lecture en mémoire (sinon Pillow est paresseux
-                    # et peut relire un fichier modifié trop tard).
+        # et peut relire un fichier modifié trop tard).
         pages.append(ScannedPage(img=PixelImage(img)))
     return pages
 
@@ -1425,14 +1454,15 @@ def load_pages_from_file(path: str, dpi: int = 150) -> list[ScannedPage]:
 # Sauvegarde / rechargement d'un état de correction
 # ---------------------------------------------------------------------------
 
+
 def _matrix_to_dict(m: Matrix) -> dict:
     return {"a": m.a, "b": m.b, "c": m.c, "d": m.d, "e": m.e, "f": m.f}
 
 
 def _matrix_from_dict(d: dict) -> Matrix:
-    return Matrix(a=d.get("a", 1.0), b=d.get("b", 0.0),
-                  c=d.get("c", 0.0), d=d.get("d", 1.0),
-                  e=d.get("e", 0.0), f=d.get("f", 0.0))
+    return Matrix(
+        a=d.get("a", 1.0), b=d.get("b", 0.0), c=d.get("c", 0.0), d=d.get("d", 1.0), e=d.get("e", 0.0), f=d.get("f", 0.0)
+    )
 
 
 def _page_to_state(page: ScannedPage) -> dict:
@@ -1451,10 +1481,28 @@ def _page_to_state(page: ScannedPage) -> dict:
         "marks": [],
     }
     for mark in page.marks:
-        m = {k: v for k, v in mark.items()
-             if k in ("x", "y", "r", "e", "q", "c", "w", "h",
-                      "checked", "correct", "neutral", "penalty",
-                      "value", "total", "gain")}
+        m = {
+            k: v
+            for k, v in mark.items()
+            if k
+            in (
+                "x",
+                "y",
+                "r",
+                "e",
+                "q",
+                "c",
+                "w",
+                "h",
+                "checked",
+                "correct",
+                "neutral",
+                "penalty",
+                "value",
+                "total",
+                "gain",
+            )
+        }
         state["marks"].append(m)
     return state
 
@@ -1476,14 +1524,14 @@ def _page_from_state(page: ScannedPage, state: dict) -> None:
     page.marks = list(state.get("marks", []))
 
 
-def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
-                          path: str) -> None:
+def save_correction_state(pages: list[ScannedPage], copy_paths: list[str], path: str) -> None:
     """Sauvegarde l'état de correction des pages dans un fichier JSON.
 
     Les images des copies sont sauvegardées dans un dossier portant le
     même nom que le fichier JSON (sans extension) à côté de celui-ci.
     """
     import json
+
     base = os.path.splitext(path)[0]
     img_dir = base + "_images"
     os.makedirs(img_dir, exist_ok=True)
@@ -1492,12 +1540,10 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
     # Index de page relatif au fichier (pour distinguer les pages d'un
     # même PDF lors du rechargement).
     _file_page_idx: dict[str, int] = {}
-    for i, (copy_path, page) in enumerate(zip(copy_paths, pages)):
+    for _i, (copy_path, page) in enumerate(zip(copy_paths, pages, strict=False)):
         page_index = _file_page_idx.get(copy_path, 0)
         _file_page_idx[copy_path] = page_index + 1
-        corrected = (page.variant_id is not None
-                     or page.student_id is not None
-                     or bool(page.marks))
+        corrected = page.variant_id is not None or page.student_id is not None or bool(page.marks)
         img_name = None
         if page.img is not None and page.img.img is not None:
             base_name = os.path.splitext(os.path.basename(copy_path))[0]
@@ -1539,8 +1585,7 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str],
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def load_correction_state(copy_path: str, page: ScannedPage,
-                           state_path: str, page_index: int = 0) -> bool:
+def load_correction_state(copy_path: str, page: ScannedPage, state_path: str, page_index: int = 0) -> bool:
     """Recharge l'état de correction d'une copie depuis un fichier JSON.
 
     Retourne True si l'état a été trouvé et appliqué.
@@ -1549,9 +1594,10 @@ def load_correction_state(copy_path: str, page: ScannedPage,
     distinguer les pages d'un même PDF lors du rechargement.
     """
     import json
+
     if not os.path.exists(state_path):
         return False
-    with open(state_path, "r", encoding="utf-8") as f:
+    with open(state_path, encoding="utf-8") as f:
         data = json.load(f)
     img_dir = data.get("image_dir")
     abs_copy = os.path.abspath(copy_path)
@@ -1566,8 +1612,7 @@ def load_correction_state(copy_path: str, page: ScannedPage,
         _page_from_state(page, entry["page"])
         img_name = entry.get("image")
         if img_name and img_dir:
-            img_path = os.path.join(os.path.dirname(state_path),
-                                    img_dir, img_name)
+            img_path = os.path.join(os.path.dirname(state_path), img_dir, img_name)
             if os.path.exists(img_path):
                 img = Image.open(img_path)
                 page.img = PixelImage(img)

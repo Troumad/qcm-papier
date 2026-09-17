@@ -15,7 +15,6 @@ aléatoire) se font en testant un bit du seed.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal
 
 # Nombre premier supérieur à 2^15 = 32768, utilisé dans le code original.
 PRIME = 32771
@@ -50,8 +49,7 @@ def tri_from_flags(base: bool, alt: bool, random_flag: bool) -> TriChoice:
     return TriChoice.BASE
 
 
-def pseudo_random(seed: int, delta: int, bit: int,
-                  choice: TriChoice) -> bool:
+def pseudo_random(seed: int, delta: int, bit: int, choice: TriChoice) -> bool:
     """Décision binaire reproductible (renvoie True si « alt »).
 
     Reproduit ``pseudoRandom(seed, delta, bit, button_base, button_alt,
@@ -78,10 +76,10 @@ def pseudo_random(seed: int, delta: int, bit: int,
 # Insertion d'éléments « fantômes »
 # ---------------------------------------------------------------------------
 
-def insert_choices(variant_id: int, choice_list: list,
-                   additional: int = 0,
-                   new_choices_name: str = "X",
-                   new_choices_count: int = 1) -> None:
+
+def insert_choices(
+    variant_id: int, choice_list: list, additional: int = 0, new_choices_name: str = "X", new_choices_count: int = 1
+) -> None:
     """Insère ``new_choices_count + additional`` choix fantômes neutres.
 
     Reproduit ``insertChoices(variant_id, choice_list, additional)``
@@ -95,20 +93,26 @@ def insert_choices(variant_id: int, choice_list: list,
     for _ in range(int(new_choices_count) + additional):
         choice_index = seed % len(choice_list) if choice_list else 0
         seed += PRIME
-        choice_list.insert(choice_index, {
-            "index": -1,
-            "name": new_choices_name,
-            "correct": False,
-            "neutral": True,
-            "penalty": False,
-        })
+        choice_list.insert(
+            choice_index,
+            {
+                "index": -1,
+                "name": new_choices_name,
+                "correct": False,
+                "neutral": True,
+                "penalty": False,
+            },
+        )
 
 
-def insert_questions(variant_id: int, question_list: list,
-                     new_questions: int = 1,
-                     new_choices: int = 4,
-                     new_questions_name: str = "Question",
-                     new_choices_name: str = "X") -> None:
+def insert_questions(
+    variant_id: int,
+    question_list: list,
+    new_questions: int = 1,
+    new_choices: int = 4,
+    new_questions_name: str = "Question",
+    new_choices_name: str = "X",
+) -> None:
     """Insère ``new_questions`` questions fantômes.
 
     Reproduit ``insertQuestions(variant_id, question_list)`` (index.html ~6087).
@@ -135,23 +139,28 @@ def insert_questions(variant_id: int, question_list: list,
             "choices": [],
         }
         for _ in range(int(new_choices)):
-            question["choices"].append({
-                "index": 0,
-                "name": new_choices_name,
-                "correct": False,
-                "neutral": True,
-                "penalty": False,
-            })
+            question["choices"].append(
+                {
+                    "index": 0,
+                    "name": new_choices_name,
+                    "correct": False,
+                    "neutral": True,
+                    "penalty": False,
+                }
+            )
         question_list.insert(question_index, question)
 
 
-def insert_exercises(variant_id: int, exercise_list: list,
-                     new_exercises: int = 1,
-                     new_questions: int = 1,
-                     new_choices: int = 4,
-                     new_exercises_name: str = "Exercice",
-                     new_questions_name: str = "Question",
-                     new_choices_name: str = "X") -> None:
+def insert_exercises(
+    variant_id: int,
+    exercise_list: list,
+    new_exercises: int = 1,
+    new_questions: int = 1,
+    new_choices: int = 4,
+    new_exercises_name: str = "Exercice",
+    new_questions_name: str = "Question",
+    new_choices_name: str = "X",
+) -> None:
     """Insère ``new_exercises`` exercices fantômes.
 
     Reproduit ``insertExercises(variant_id, exercise_list)`` (index.html ~6126).
@@ -195,13 +204,15 @@ def insert_exercises(variant_id: int, exercise_list: list,
                 "choices": [],
             }
             for _ in range(int(new_choices)):
-                question["choices"].append({
-                    "index": 0,
-                    "name": new_choices_name,
-                    "correct": False,
-                    "neutral": True,
-                    "penalty": False,
-                })
+                question["choices"].append(
+                    {
+                        "index": 0,
+                        "name": new_choices_name,
+                        "correct": False,
+                        "neutral": True,
+                        "penalty": False,
+                    }
+                )
             exercise["questions"].append(question)
         exercise_list.insert(exercise_index, exercise)
 
@@ -209,6 +220,7 @@ def insert_exercises(variant_id: int, exercise_list: list,
 # ---------------------------------------------------------------------------
 # Choix d'index pseudo-aléatoire pour l'ordre
 # ---------------------------------------------------------------------------
+
 
 def random_index(seed: int, length: int) -> int:
     """Renvoie ``seed % length`` (sélection d'index pour l'ordre aléatoire).

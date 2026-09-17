@@ -8,7 +8,7 @@ def test_code39_table_complete():
     for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -$.%/+*":
         assert c in code39.CODE39, f"Caractère {c!r} manquant"
     # Chaque motif fait 9 caractères '0'/'1'.
-    for char, pattern in code39.CODE39.items():
+    for _char, pattern in code39.CODE39.items():
         assert len(pattern) == 9
         assert all(c in "01" for c in pattern)
 
