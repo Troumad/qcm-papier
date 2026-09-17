@@ -56,6 +56,12 @@ ou précédemment enregistré ; Enregistrer sous permet de choisir un autre fich
 Les raccourcis sont **Ctrl/Cmd + S** et **Ctrl/Cmd + Maj + S**.
 
 Les exports PDF, ZIP et notes proposent également une destination native.
+**Enregistrer sous** et tous ces exports s'ouvrent par défaut dans le dossier du
+JSON courant, indépendamment du dernier dossier utilisé par une autre application.
+Un export vers un autre dossier ne change pas cette préférence. Après un
+**Enregistrer sous** du JSON réussi, son nouveau dossier devient la référence.
+Pour un projet nouveau sans fichier JSON, le dialogue utilise le choix du système
+jusqu'au premier enregistrement du projet.
 L'écriture passe par un fichier temporaire dans le dossier de destination, puis
 son remplacement. Une annulation ou un échec d'écriture conserve l'indication
 « non enregistré ». Avant de fermer, l'application propose de sauvegarder le

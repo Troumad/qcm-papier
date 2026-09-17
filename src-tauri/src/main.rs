@@ -56,12 +56,13 @@ async fn save_document(
     save_as: bool,
 ) -> Result<Option<String>, String> {
     validate_window(&window, &state)?;
+    let project_path = state
+        .project_path
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone();
     let previous = if project && !save_as {
-        state
-            .project_path
-            .lock()
-            .map_err(|e| e.to_string())?
-            .clone()
+        project_path.clone()
     } else {
         None
     };
@@ -70,6 +71,11 @@ async fn save_document(
     } else {
         let safe_name = name.rsplit(['/', '\\']).next().unwrap_or("document");
         let mut dialog = rfd::AsyncFileDialog::new().set_file_name(safe_name);
+        // Les dialogues système peuvent retenir un dossier utilisé par une autre
+        // application. Toujours repartir du projet courant pour chaque export.
+        if let Some(directory) = project_path.as_deref().and_then(|path| path.parent()) {
+            dialog = dialog.set_directory(directory);
+        }
         if project {
             dialog = dialog.add_filter("Projet QCM", &["json"]);
         }
