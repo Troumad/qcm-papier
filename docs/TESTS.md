@@ -5,7 +5,7 @@ fichiers versionnés et les nouveaux tests. Aucun PDF étudiant privé n'est req
 
 ## Résultats
 
-- 162 tests Python réussis, 5 ignorés car ils nécessitent le PDF local de correction.
+- 175 tests Python réussis, 5 ignorés car ils nécessitent le PDF local de correction.
 - Les mêmes tests passent sous Python 3.10.
 - 17 tests JavaScript (Markdown, sauvegardes et filtres de correction) réussis ; pas de mesure de couverture JavaScript.
 - Ruff étendu, formatage et Bandit passent.
@@ -16,10 +16,10 @@ fichiers versionnés et les nouveaux tests. Aucun PDF étudiant privé n'est req
 
 La mesure combine lignes exécutables et branches conditionnelles :
 
-- **50,9 % sur tout le paquet Python**, GTK inclus.
-- **81,8 % hors `qcm_papier/ui/`**, CLI et point d'entrée inclus.
-- Sur ce dernier périmètre : **85,5 % des lignes** (3334/3901) et
-  **71,3 % des branches conditionnelles** (968/1358).
+- **51,6 % sur tout le paquet Python**, GTK inclus.
+- **82,6 % hors `qcm_papier/ui/`**, CLI et point d'entrée inclus.
+- Sur ce dernier périmètre : **86,1 % des lignes** (3408/3957) et
+  **72,3 % des branches conditionnelles** (1001/1384).
 - Le seuil CI de **80 %** porte sur la mesure combinée hors GTK. Ce seuil protège
   contre les régressions globales ; il ne garantit pas chaque module individuellement.
 
@@ -30,11 +30,11 @@ La mesure combine lignes exécutables et branches conditionnelles :
 | `qcm_papier/code39.py` | 90.9 % |
 | `qcm_papier/config.py` | 80.0 % |
 | `qcm_papier/editing.py` | 93.5 % |
-| `qcm_papier/generator.py` | 82.4 % |
+| `qcm_papier/generator.py` | 83.7 % |
 | `qcm_papier/marking.py` | 79.1 % |
 | `qcm_papier/model.py` | 89.2 % |
 | `qcm_papier/pdf_preview.py` | 100.0 % |
-| `qcm_papier/pdf_writer.py` | 77.2 % |
+| `qcm_papier/pdf_writer.py` | 88.3 % |
 | `qcm_papier/project.py` | 90.4 % |
 | `qcm_papier/random_gen.py` | 100.0 % |
 | `qcm_papier/scanner.py` | 74.8 % |
@@ -62,10 +62,16 @@ l'annulation, l'échec d'écriture, les modifications concurrentes à une sauveg
 le téléchargement effectif du JSON et son rappel après l'export PDF. Un test Python
 vérifie qu'un sujet modifié ne réexporte pas les anciennes variantes, y compris
 après sauvegarde et réouverture.
-Avec le PDF privé présent localement, les **167 tests Python** passent.
+Avec le PDF privé présent localement, les **180 tests Python** passent.
 
 Le lanceur Tauri compile sur macOS ; `cargo fmt --check` et
 `cargo clippy --locked -- -D warnings` passent. Cela ne valide pas les dialogues natifs.
+
+Après intégration de `nouvelle_main` (jusqu'à `b90dac2`), les sept tests de
+positionnement PDF passent : en-tête, cadres, paysage, pied de page multiligne
+et code-barres. Une page synthétique a aussi été contrôlée visuellement : pas
+de chevauchement entre l'en-tête et le cadre, ni entre le pied et le code-barres.
+Le binaire Tauri démarre sur macOS avec un JSON de test et son serveur répond.
 
 ## Limites et prochains tests prioritaires
 
@@ -83,7 +89,7 @@ Le lanceur Tauri compile sur macOS ; `cargo fmt --check` et
 
 ## Reproduire
 
-Le lanceur `lancer-tauri.sh` dispose en complément de six tests avec outils
+Le lanceur `lancer-tauri.sh` dispose de six tests inclus dans le total ci-dessus avec outils
 simulés : chemin du JSON avec espaces, environnement Python séparé, absence de
 projet, aide et arguments invalides. Ils n'installent aucun paquet et n'ouvrent
 aucune fenêtre. La compilation et Clippy du lanceur passent sur macOS ; une
