@@ -192,6 +192,26 @@ def _draw_variant(c: canvaslib.Canvas, variant: Variant, layout: Layout, page_he
     c.setDash()
 
 
+def _shift_variant_y(variant: Variant, dy: float) -> None:
+    """Translate verticalement (en mm) tous les éléments d'une variante.
+
+    Les coordonnées des textes, cadres, cercles, lignes et de la boîte
+    d'identification sont stockées en absolu (déjà décalées de ``id_y`` au
+    moment de la génération). Quand la hauteur de l'en-tête change après
+    génération (projet chargé depuis JSON puis rendu sans --regenerate),
+    ``id_y`` et tout ce qui en dérive doivent suivre le même décalage pour
+    ne pas chevaucher le nouvel en-tête.
+    """
+    if dy == 0:
+        return
+    variant.id_y += dy
+    variant.id_lines = [y + dy for y in variant.id_lines]
+    for array in (variant.texts, variant.rects, variant.circles, variant.marks, variant.lines):
+        for item in array:
+            if "y" in item:
+                item["y"] += dy
+
+
 def generate_pdf(project: Project, output: str | IO[bytes] | None = None, per_student: bool = False) -> bytes:
     """Génère le PDF sujet pour toutes les variantes du projet."""
     from reportlab.lib.pagesizes import A4, landscape
@@ -201,9 +221,15 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None, per_st
     # layouts pré-générés (chemin `qcm-papier pdf` sans --regenerate, GTK, web).
     from .generator import _refresh_header_footer
 
+    # Hauteurs d'en-tête AVANT rafraîchissement : servent à translater les
+    # variantes déjà générées quand la hauteur réservée change, sinon les
+    # cadres (calculés à partir de header_height) restent à l'ancienne
+    # position et l'en-tête actualisé les chevauche.
+    old_header_height: dict[str, float] = {}
     for orientation in ("p", "l"):
         layout = project.variants.layout(orientation)
         if layout is not None:
+            old_header_height[orientation] = layout.header_height
             _refresh_header_footer(layout, project.settings)
 
     variant_ids = []
@@ -213,6 +239,19 @@ def generate_pdf(project: Project, output: str | IO[bytes] | None = None, per_st
 
     if not variant_ids:
         raise ValueError("Aucune variante à générer : lancez d'abord la " "génération des variantes.")
+
+    # Repositionnement des variantes déjà générées si l'en-tête a changé
+    # depuis leur génération. Le décalage est nul pour une variante générée
+    # après le rafraîchissement (déjà à la bonne position).
+    for vid in variant_ids:
+        variant = project.variants.variant(vid)
+        if variant is None:
+            continue
+        layout = project.variants.layout(variant.layout)
+        if layout is None:
+            continue
+        dy = layout.header_height - old_header_height.get(variant.layout, layout.header_height)
+        _shift_variant_y(variant, dy)
 
     copy_count = project.settings.generate_students if per_student else len(variant_ids)
 
