@@ -32,6 +32,7 @@ from .code39 import CODE39
 from .marking import score_page
 from .model import Layout, Project, VariantStore
 
+
 CLAIR = 140  # variable globale du JS (index.html ligne 4)
 
 
@@ -433,10 +434,13 @@ def align_auto(page: ScannedPage, variants: dict) -> bool:
 
 
 def _connected_components(mask):
-    """Étiquetage des composantes connexes (BFS) sur un masque booléen.
+    """
+    Étiquetage des composantes connexes sur un masque booléen.
 
-    Renvoie la liste des composantes : (cx, cy, area, bbox_w, bbox_h) où
-    (cx, cy) est le centroïde et area le nombre de pixels True.
+        Renvoie la liste des composantes : (cx, cy, area, bbox_w, bbox_h) où
+        (cx, cy) est le centroïde et area le nombre de pixels True.
+
+        Utilise un BFS en Python pur optimisé avec NumPy pour les calculs finaux.
     """
     from collections import deque
 
@@ -451,18 +455,17 @@ def _connected_components(mask):
                 cur += 1
                 q = deque([(sy, sx)])
                 labels[(sy, sx)] = cur
-                cnt = 0
-                sumx = 0
-                sumy = 0
+                # Stocker les coordonnées pour calcul vectorisé à la fin
+                ys_list = []
+                xs_list = []
                 minx = sw
                 miny = sh
                 maxx = 0
                 maxy = 0
                 while q:
                     y, x = q.popleft()
-                    cnt += 1
-                    sumx += x
-                    sumy += y
+                    ys_list.append(y)
+                    xs_list.append(x)
                     if x < minx:
                         minx = x
                     if x > maxx:
@@ -476,7 +479,14 @@ def _connected_components(mask):
                         if 0 <= ny < sh and 0 <= nx < sw and mask[ny, nx] and (ny, nx) not in labels:
                             labels[(ny, nx)] = cur
                             q.append((ny, nx))
-                out.append((sumx / cnt, sumy / cnt, cnt, maxx - minx + 1, maxy - miny + 1))
+                # Calcul vectorisé du centroïde
+                cnt = len(xs_list)
+                if cnt > 0:
+                    cx = float(np.sum(xs_list) / cnt)
+                    cy = float(np.sum(ys_list) / cnt)
+                    bbox_w = maxx - minx + 1
+                    bbox_h = maxy - miny + 1
+                    out.append((cx, cy, cnt, bbox_w, bbox_h))
     return out
 
 
@@ -870,15 +880,15 @@ def correct_with_manual_align(
 
 def _bresenham_pixels(
     pimg: PixelImage, x1: int, y1: int, x2: int, y2: int, scale: float, origin_x: float, origin_y: float
-) -> list[dict]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Parcourt le segment (x1,y1)→(x2,y2) et collecte les pixels (x, g).
 
-    Reprend l'algorithme de Bresenham du JS (index.html ~2890-3160) avec une
-    implémentation Python simplifiée mais équivalente (parcours par pas entier).
+    Version optimisée qui retourne des tableaux NumPy au lieu d'une liste de dicts.
     Chaque pixel est enregistré avec sa position ``x`` (distance mm depuis
     l'origine) et ``g`` (niveau de gris inversé : 128 - grey, positif = sombre).
     """
-    pixels: list[dict] = []
+    x_coords = []
+    g_values = []
     dx = abs(x2 - x1)
     dy = abs(y2 - y1)
     sx = 1 if x1 < x2 else -1
@@ -890,6 +900,90 @@ def _bresenham_pixels(
         if a != 255:
             grey = 255
         # distance depuis l'extrémité (x2, y2)
+        delta_x = x - x2
+        delta_y = y - y2
+        dist = math.sqrt(delta_x * delta_x + delta_y * delta_y)
+        x_coords.append(scale * dist)
+        g_values.append(128 - grey)
+        if x == x2 and y == y2:
+            break
+        e2 = 2 * err
+        if e2 > -dy:
+            err -= dy
+            x += sx
+        if e2 < dx:
+            err += dx
+            y += sy
+        if x < 0 or y < 0 or x >= pimg.width or y >= pimg.height:
+            break
+    return np.array(x_coords, dtype=np.float64), np.array(g_values, dtype=np.float64)
+
+
+def _correlate_character(
+    x_coords: np.ndarray, g_values: np.ndarray, char: str, start: int, barcode_resolution: float
+) -> float:
+    """Corrélation d'un caractère Code 39 avec les pixels à partir de ``start``.
+
+    Version vectorisée utilisant NumPy pour les calculs.
+    """
+    code = CODE39.get(char)
+    if code is None or start >= len(x_coords):
+        return 0.0
+
+    # Calculer les poids (w) comme dans l'original
+    # pixels[i]["w"] = abs(pixels[i-1]["x"] - pixels[i+1]["x"]) / 2
+    # On pré-calcule les poids pour tous les pixels
+    n = len(x_coords)
+    weights = np.zeros(n, dtype=np.float64)
+    if n > 2:
+        weights[1:-1] = np.abs(x_coords[:-2] - x_coords[2:]) / 2
+    weights[0] = 0.0
+    weights[-1] = 0.0
+
+    # Calculer les contributions pour chaque barre du code
+    s = x_coords[start]
+    res3 = 3 * barcode_resolution
+    value = 0.0
+    i = start
+    length = len(x_coords)
+
+    for j, bit in enumerate(code):
+        bar_width = res3 if bit == "1" else barcode_resolution
+        if j % 2 == 0:  # barre noire : contribution positive
+            while i < length and (s - x_coords[i]) <= bar_width:
+                value += weights[i] * g_values[i]
+                i += 1
+        else:  # barre blanche : contribution négative
+            while i < length and (s - x_coords[i]) <= bar_width:
+                value -= weights[i] * g_values[i]
+                i += 1
+        if i >= length:
+            return 0.0
+        s -= bar_width
+
+    # Petite barre blanche finale
+    while i < length and (s - x_coords[i]) <= barcode_resolution:
+        value -= weights[i] * g_values[i]
+        i += 1
+
+    return value
+
+
+def _bresenham_pixels_legacy(
+    pimg: PixelImage, x1: int, y1: int, x2: int, y2: int, scale: float, origin_x: float, origin_y: float
+) -> list[dict]:
+    """Version originale pour compatibilité."""
+    pixels: list[dict] = []
+    dx = abs(x2 - x1)
+    dy = abs(y2 - y1)
+    sx = 1 if x1 < x2 else -1
+    sy = 1 if y1 < y2 else -1
+    err = dx - dy
+    x, y = x1, y1
+    while True:
+        grey, a = pimg.get_grey(x, y)
+        if a != 255:
+            grey = 255
         delta_x = x - x2
         delta_y = y - y2
         dist = math.sqrt(delta_x * delta_x + delta_y * delta_y)
@@ -908,11 +1002,8 @@ def _bresenham_pixels(
     return pixels
 
 
-def _correlate_character(pixels: list[dict], char: str, start: int, barcode_resolution: float) -> float:
-    """Corrélation d'un caractère Code 39 avec les pixels à partir de ``start``.
-
-    Reprend ``correlate_character`` (index.html ~3140-3200).
-    """
+def _correlate_character_legacy(pixels: list[dict], char: str, start: int, barcode_resolution: float) -> float:
+    """Version originale pour compatibilité."""
     code = CODE39.get(char)
     if code is None or start >= len(pixels):
         return 0.0
@@ -923,20 +1014,19 @@ def _correlate_character(pixels: list[dict], char: str, start: int, barcode_reso
     res3 = 3 * barcode_resolution
     for j, bit in enumerate(code):
         bar_width = res3 if bit == "1" else barcode_resolution
-        if j % 2 == 0:  # barre noire : contribution positive
+        if j % 2 == 0:
             while (s - pixels[i]["x"]) <= bar_width:
                 value += pixels[i]["w"] * pixels[i]["g"] if "w" in pixels[i] else pixels[i]["g"]
                 i += 1
                 if i >= length:
                     return 0.0
-        else:  # barre blanche : contribution négative
+        else:
             while (s - pixels[i]["x"]) <= bar_width:
                 value -= pixels[i]["w"] * pixels[i]["g"] if "w" in pixels[i] else pixels[i]["g"]
                 i += 1
                 if i >= length:
                     return 0.0
         s -= bar_width
-    # Petite barre blanche finale.
     while i < length and (s - pixels[i]["x"]) <= barcode_resolution:
         value -= pixels[i]["w"] * pixels[i]["g"] if "w" in pixels[i] else pixels[i]["g"]
         i += 1
@@ -948,9 +1038,7 @@ def read_barcode_line(
 ) -> str:
     """Lit une ligne de code-barres et renvoie le texte décodé.
 
-    Reprend ``readBarcodeLine`` (index.html ~2806-3160) : tracé de Bresenham,
-    calcul des poids, repérage des '*' de début/fin, puis corrélation caractère
-    par caractère.
+    Version optimisée utilisant des tableaux NumPy.
     """
     dist_x = right_x - left_x
     dist_y = right_y - left_y
@@ -965,15 +1053,17 @@ def read_barcode_line(
     canvas_dist = math.sqrt(canvas_w * canvas_w + canvas_h * canvas_h)
     scale = dist / canvas_dist if canvas_dist else 1.0
 
-    pixels = _bresenham_pixels(pimg, cl_x, cl_y, cr_x, cr_y, scale, cl_x, cl_y)
-    if len(pixels) < 2:
+    x_coords, g_values = _bresenham_pixels(pimg, cl_x, cl_y, cr_x, cr_y, scale, cl_x, cl_y)
+    if len(x_coords) < 2:
         return ""
 
-    # Poids de chaque pixel (moyenne des distances aux voisins).
-    pixels[0]["w"] = 0.0
-    for i in range(1, len(pixels) - 1):
-        pixels[i]["w"] = abs(pixels[i - 1]["x"] - pixels[i + 1]["x"]) / 2
-    pixels[-1]["w"] = 0.0
+    # Calculer les poids (w) pour tous les pixels
+    n = len(x_coords)
+    weights = np.zeros(n, dtype=np.float64)
+    if n > 2:
+        weights[1:-1] = np.abs(x_coords[:-2] - x_coords[2:]) / 2
+    weights[0] = 0.0
+    weights[-1] = 0.0
 
     barcode_angle = math.atan2(left_y - right_y, left_x - right_x)
     cos_a = math.cos(barcode_angle)
@@ -984,8 +1074,8 @@ def read_barcode_line(
     # Recherche du '*' de début.
     first_pos = None
     first_weight = None
-    for i in range(len(pixels) // 2 - 1):
-        c = _correlate_character(pixels, "*", i, res)
+    for i in range(len(x_coords) // 2 - 1):
+        c = _correlate_character(x_coords, g_values, "*", i, res)
         if c >= correlate_threshold:
             if first_weight is None or c > first_weight:
                 first_pos = i
@@ -996,8 +1086,8 @@ def read_barcode_line(
     # Recherche du '*' de fin.
     last_pos = None
     last_weight = None
-    for i in range(len(pixels) - 1, len(pixels) // 2 + 1, -1):
-        c = _correlate_character(pixels, "*", i, res)
+    for i in range(len(x_coords) - 1, len(x_coords) // 2 + 1, -1):
+        c = _correlate_character(x_coords, g_values, "*", i, res)
         if c >= correlate_threshold:
             if last_weight is None or c > last_weight:
                 last_pos = i
@@ -1009,18 +1099,18 @@ def read_barcode_line(
         return ""
 
     characters = list(CODE39.keys())
-    first_x = pixels[first_pos]["x"]
-    last_x = pixels[last_pos]["x"]
+    first_x = x_coords[first_pos]
+    last_x = x_coords[last_pos]
     nb_chars = layout.barcode_length
     result = ""
     left = 0
     for i in range(nb_chars):
         position = (first_x * (nb_chars - 1 - i) + last_x * i) / (nb_chars - 1)
-        right = len(pixels) - 1
+        right = len(x_coords) - 1
         # Recherche dichotomique du pixel le plus proche de ``position``.
         while left < right:
             middle = (left + right) // 2
-            middle_pos = pixels[middle]["x"]
+            middle_pos = x_coords[middle]
             if middle_pos == position:
                 left = middle
                 break
@@ -1031,17 +1121,17 @@ def read_barcode_line(
         max_weight = 0.0
         max_char = ""
         for ch in characters:
-            c = _correlate_character(pixels, ch, left, res)
+            c = _correlate_character(x_coords, g_values, ch, left, res)
             if c > max_weight:
                 max_weight = c
                 max_char = ch
         if max_weight == 0:
-            if pixels[left]["g"] > 0:
+            if g_values[left] > 0:
                 left -= 1
             else:
                 left += 1
             for ch in characters:
-                c = _correlate_character(pixels, ch, left, res)
+                c = _correlate_character(x_coords, g_values, ch, left, res)
                 if c > max_weight:
                     max_weight = c
                     max_char = ch
