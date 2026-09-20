@@ -3112,7 +3112,14 @@ class MarkedPageWindow(Gtk.Window):
         if page.adjust is not None and page.matrix_inv is not None:
             # Recharger les marks avec la nouvelle variante
             scanner.show_marks(page, self._project)
-            scanner.auto_marks(page, page.matrix_inv, clair=int(self.clair_spin.get_value()))
+            # Utiliser le seuil par défaut ou celui de la fenêtre parente si disponible
+            clair = 140
+            if hasattr(self, "_parent_window") and self._parent_window is not None:
+                try:
+                    clair = int(self._parent_window.clair_spin.get_value())
+                except (AttributeError, ValueError):
+                    pass
+            scanner.auto_marks(page, page.matrix_inv, clair=clair)
 
             # Recalculer la note
             from qcm_papier.marking import score_page
