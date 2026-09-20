@@ -3121,6 +3121,16 @@ class MarkedPageWindow(Gtk.Window):
                     pass
             scanner.auto_marks(page, page.matrix_inv, clair=clair)
 
+            # Essayer de lire l'étudiant si possible
+            if page.matrix is not None:
+                scanner.read_student_id(page, self._project.variants, page.matrix_inv, 41, 241)
+                if page.student_id is not None and hasattr(self._project, "students"):
+                    student = self._project.students.get(page.student_id)
+                    if student is not None:
+                        page.student_eid = student.eid
+                        page.student_name = student.name
+                        page.student_firstname = student.firstname
+
             # Recalculer la note
             from qcm_papier.marking import score_page
 
