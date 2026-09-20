@@ -254,8 +254,8 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.project_path: str | None = None
         # Vrai s'il y a des modifications non enregistrées (drapeau « dirty »).
         self._dirty = False
-        # Dernier fichier corrigé pour la priorité de répertoire
-        self.last_corrected_file: str | None = None
+        # Dernier fichier sélectionné (non effacé) pour la priorité de répertoire
+        self.last_selected_file: str | None = None
 
         # Demander confirmation avant de fermer si le projet est modifié.
         self.connect("close-request", self._on_close_request)
@@ -1823,14 +1823,16 @@ class QcmWindow(Gtk.ApplicationWindow):
             "n_pages": 0,
             "check": check,
         }
+        # Mettre à jour le dernier fichier sélectionné
+        self.last_selected_file = path
 
     def _on_load_copies(self, _btn) -> None:
         # Déterminer le répertoire initial selon la priorité :
-        # 1. Répertoire du dernier fichier corrigé
+        # 1. Répertoire du dernier fichier sélectionné (non effacé)
         # 2. Répertoire du projet JSON
         initial_folder = None
-        if self.last_corrected_file and os.path.exists(self.last_corrected_file):
-            initial_folder = os.path.dirname(self.last_corrected_file)
+        if self.last_selected_file and os.path.exists(self.last_selected_file):
+            initial_folder = os.path.dirname(self.last_selected_file)
         elif self.project_path and os.path.exists(self.project_path):
             initial_folder = os.path.dirname(self.project_path)
 
@@ -1904,6 +1906,9 @@ class QcmWindow(Gtk.ApplicationWindow):
                     self.copies_list.remove(info["row"])
                 if path in self.copies:
                     self.copies.remove(path)
+                # Si le fichier effacé était le dernier sélectionné, le réinitialiser
+                if self.last_selected_file == path:
+                    self.last_selected_file = None
             total = sum(1 for _l, pg in self.marked_pages if getattr(pg, "copy_path", None) in removed)
 
             def progress(i):
@@ -2106,8 +2111,6 @@ class QcmWindow(Gtk.ApplicationWindow):
         n_err = 0
         total = len(to_correct)
         for copy_idx, copy_path in enumerate(to_correct, 1):
-            # Mettre à jour le dernier fichier corrigé
-            self.last_corrected_file = copy_path
             fname = os.path.basename(copy_path)
             info = self.copy_rows.get(copy_path)
             self.marking_status.set_text(f"Correction {copy_idx}/{total} : {fname}")
