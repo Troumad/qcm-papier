@@ -12,12 +12,8 @@ dist/
 # Fichiers générés à chaque lancement (ne pas versionner)
 token-vibe
 
-# PDF régénéré par l'application : on garde l'exemple initial dans le dépôt
-# via les autres OML1_*.pdf, mais OML1_2026.pdf change à chaque lancement.
-math/2026/OML1_2026.pdf
-
-# PDF de correction modifié à chaque correction.
-math/2026/correction3.pdf
+# le répertoire avec les données de travail
+math/
 
 # Application Tauri : fichiers de compilation
 src-tauri/target/
