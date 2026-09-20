@@ -65,7 +65,7 @@ def _file_dialog(parent, title: str, action, filters=None, initial_name=None, in
     return path[0]
 
 
-def _file_dialog_multiple(parent, title: str, filters=None):
+def _file_dialog_multiple(parent, title: str, filters=None, initial_folder=None):
     """Sélecteur de fichiers natif en mode sélection multiple (GTK 4)."""
     dialog = Gtk.FileChooserNative.new(title, parent, Gtk.FileChooserAction.OPEN, None, None)
     dialog.set_select_multiple(True)
@@ -76,6 +76,8 @@ def _file_dialog_multiple(parent, title: str, filters=None):
             for p in patterns:
                 filt.add_pattern(p)
             dialog.add_filter(filt)
+    if initial_folder:
+        dialog.set_current_folder(Gio.File.new_for_path(initial_folder))
 
     paths = []
     from gi.repository import GLib
@@ -252,6 +254,8 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.project_path: str | None = None
         # Vrai s'il y a des modifications non enregistrées (drapeau « dirty »).
         self._dirty = False
+        # Dernier fichier corrigé pour la priorité de répertoire
+        self.last_corrected_file: str | None = None
 
         # Demander confirmation avant de fermer si le projet est modifié.
         self.connect("close-request", self._on_close_request)
@@ -1821,8 +1825,20 @@ class QcmWindow(Gtk.ApplicationWindow):
         }
 
     def _on_load_copies(self, _btn) -> None:
+        # Déterminer le répertoire initial selon la priorité :
+        # 1. Répertoire du dernier fichier corrigé
+        # 2. Répertoire du projet JSON
+        initial_folder = None
+        if self.last_corrected_file and os.path.exists(self.last_corrected_file):
+            initial_folder = os.path.dirname(self.last_corrected_file)
+        elif self.project_path and os.path.exists(self.project_path):
+            initial_folder = os.path.dirname(self.project_path)
+
         paths = _file_dialog_multiple(
-            self, "Choisir les copies", filters=[("PDF et images", ["*.pdf", "*.png", "*.jpg", "*.jpeg"])]
+            self,
+            "Choisir les copies",
+            filters=[("PDF et images", ["*.pdf", "*.png", "*.jpg", "*.jpeg"])],
+            initial_folder=initial_folder,
         )
         if not paths:
             return
@@ -2090,6 +2106,8 @@ class QcmWindow(Gtk.ApplicationWindow):
         n_err = 0
         total = len(to_correct)
         for copy_idx, copy_path in enumerate(to_correct, 1):
+            # Mettre à jour le dernier fichier corrigé
+            self.last_corrected_file = copy_path
             fname = os.path.basename(copy_path)
             info = self.copy_rows.get(copy_path)
             self.marking_status.set_text(f"Correction {copy_idx}/{total} : {fname}")
