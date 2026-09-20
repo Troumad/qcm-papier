@@ -1,22 +1,22 @@
-"""Correction automatique des copies scannées.
+"""Correction automatique des copies scannÃ©es.
 
-Reproduit les méthodes de la classe ``Page`` du code JavaScript original
+Reproduit les mÃ©thodes de la classe ``Page`` du code JavaScript original
 (index.html lignes ~2155-3645) :
 
 * **Chargement** d'un PDF ou d'une image (PyMuPDF / Pillow).
-* **Alignement** : localisation des 5 repères noirs (``alignAuto`` +
-  ``alignAdjustShape``), calcul d'une matrice de transformation page→canvas
-  (``computeViewport``) et détermination de l'orientation/rotation
+* **Alignement** : localisation des 5 repÃ¨res noirs (``alignAuto`` +
+  ``alignAdjustShape``), calcul d'une matrice de transformation pageâcanvas
+  (``computeViewport``) et dÃ©termination de l'orientation/rotation
   (``alignViewer``).
-* **Lecture du code-barres** Code 39 par corrélation (``readBarcode`` +
-  ``readBarcodeLine``) via un tracé de Bresenham.
-* **Lecture du numéro étudiant** (``readStudentId`` + ``readMark``).
-* **Détection des cases cochées** (``autoMarks``).
+* **Lecture du code-barres** Code 39 par corrÃ©lation (``readBarcode`` +
+  ``readBarcodeLine``) via un tracÃ© de Bresenham.
+* **Lecture du numÃ©ro Ã©tudiant** (``readStudentId`` + ``readMark``).
+* **DÃ©tection des cases cochÃ©es** (``autoMarks``).
 * **Calcul de la note** via :mod:`qcm_papier.marking`.
 
-Les accès pixels utilisent Pillow (mode ``RGBA``) ; les calculs sur des zones
-entières (repères, cases, recherche globale) utilisent numpy. La matrice de transformation
-est une matrice affine 2×3 (a, b, c, d, e, f) comme ``DOMMatrix`` du JS.
+Les accÃ¨s pixels utilisent Pillow (mode ``RGBA``) ; les calculs sur des zones
+entiÃ¨res (repÃ¨res, cases, recherche globale) utilisent numpy. La matrice de transformation
+est une matrice affine 2Ã3 (a, b, c, d, e, f) comme ``DOMMatrix`` du JS.
 """
 
 from __future__ import annotations
@@ -31,7 +31,6 @@ from PIL import Image
 from .code39 import CODE39
 from .marking import score_page
 from .model import Layout, Project, VariantStore
-
 
 CLAIR = 140  # variable globale du JS (index.html ligne 4)
 
@@ -51,7 +50,7 @@ def _layout_of(variants, orientation):
 
 
 # ---------------------------------------------------------------------------
-# Matrice affine 2×3 (équivalent DOMMatrix)
+# Matrice affine 2Ã3 (Ã©quivalent DOMMatrix)
 # ---------------------------------------------------------------------------
 
 
@@ -111,12 +110,12 @@ class Matrix:
 
 
 # ---------------------------------------------------------------------------
-# Accès pixels via Pillow
+# AccÃ¨s pixels via Pillow
 # ---------------------------------------------------------------------------
 
 
 class PixelImage:
-    """Encapsule un Pillow Image RGBA pour l'accès aux pixels (x, y)."""
+    """Encapsule un Pillow Image RGBA pour l'accÃ¨s aux pixels (x, y)."""
 
     def __init__(self, img: Image.Image):
         self.img = img.convert("RGBA")
@@ -143,8 +142,8 @@ class PixelImage:
         """Retourne (grey, alpha) d'un pixel avec la formule de readMark du JS.
 
         ``grey = 2*min(r,g,b)/3 + (0.299*r + 0.587*g + 0.114*b)/3`` :
-        donne plus de poids au canal le plus faible (noir/gris foncé), pour
-        mieux distinguer les cases cochées des contours imprimés.
+        donne plus de poids au canal le plus faible (noir/gris foncÃ©), pour
+        mieux distinguer les cases cochÃ©es des contours imprimÃ©s.
         """
         if 0 <= x < self.width and 0 <= y < self.height:
             r, g, b, a = self.pixels[x, y]
@@ -154,7 +153,7 @@ class PixelImage:
         return grey, a
 
     def get_region(self, x: int, y: int, w: int, h: int) -> list[tuple[int, int, int, int]]:
-        """Retourne les pixels RGBA d'une région (liste linéaire)."""
+        """Retourne les pixels RGBA d'une rÃ©gion (liste linÃ©aire)."""
         region = []
         for yy in range(y, y + h):
             for xx in range(x, x + w):
@@ -164,11 +163,11 @@ class PixelImage:
         return region
 
     def region(self, left: int, top: int, w: int, h: int) -> np.ndarray:
-        """Pixels RGBA d'une région, tableau float64 de forme (h, w, 4).
+        """Pixels RGBA d'une rÃ©gion, tableau float64 de forme (h, w, 4).
 
         Les pixels hors de l'image valent blanc opaque, comme dans
-        ``get_grey`` et ``get_mark_grey``. Seule la zone demandée est lue :
-        aucune copie de la page entière n'est gardée en mémoire.
+        ``get_grey`` et ``get_mark_grey``. Seule la zone demandÃ©e est lue :
+        aucune copie de la page entiÃ¨re n'est gardÃ©e en mÃ©moire.
         """
         out = np.full((max(h, 0), max(w, 0), 4), 255.0)
         x0, y0 = max(left, 0), max(top, 0)
@@ -179,13 +178,13 @@ class PixelImage:
         return out
 
     def grey_region(self, left: int, top: int, w: int, h: int) -> tuple[np.ndarray, np.ndarray]:
-        """(gris, opaque) d'une région, avec la formule de ``get_grey``."""
+        """(gris, opaque) d'une rÃ©gion, avec la formule de ``get_grey``."""
         px = self.region(left, top, w, h)
         r, g, b = px[..., 0], px[..., 1], px[..., 2]
         return 0.299 * r + 0.587 * g + 0.114 * b, px[..., 3] == 255
 
     def mark_grey_region(self, left: int, top: int, w: int, h: int) -> tuple[np.ndarray, np.ndarray]:
-        """(gris, opaque) d'une région, avec la formule de ``get_mark_grey``."""
+        """(gris, opaque) d'une rÃ©gion, avec la formule de ``get_mark_grey``."""
         px = self.region(left, top, w, h)
         r, g, b = px[..., 0], px[..., 1], px[..., 2]
         grey = 2 * np.minimum(np.minimum(r, g), b) / 3 + (0.299 * r + 0.587 * g + 0.114 * b) / 3
@@ -193,13 +192,13 @@ class PixelImage:
 
 
 # ---------------------------------------------------------------------------
-# Page corrigée
+# Page corrigÃ©e
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class ScannedPage:
-    """Une page de copie scannée en cours de correction.
+    """Une page de copie scannÃ©e en cours de correction.
 
     Reproduit la classe ``Page`` du code original (index.html ~2155).
     """
@@ -239,12 +238,12 @@ class ScannedPage:
 
 
 # ---------------------------------------------------------------------------
-# Calcul du viewport (matrice page→canvas)
+# Calcul du viewport (matrice pageâcanvas)
 # ---------------------------------------------------------------------------
 
 
 def compute_viewport(page: ScannedPage, variants: dict, dest_x: int, dest_y: int) -> dict:
-    """Calcule la matrice de transformation page→canvas.
+    """Calcule la matrice de transformation pageâcanvas.
 
     Reprend ``Page.computeViewport`` (index.html ~2200-2280).
     """
@@ -293,14 +292,14 @@ def compute_viewport(page: ScannedPage, variants: dict, dest_x: int, dest_y: int
 
 
 # ---------------------------------------------------------------------------
-# Ajustement d'un repère (centrage sur le centre de gravité sombre)
+# Ajustement d'un repÃ¨re (centrage sur le centre de gravitÃ© sombre)
 # ---------------------------------------------------------------------------
 
 
 def align_adjust_shape(
     pimg: PixelImage, matrix: Matrix, page_x: float, page_y: float, range_mm: float, clair: float
 ) -> dict:
-    """Ajuste la position d'un repère en cherchant le centre de gravité sombre.
+    """Ajuste la position d'un repÃ¨re en cherchant le centre de gravitÃ© sombre.
 
     Reprend ``Page.alignAdjustShape`` (index.html ~2284-2325).
     """
@@ -317,7 +316,7 @@ def align_adjust_shape(
     canvas_top = int(canvas_y - canvas_rect_h / 2)
 
     grey, opaque = pimg.grey_region(canvas_left, canvas_top, canvas_rect_w, canvas_rect_h)
-    # Pixels sombres opaques ; (dy, dx) = décalage depuis le coin haut-gauche.
+    # Pixels sombres opaques ; (dy, dx) = dÃ©calage depuis le coin haut-gauche.
     dy, dx = np.nonzero(opaque & (grey < clair))
     sum_c = int(dx.size)
     sum_x = float(dx.sum())
@@ -344,16 +343,16 @@ def _score_ok(score: float) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Alignement automatique (recherche des 5 repères + orientation)
+# Alignement automatique (recherche des 5 repÃ¨res + orientation)
 # ---------------------------------------------------------------------------
 
 
 def align_auto(page: ScannedPage, variants: dict) -> bool:
-    """Localise les 5 repères et détermine l'orientation/rotation.
+    """Localise les 5 repÃ¨res et dÃ©termine l'orientation/rotation.
 
     Reprend ``Page.alignAuto`` (index.html ~2660-2805). Teste les 4 rotations
-    possibles (0°, 90°, 180°, 270°) en miroir portrait/paysage, et plusieurs
-    seuils de clarté (clair de 0 à 220 par pas de 10).
+    possibles (0Â°, 90Â°, 180Â°, 270Â°) en miroir portrait/paysage, et plusieurs
+    seuils de clartÃ© (clair de 0 Ã  220 par pas de 10).
     """
     if page.img is None:
         return False
@@ -428,19 +427,19 @@ def align_auto(page: ScannedPage, variants: dict) -> bool:
                 break
     if success:
         return True
-    # Repli : recherche globale des 5 repères (page fortement décalée/rotée
-    # que la recherche locale ne peut pas récupérer).
+    # Repli : recherche globale des 5 repÃ¨res (page fortement dÃ©calÃ©e/rotÃ©e
+    # que la recherche locale ne peut pas rÃ©cupÃ©rer).
     return align_auto_global(page, variants)
 
 
 def _connected_components(mask):
     """
-    Étiquetage des composantes connexes sur un masque booléen.
+    Ãtiquetage des composantes connexes sur un masque boolÃ©en.
 
-        Renvoie la liste des composantes : (cx, cy, area, bbox_w, bbox_h) où
-        (cx, cy) est le centroïde et area le nombre de pixels True.
+        Renvoie la liste des composantes : (cx, cy, area, bbox_w, bbox_h) oÃ¹
+        (cx, cy) est le centroÃ¯de et area le nombre de pixels True.
 
-        Utilise un BFS en Python pur optimisé avec NumPy pour les calculs finaux.
+        Utilise un BFS en Python pur optimisÃ© avec NumPy pour les calculs finaux.
     """
     from collections import deque
 
@@ -455,7 +454,7 @@ def _connected_components(mask):
                 cur += 1
                 q = deque([(sy, sx)])
                 labels[(sy, sx)] = cur
-                # Stocker les coordonnées pour calcul vectorisé à la fin
+                # Stocker les coordonnÃ©es pour calcul vectorisÃ© Ã  la fin
                 ys_list = []
                 xs_list = []
                 minx = sw
@@ -479,7 +478,7 @@ def _connected_components(mask):
                         if 0 <= ny < sh and 0 <= nx < sw and mask[ny, nx] and (ny, nx) not in labels:
                             labels[(ny, nx)] = cur
                             q.append((ny, nx))
-                # Calcul vectorisé du centroïde
+                # Calcul vectorisÃ© du centroÃ¯de
                 cnt = len(xs_list)
                 if cnt > 0:
                     cx = float(np.sum(xs_list) / cnt)
@@ -491,17 +490,17 @@ def _connected_components(mask):
 
 
 def align_auto_global(page: ScannedPage, variants: dict) -> bool:
-    """Recherche globale des 5 repères quand l'alignement local échoue.
+    """Recherche globale des 5 repÃ¨res quand l'alignement local Ã©choue.
 
-    Contrairement à ``align_auto`` (qui cherche les repères près de leurs
-    positions théoriques via ``align_adjust_shape``), cette fonction détecte
+    Contrairement Ã  ``align_auto`` (qui cherche les repÃ¨res prÃ¨s de leurs
+    positions thÃ©oriques via ``align_adjust_shape``), cette fonction dÃ©tecte
     tous les blobs sombres de l'image, puis cherche une transformation de
-    similarité (translation + rotation + échelle) qui aligne le motif des 5
-    repères du layout sur 5 des blobs détectés. Permet de corriger une page
-    mal scannée (fortement décalée/rotée/redimensionnée) que la recherche
-    locale ne peut pas récupérer.
+    similaritÃ© (translation + rotation + Ã©chelle) qui aligne le motif des 5
+    repÃ¨res du layout sur 5 des blobs dÃ©tectÃ©s. Permet de corriger une page
+    mal scannÃ©e (fortement dÃ©calÃ©e/rotÃ©e/redimensionnÃ©e) que la recherche
+    locale ne peut pas rÃ©cupÃ©rer.
 
-    Renvoie True si les 5 repères ont été localisés et ``page.adjust`` calculé.
+    Renvoie True si les 5 repÃ¨res ont Ã©tÃ© localisÃ©s et ``page.adjust`` calculÃ©.
     """
     if page.img is None:
         return False
@@ -511,46 +510,46 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
     if layout_p is None and layout_l is None:
         return False
 
-    # Modèles des 5 repères en coordonnées page (mm) pour les 8 orientations
-    # possibles (4 rotations × portrait/paysage), reproduits comme dans
-    # align_auto (combinaisons de shapes_x/shapes_y avec symétries).
+    # ModÃ¨les des 5 repÃ¨res en coordonnÃ©es page (mm) pour les 8 orientations
+    # possibles (4 rotations Ã portrait/paysage), reproduits comme dans
+    # align_auto (combinaisons de shapes_x/shapes_y avec symÃ©tries).
     pw = layout_p.page_width if layout_p else 210
     ph = layout_p.page_height if layout_p else 297
     lw = layout_l.page_width if layout_l else 297
     lh = layout_l.page_height if layout_l else 210
     models = []
     if layout_p is not None:
-        models.append(list(zip(layout_p.shapes_x, layout_p.shapes_y, strict=False)))  # p0°
-        models.append([(pw - x, ph - y) for x, y in zip(layout_p.shapes_x, layout_p.shapes_y, strict=False)])  # p180°
+        models.append(list(zip(layout_p.shapes_x, layout_p.shapes_y, strict=False)))  # p0Â°
+        models.append([(pw - x, ph - y) for x, y in zip(layout_p.shapes_x, layout_p.shapes_y, strict=False)])  # p180Â°
     if layout_l is not None:
-        models.append(list(zip(layout_l.shapes_y, [lw - x for x in layout_l.shapes_x], strict=False)))  # l90°
-        models.append(list(zip([lh - y for y in layout_l.shapes_y], layout_l.shapes_x, strict=False)))  # l270°
-        models.append(list(zip(layout_l.shapes_x, layout_l.shapes_y, strict=False)))  # l0°
+        models.append(list(zip(layout_l.shapes_y, [lw - x for x in layout_l.shapes_x], strict=False)))  # l90Â°
+        models.append(list(zip([lh - y for y in layout_l.shapes_y], layout_l.shapes_x, strict=False)))  # l270Â°
+        models.append(list(zip(layout_l.shapes_x, layout_l.shapes_y, strict=False)))  # l0Â°
     if layout_l is not None and layout_p is not None:
         models.append(
             list(zip([ph - x for x in layout_l.shapes_x], [pw - y for y in layout_l.shapes_y], strict=False))
-        )  # l180°
+        )  # l180Â°
     if layout_p is not None:
-        models.append(list(zip(layout_p.shapes_y, [pw - x for x in layout_p.shapes_x], strict=False)))  # p90°
-        models.append(list(zip([ph - y for y in layout_p.shapes_y], layout_p.shapes_x, strict=False)))  # p270°
+        models.append(list(zip(layout_p.shapes_y, [pw - x for x in layout_p.shapes_x], strict=False)))  # p90Â°
+        models.append(list(zip([ph - y for y in layout_p.shapes_y], layout_p.shapes_x, strict=False)))  # p270Â°
     if not models:
         return False
 
     img = np.asarray(page.img.img.convert("L"))
     H, W = img.shape
 
-    # Échelle attendue (px/mm) et rayon des repères (2 mm).
+    # Ãchelle attendue (px/mm) et rayon des repÃ¨res (2 mm).
     scale_ref = max(W, H) / max(pw, ph, lw, lh)
-    # seuil de binarisation ; on prend un seuil modéré pour garder les repères
+    # seuil de binarisation ; on prend un seuil modÃ©rÃ© pour garder les repÃ¨res
     mask = img < 140
-    # sous-échantillonnage pour accélérer l'étiquetage (facteur 2)
+    # sous-Ã©chantillonnage pour accÃ©lÃ©rer l'Ã©tiquetage (facteur 2)
     step = 2 if min(W, H) > 800 else 1
     if step > 1:
         mask = mask[::step, ::step]
     comps = _connected_components(mask)
-    # Aire attendue d'un repère : π·r² (r=2mm) à l'échelle, avec une marge large
-    # pour tolérer scans redimensionnés. On filtre aussi la circularité
-    # (ratio largeur/hauteur proche de 1, remplissage ~π/4).
+    # Aire attendue d'un repÃ¨re : ÏÂ·rÂ² (r=2mm) Ã  l'Ã©chelle, avec une marge large
+    # pour tolÃ©rer scans redimensionnÃ©s. On filtre aussi la circularitÃ©
+    # (ratio largeur/hauteur proche de 1, remplissage ~Ï/4).
     area_ref = math.pi * (2.0 * scale_ref) ** 2 / (step * step)
     area_lo = max(20, area_ref * 0.25)
     area_hi = area_ref * 3.0
@@ -572,11 +571,11 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
     blobs = np.array(blobs, dtype=float)
 
     best = None  # (mean_err, model_pts, blob_idx)
-    tol = 18.0  # tolérance de position (px)
+    tol = 18.0  # tolÃ©rance de position (px)
     n_blobs = len(blobs)
 
     def try_match(model, ai, mv, ml, bi, bj):
-        """Teste la paire de blobs (bi, bj) comme image de la paire du modèle
+        """Teste la paire de blobs (bi, bj) comme image de la paire du modÃ¨le
         d'origine ``model[ai]`` et de vecteur ``mv`` (longueur ``ml``).
 
         Renvoie (erreur moyenne, appariement) ou None.
@@ -590,7 +589,7 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
             return None
         ang = math.atan2(float(dv[1]), float(dv[0])) - math.atan2(float(mv[1]), float(mv[0]))
         cs, sn = math.cos(ang), math.sin(ang)
-        # similarité : pred = blobs[bi] + scale·R·(model - model[ai])
+        # similaritÃ© : pred = blobs[bi] + scaleÂ·RÂ·(model - model[ai])
         rel = model - model[ai]
         pred = blobs[bi] + scale * (rel @ np.array([[cs, sn], [-sn, cs]]))
         # appariement greedy au plus proche
@@ -613,24 +612,24 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
                 return None
         return sum(a[2] for a in assign) / 5, assign
 
-    # Pré-filtre vectorisé : pour chaque paire du modèle, on écarte d'un coup
-    # les paires de blobs qui ne peuvent pas réussir (distance trop courte,
-    # échelle hors plage, ou un repère prédit sans aucun blob à moins de
-    # ``tol``). Les candidats restants passent, dans le même ordre, par
-    # ``try_match`` qui refait le calcul d'origine : le résultat est identique
-    # à la boucle complète. La marge ``eps`` couvre les écarts d'arrondi entre
-    # calcul vectorisé et calcul scalaire.
+    # PrÃ©-filtre vectorisÃ© : pour chaque paire du modÃ¨le, on Ã©carte d'un coup
+    # les paires de blobs qui ne peuvent pas rÃ©ussir (distance trop courte,
+    # Ã©chelle hors plage, ou un repÃ¨re prÃ©dit sans aucun blob Ã  moins de
+    # ``tol``). Les candidats restants passent, dans le mÃªme ordre, par
+    # ``try_match`` qui refait le calcul d'origine : le rÃ©sultat est identique
+    # Ã  la boucle complÃ¨te. La marge ``eps`` couvre les Ã©carts d'arrondi entre
+    # calcul vectorisÃ© et calcul scalaire.
     eps = 1e-6
     pair_bi, pair_bj = np.nonzero(~np.eye(n_blobs, dtype=bool))
     pair_dv = blobs[pair_bj] - blobs[pair_bi]
     pair_dl = np.hypot(pair_dv[:, 0], pair_dv[:, 1])
     pair_angle = np.arctan2(pair_dv[:, 1], pair_dv[:, 0])
-    # Taille des lots : tableaux intermédiaires (lot × 5 × n_blobs) bornés.
+    # Taille des lots : tableaux intermÃ©diaires (lot Ã 5 Ã n_blobs) bornÃ©s.
     chunk = max(1, 1_000_000 // (5 * n_blobs))
     for model_pts in models:
         model = np.array(model_pts, dtype=float)
-        # pour chaque paire (i,j) du modèle comme ancre, on essaie chaque paire
-        # de blobs comme cible et on vérifie la transformation de similarité.
+        # pour chaque paire (i,j) du modÃ¨le comme ancre, on essaie chaque paire
+        # de blobs comme cible et on vÃ©rifie la transformation de similaritÃ©.
         for ai in range(5):
             for aj in range(5):
                 if ai == aj:
@@ -653,7 +652,7 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
                     s = pair_scale[cand][:, None]
                     pred_x = blobs[pair_bi[cand], 0][:, None] + s * (rel[:, 0] * cs - rel[:, 1] * sn)
                     pred_y = blobs[pair_bi[cand], 1][:, None] + s * (rel[:, 0] * sn + rel[:, 1] * cs)
-                    # Distance de chaque repère prédit au blob le plus proche.
+                    # Distance de chaque repÃ¨re prÃ©dit au blob le plus proche.
                     nearest = np.hypot(pred_x[:, :, None] - blobs[:, 0], pred_y[:, :, None] - blobs[:, 1]).min(axis=2)
                     for c in cand[(nearest <= tol + eps).all(axis=1)]:
                         res = try_match(model, ai, mv, ml, int(pair_bi[c]), int(pair_bj[c]))
@@ -662,7 +661,7 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
     if best is None:
         return False
     _err, model_pts, assign = best
-    # On construit page.shapes dans l'ordre du modèle (0..4).
+    # On construit page.shapes dans l'ordre du modÃ¨le (0..4).
     order = [None] * 5
     for k, idx, _d in assign:
         order[k] = idx
@@ -676,16 +675,16 @@ def align_auto_global(page: ScannedPage, variants: dict) -> bool:
 
 
 def align_viewer(page: ScannedPage, variants: dict) -> None:
-    """Détermine l'orientation et calcule ``page.adjust`` (rotation + échelle).
+    """DÃ©termine l'orientation et calcule ``page.adjust`` (rotation + Ã©chelle).
 
-    Reprend ``Page.alignViewer`` (index.html ~2328-2660). Les 5 repères sont
-    classés (haut-gauche, intérieur, bas-gauche, bas-droit, haut-droit) puis on
-    calcule la rotation et l'échelle moyennes par rapport au layout de référence.
+    Reprend ``Page.alignViewer`` (index.html ~2328-2660). Les 5 repÃ¨res sont
+    classÃ©s (haut-gauche, intÃ©rieur, bas-gauche, bas-droit, haut-droit) puis on
+    calcule la rotation et l'Ã©chelle moyennes par rapport au layout de rÃ©fÃ©rence.
     """
     if len(page.shapes) != 5:
         return
 
-    # 1. Les deux repères les plus proches (i1, i2).
+    # 1. Les deux repÃ¨res les plus proches (i1, i2).
     i1 = i2 = -1
     dist_min = float("inf")
     for i in range(5):
@@ -696,7 +695,7 @@ def align_viewer(page: ScannedPage, variants: dict) -> None:
             if d < dist_min:
                 i1, i2, dist_min = i, j, d
 
-    # 2. Parmi les 3 autres, on cherche le plus éloigné d'un des deux (bottom_right)
+    # 2. Parmi les 3 autres, on cherche le plus Ã©loignÃ© d'un des deux (bottom_right)
     #    et le plus proche de l'autre (inner).
     others = [i for i in range(5) if i not in (i1, i2)]
     dist_max = 0
@@ -718,13 +717,13 @@ def align_viewer(page: ScannedPage, variants: dict) -> None:
     inner = i5
     top_left = i3
     bottom_right = i4
-    # Les deux points restants → bottom_left et top_right (assignation puis vérif).
+    # Les deux points restants â bottom_left et top_right (assignation puis vÃ©rif).
     remaining = [i for i in range(5) if i not in (inner, bottom_right, top_left)]
     if len(remaining) != 2:
         return
     bottom_left, top_right = remaining[0], remaining[1]
 
-    # Vérification de l'assignation.
+    # VÃ©rification de l'assignation.
     def dist2(a, b):
         dx = page.shapes[a]["canvas_x"] - page.shapes[b]["canvas_x"]
         dy = page.shapes[a]["canvas_y"] - page.shapes[b]["canvas_y"]
@@ -824,26 +823,26 @@ def align_viewer(page: ScannedPage, variants: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Alignement manuel (placement des 5 repères à la main)
+# Alignement manuel (placement des 5 repÃ¨res Ã  la main)
 # ---------------------------------------------------------------------------
 
 
 def align_manual(page: ScannedPage, variants: dict, points: list[tuple[float, float]]) -> bool:
-    """Alignement manuel : l'utilisateur clique 5 repères sur l'image scannée.
+    """Alignement manuel : l'utilisateur clique 5 repÃ¨res sur l'image scannÃ©e.
 
     ``points`` est la liste des 5 positions (x, y) en pixels canvas. On
-    construit les ``page.shapes`` (au même format que ``align_adjust_shape`` :
+    construit les ``page.shapes`` (au mÃªme format que ``align_adjust_shape`` :
     ``canvas_x``, ``canvas_y``) puis on appelle ``align_viewer`` pour calculer
-    ``page.adjust`` (rotation + échelle moyennes → transformation affine de la
+    ``page.adjust`` (rotation + Ã©chelle moyennes â transformation affine de la
     page). Reprend le placement manuel du code JS (``navigate_align_manual`` +
-    ``page.alignViewer()`` après 5 clics, index.html ~4000-4020).
+    ``page.alignViewer()`` aprÃ¨s 5 clics, index.html ~4000-4020).
 
-    Renvoie True si ``page.adjust`` a pu être calculé.
+    Renvoie True si ``page.adjust`` a pu Ãªtre calculÃ©.
     """
     if page.img is None or len(points) != 5:
         return False
     page.clear_marks()
-    # On conserve uniquement les positions cliquées (canvas_x, canvas_y).
+    # On conserve uniquement les positions cliquÃ©es (canvas_x, canvas_y).
     page.shapes = [{"canvas_x": float(x), "canvas_y": float(y)} for (x, y) in points]
     try:
         align_viewer(page, variants)
@@ -859,11 +858,11 @@ def correct_with_manual_align(
     check_manual_active: bool = False,
     clair: float = CLAIR,
 ) -> bool:
-    """Alignement manuel des 5 repères puis correction de la page.
+    """Alignement manuel des 5 repÃ¨res puis correction de la page.
 
-    Utilisé quand l'alignement automatique échoue (repères introuvables) :
-    l'utilisateur place les 5 repères à la main, on calcule la transformation
-    affine de la page, puis on reprend la correction (code-barres, n° étudiant,
+    UtilisÃ© quand l'alignement automatique Ã©choue (repÃ¨res introuvables) :
+    l'utilisateur place les 5 repÃ¨res Ã  la main, on calcule la transformation
+    affine de la page, puis on reprend la correction (code-barres, nÂ° Ã©tudiant,
     cases, note).
     """
     if page.ignore:
@@ -881,11 +880,11 @@ def correct_with_manual_align(
 def _bresenham_pixels(
     pimg: PixelImage, x1: int, y1: int, x2: int, y2: int, scale: float, origin_x: float, origin_y: float
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Parcourt le segment (x1,y1)→(x2,y2) et collecte les pixels (x, g).
+    """Parcourt le segment (x1,y1)â(x2,y2) et collecte les pixels (x, g).
 
-    Version optimisée qui retourne des tableaux NumPy au lieu d'une liste de dicts.
-    Chaque pixel est enregistré avec sa position ``x`` (distance mm depuis
-    l'origine) et ``g`` (niveau de gris inversé : 128 - grey, positif = sombre).
+    Version optimisÃ©e qui retourne des tableaux NumPy au lieu d'une liste de dicts.
+    Chaque pixel est enregistrÃ© avec sa position ``x`` (distance mm depuis
+    l'origine) et ``g`` (niveau de gris inversÃ© : 128 - grey, positif = sombre).
     """
     x_coords = []
     g_values = []
@@ -899,7 +898,7 @@ def _bresenham_pixels(
         grey, a = pimg.get_grey(x, y)
         if a != 255:
             grey = 255
-        # distance depuis l'extrémité (x2, y2)
+        # distance depuis l'extrÃ©mitÃ© (x2, y2)
         delta_x = x - x2
         delta_y = y - y2
         dist = math.sqrt(delta_x * delta_x + delta_y * delta_y)
@@ -922,9 +921,9 @@ def _bresenham_pixels(
 def _correlate_character(
     x_coords: np.ndarray, g_values: np.ndarray, char: str, start: int, barcode_resolution: float
 ) -> float:
-    """Corrélation d'un caractère Code 39 avec les pixels à partir de ``start``.
+    """CorrÃ©lation d'un caractÃ¨re Code 39 avec les pixels Ã  partir de ``start``.
 
-    Version vectorisée utilisant NumPy pour les calculs.
+    Version vectorisÃ©e utilisant NumPy pour les calculs.
     """
     code = CODE39.get(char)
     if code is None or start >= len(x_coords):
@@ -932,7 +931,7 @@ def _correlate_character(
 
     # Calculer les poids (w) comme dans l'original
     # pixels[i]["w"] = abs(pixels[i-1]["x"] - pixels[i+1]["x"]) / 2
-    # On pré-calcule les poids pour tous les pixels
+    # On prÃ©-calcule les poids pour tous les pixels
     n = len(x_coords)
     weights = np.zeros(n, dtype=np.float64)
     if n > 2:
@@ -953,7 +952,7 @@ def _correlate_character(
             while i < length and (s - x_coords[i]) <= bar_width:
                 value += weights[i] * g_values[i]
                 i += 1
-        else:  # barre blanche : contribution négative
+        else:  # barre blanche : contribution nÃ©gative
             while i < length and (s - x_coords[i]) <= bar_width:
                 value -= weights[i] * g_values[i]
                 i += 1
@@ -972,7 +971,7 @@ def _correlate_character(
 def _bresenham_pixels_legacy(
     pimg: PixelImage, x1: int, y1: int, x2: int, y2: int, scale: float, origin_x: float, origin_y: float
 ) -> list[dict]:
-    """Version originale pour compatibilité."""
+    """Version originale pour compatibilitÃ©."""
     pixels: list[dict] = []
     dx = abs(x2 - x1)
     dy = abs(y2 - y1)
@@ -1003,7 +1002,7 @@ def _bresenham_pixels_legacy(
 
 
 def _correlate_character_legacy(pixels: list[dict], char: str, start: int, barcode_resolution: float) -> float:
-    """Version originale pour compatibilité."""
+    """Version originale pour compatibilitÃ©."""
     code = CODE39.get(char)
     if code is None or start >= len(pixels):
         return 0.0
@@ -1036,9 +1035,9 @@ def _correlate_character_legacy(pixels: list[dict], char: str, start: int, barco
 def read_barcode_line(
     pimg: PixelImage, matrix: Matrix, layout: Layout, left_x: float, left_y: float, right_x: float, right_y: float
 ) -> str:
-    """Lit une ligne de code-barres et renvoie le texte décodé.
+    """Lit une ligne de code-barres et renvoie le texte dÃ©codÃ©.
 
-    Version optimisée utilisant des tableaux NumPy.
+    Version optimisÃ©e utilisant des tableaux NumPy.
     """
     dist_x = right_x - left_x
     dist_y = right_y - left_y
@@ -1071,7 +1070,7 @@ def read_barcode_line(
 
     correlate_threshold = 16 * layout.barcode_resolution * 128 * 0.5
 
-    # Recherche du '*' de début.
+    # Recherche du '*' de dÃ©but.
     first_pos = None
     first_weight = None
     for i in range(len(x_coords) // 2 - 1):
@@ -1186,7 +1185,7 @@ def read_barcode(page: ScannedPage, variants: dict, matrix: Matrix) -> bool:
 
 
 def read_mark(pimg: PixelImage, matrix_inv: Matrix, page_x: float, page_y: float, radius: float, clair: float) -> bool:
-    """Détermine si une case (cercle) est cochée.
+    """DÃ©termine si une case (cercle) est cochÃ©e.
 
     Reprend ``Page.readMark`` (index.html ~3220-3270). Compte les pixels
     sombres/moyens/clairs dans le cercle et applique les seuils du code original.
@@ -1216,14 +1215,14 @@ def read_mark(pimg: PixelImage, matrix_inv: Matrix, page_x: float, page_y: float
 
 
 # ---------------------------------------------------------------------------
-# Lecture du numéro étudiant
+# Lecture du numÃ©ro Ã©tudiant
 # ---------------------------------------------------------------------------
 
 
 def read_student_id(
     page: ScannedPage, variants: dict, matrix_inv: Matrix, clair_start: int = 10, clair_max: int = 241
 ) -> bool:
-    """Lit le numéro étudiant (7 chiffres) à partir des cases d'identification.
+    """Lit le numÃ©ro Ã©tudiant (7 chiffres) Ã  partir des cases d'identification.
 
     Reprend ``Page.readStudentId`` (index.html ~3294-3365).
     """
@@ -1235,7 +1234,7 @@ def read_student_id(
     pimg = page.img
 
     if len(variant.id_columns) > len(variant.id_lines):
-        # haut→bas puis gauche→droite.
+        # hautâbas puis gaucheâdroite.
         for digit in range(7):
             id_val *= 10
             found = False
@@ -1254,7 +1253,7 @@ def read_student_id(
             if not found:
                 return False
     else:
-        # gauche→droite puis haut→bas.
+        # gaucheâdroite puis hautâbas.
         for digit in range(7):
             id_val *= 10
             found = False
@@ -1282,12 +1281,12 @@ def read_student_id(
 
 
 # ---------------------------------------------------------------------------
-# Détection automatique des cases cochées
+# DÃ©tection automatique des cases cochÃ©es
 # ---------------------------------------------------------------------------
 
 
 def auto_marks(page: ScannedPage, matrix_inv: Matrix, clair: float = CLAIR) -> None:
-    """Détecte les cases cochées parmi les marks de la page.
+    """DÃ©tecte les cases cochÃ©es parmi les marks de la page.
 
     Reprend ``Page.autoMarks`` (index.html ~3365-3375).
     """
@@ -1305,7 +1304,7 @@ def auto_marks(page: ScannedPage, matrix_inv: Matrix, clair: float = CLAIR) -> N
 
 
 def show_marks(page: ScannedPage, project: Project) -> None:
-    """Initialise les marks d'une page à partir de la variante correspondante.
+    """Initialise les marks d'une page Ã  partir de la variante correspondante.
 
     Reprend ``Page.showMarks`` (index.html ~3583-3630).
     """
@@ -1336,20 +1335,20 @@ def show_marks(page: ScannedPage, project: Project) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Correction automatique complète d'une page
+# Correction automatique complÃ¨te d'une page
 # ---------------------------------------------------------------------------
 
 
 def _apply_correction(
     page: ScannedPage, project: Project, check_manual_active: bool = False, clair: float = CLAIR
 ) -> bool:
-    """Étape de correction post-alignement : calcule la matrice de
-    transformation affine page→canvas (via ``compute_viewport`` à partir de
-    ``page.adjust``), lit le code-barres, le n° étudiant, détecte les cases
+    """Ãtape de correction post-alignement : calcule la matrice de
+    transformation affine pageâcanvas (via ``compute_viewport`` Ã  partir de
+    ``page.adjust``), lit le code-barres, le nÂ° Ã©tudiant, dÃ©tecte les cases
     et calcule la note.
 
-    Suppose que ``page.adjust`` est déjà calculé (alignement auto ou manuel).
-    Renvoie True si le code-barres a pu être lu.
+    Suppose que ``page.adjust`` est dÃ©jÃ  calculÃ© (alignement auto ou manuel).
+    Renvoie True si le code-barres a pu Ãªtre lu.
     """
     vs = project.variants
     matrix = compute_viewport(page, vs, page.img.width, page.img.height)["matrix"]
@@ -1381,11 +1380,11 @@ def _apply_correction(
 
 
 def auto_check(page: ScannedPage, project: Project, check_manual_active: bool = False, clair: float = CLAIR) -> bool:
-    """Corrige automatiquement une page : aligne, lit code-barres, n° étudiant,
-    détecte les cases, calcule la note.
+    """Corrige automatiquement une page : aligne, lit code-barres, nÂ° Ã©tudiant,
+    dÃ©tecte les cases, calcule la note.
 
     Reprend ``Page.autoCheck`` (index.html ~3631-3645). Renvoie True si la
-    correction a réussi (alignement + code-barres lus).
+    correction a rÃ©ussi (alignement + code-barres lus).
     """
     if page.ignore:
         return False
@@ -1395,7 +1394,7 @@ def auto_check(page: ScannedPage, project: Project, check_manual_active: bool = 
 
 
 # ---------------------------------------------------------------------------
-# Rendu d'une page corrigée (overlay vert/rouge/jaune sur les cases)
+# Rendu d'une page corrigÃ©e (overlay vert/rouge/jaune sur les cases)
 # ---------------------------------------------------------------------------
 
 _MARK_COLORS = {
@@ -1408,8 +1407,8 @@ _MARK_COLORS = {
 
 def _mark_color(mark: dict) -> str:
     """Couleur d'une mark selon la logique de updateUserInterface (index.html
-    ~4634-4655) : jaune par défaut, vert si correcte cochée, rouge si
-    pénalisante cochée, bleu si neutre cochée ou mark manuelle nulle."""
+    ~4634-4655) : jaune par dÃ©faut, vert si correcte cochÃ©e, rouge si
+    pÃ©nalisante cochÃ©e, bleu si neutre cochÃ©e ou mark manuelle nulle."""
     if mark.get("value") is not None:
         v = mark["value"]
         if v > 0:
@@ -1431,12 +1430,12 @@ def render_marked_page(page: ScannedPage, max_width: int = 0):
     """Renvoie une image Pillow de la page avec l'overlay des cases.
 
     Reprend le rendu SVG de ``updateUserInterface`` (index.html ~4518-4655) :
-    chaque mark (case à cocher ou zone manuelle) est dessinée par-dessus
-    l'image scannée, colorée selon la logique vert/rouge/jaune/bleu.
-    Les coordonnées des marks sont en mm (système page) et converties en
+    chaque mark (case Ã  cocher ou zone manuelle) est dessinÃ©e par-dessus
+    l'image scannÃ©e, colorÃ©e selon la logique vert/rouge/jaune/bleu.
+    Les coordonnÃ©es des marks sont en mm (systÃ¨me page) et converties en
     pixels canvas via ``matrix_inv``.
 
-    ``max_width`` (si > 0) limite la largeur de l'image renvoyée (pour
+    ``max_width`` (si > 0) limite la largeur de l'image renvoyÃ©e (pour
     l'affichage dans le GUI) en conservant les proportions.
     """
     from PIL import Image as PILImage
@@ -1491,19 +1490,19 @@ def load_pages_from_file(path: str, dpi: int = 150) -> list[ScannedPage]:
     """Charge les pages d'un fichier PDF ou d'une image.
 
     Renvoie une liste de ``ScannedPage`` (une par page du PDF, ou une seule
-    pour une image). Utilise **PyMuPDF** de préférence ; sinon **pdf2image**
-    (nécessite ``poppler-utils``) comme repli pour les PDF.
+    pour une image). Utilise **PyMuPDF** de prÃ©fÃ©rence ; sinon **pdf2image**
+    (nÃ©cessite ``poppler-utils``) comme repli pour les PDF.
     """
     ext = os.path.splitext(path)[1].lower()
     pages: list[ScannedPage] = []
     if ext == ".pdf":
         loaded = False
-        # 1) PyMuPDF (préférable : pas de dépendance système).
+        # 1) PyMuPDF (prÃ©fÃ©rable : pas de dÃ©pendance systÃ¨me).
         try:
             import pymupdf
 
-            # Lire le fichier en bytes pour éviter tout cache de PyMuPDF ou
-            # de l'OS : un PDF modifié entre deux corrections est bien relu.
+            # Lire le fichier en bytes pour Ã©viter tout cache de PyMuPDF ou
+            # de l'OS : un PDF modifiÃ© entre deux corrections est bien relu.
             with open(path, "rb") as _f:
                 pdf_bytes = _f.read()
             doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
@@ -1515,7 +1514,7 @@ def load_pages_from_file(path: str, dpi: int = 150) -> list[ScannedPage]:
             loaded = True
         except ImportError:
             pass
-        # 2) Repli : pdf2image (nécessite poppler-utils installé).
+        # 2) Repli : pdf2image (nÃ©cessite poppler-utils installÃ©).
         if not loaded:
             try:
                 from pdf2image import convert_from_path
@@ -1528,20 +1527,20 @@ def load_pages_from_file(path: str, dpi: int = 150) -> list[ScannedPage]:
                 pass
         if not loaded:
             raise RuntimeError(
-                "Aucune bibliothèque de rendu PDF disponible. Installez "
+                "Aucune bibliothÃ¨que de rendu PDF disponible. Installez "
                 "PyMuPDF (``pip install --user pymupdf``) ou pdf2image + "
                 "poppler-utils (``urpmi python3-pdf2image poppler``)."
             )
     else:
         img = Image.open(path)
-        img.load()  # Forcer la lecture en mémoire (sinon Pillow est paresseux
-        # et peut relire un fichier modifié trop tard).
+        img.load()  # Forcer la lecture en mÃ©moire (sinon Pillow est paresseux
+        # et peut relire un fichier modifiÃ© trop tard).
         pages.append(ScannedPage(img=PixelImage(img)))
     return pages
 
 
 # ---------------------------------------------------------------------------
-# Sauvegarde / rechargement d'un état de correction
+# Sauvegarde / rechargement d'un Ã©tat de correction
 # ---------------------------------------------------------------------------
 
 
@@ -1615,10 +1614,10 @@ def _page_from_state(page: ScannedPage, state: dict) -> None:
 
 
 def save_correction_state(pages: list[ScannedPage], copy_paths: list[str], path: str) -> None:
-    """Sauvegarde l'état de correction des pages dans un fichier JSON.
+    """Sauvegarde l'Ã©tat de correction des pages dans un fichier JSON.
 
-    Les images des copies sont sauvegardées dans un dossier portant le
-    même nom que le fichier JSON (sans extension) à côté de celui-ci.
+    Les images des copies sont sauvegardÃ©es dans un dossier portant le
+    mÃªme nom que le fichier JSON (sans extension) Ã  cÃ´tÃ© de celui-ci.
     """
     import json
 
@@ -1628,7 +1627,7 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str], path:
     data = {"copies": [], "image_dir": img_dir}
     used_names: set[str] = set()
     # Index de page relatif au fichier (pour distinguer les pages d'un
-    # même PDF lors du rechargement).
+    # mÃªme PDF lors du rechargement).
     _file_page_idx: dict[str, int] = {}
     for _i, (copy_path, page) in enumerate(zip(copy_paths, pages, strict=False)):
         page_index = _file_page_idx.get(copy_path, 0)
@@ -1637,10 +1636,10 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str], path:
         img_name = None
         if page.img is not None and page.img.img is not None:
             base_name = os.path.splitext(os.path.basename(copy_path))[0]
-            # Nommer l'image avec l'ID étudiant et le nom du fichier source
-            # (paquet) pour distinguer deux étudiants de paquets différents
-            # qui auraient le même numéro (ex: p8789999_sujet_6.png).
-            # Sans ID étudiant, numérotation simple à partir de 1.
+            # Nommer l'image avec l'ID Ã©tudiant et le nom du fichier source
+            # (paquet) pour distinguer deux Ã©tudiants de paquets diffÃ©rents
+            # qui auraient le mÃªme numÃ©ro (ex: p8789999_sujet_6.png).
+            # Sans ID Ã©tudiant, numÃ©rotation simple Ã  partir de 1.
             if page.student_id:
                 img_name = f"{page.student_id}_{base_name}_{page_index + 1}.png"
             else:
@@ -1676,12 +1675,12 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str], path:
 
 
 def load_correction_state(copy_path: str, page: ScannedPage, state_path: str, page_index: int = 0) -> bool:
-    """Recharge l'état de correction d'une copie depuis un fichier JSON.
+    """Recharge l'Ã©tat de correction d'une copie depuis un fichier JSON.
 
-    Retourne True si l'état a été trouvé et appliqué.
+    Retourne True si l'Ã©tat a Ã©tÃ© trouvÃ© et appliquÃ©.
 
-    ``page_index`` (index de la page dans le fichier, 0 = première) permet de
-    distinguer les pages d'un même PDF lors du rechargement.
+    ``page_index`` (index de la page dans le fichier, 0 = premiÃ¨re) permet de
+    distinguer les pages d'un mÃªme PDF lors du rechargement.
     """
     import json
 
@@ -1694,8 +1693,8 @@ def load_correction_state(copy_path: str, page: ScannedPage, state_path: str, pa
     for entry in data.get("copies", []):
         if os.path.abspath(entry["file"]) != abs_copy:
             continue
-        # page_index présent dans les nouvelles sauvegardes ; pour les anciennes
-        # (sans page_index), on tombe sur 0 = première page.
+        # page_index prÃ©sent dans les nouvelles sauvegardes ; pour les anciennes
+        # (sans page_index), on tombe sur 0 = premiÃ¨re page.
         entry_idx = entry.get("page_index", 0)
         if entry_idx != page_index:
             continue
