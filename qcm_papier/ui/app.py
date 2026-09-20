@@ -2946,6 +2946,20 @@ class MarkedPageWindow(Gtk.Window):
 
         self.side.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
+        # Édition manuelle du numéro de variante
+        self.side.append(Gtk.Label(label="N° Variante :"))
+        self.entry_variant = Gtk.Entry()
+        self.entry_variant.set_max_length(6)
+        self.entry_variant.set_placeholder_text("ex: 1000")
+        btn_apply_vid = Gtk.Button(label="Appliquer")
+        btn_apply_vid.connect("clicked", self._on_apply_variant_id)
+        vid_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        vid_box.append(self.entry_variant)
+        vid_box.append(btn_apply_vid)
+        self.side.append(vid_box)
+
+        self.side.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
         # Édition manuelle du numéro étudiant
         self.side.append(Gtk.Label(label="N° étudiant :"))
         self.entry_student = Gtk.Entry()
@@ -3051,6 +3065,7 @@ class MarkedPageWindow(Gtk.Window):
         self.btn_prev.set_sensitive(self.idx > 0)
         self.btn_next.set_sensitive(self.idx < n - 1)
         self.entry_student.set_text(page.student_id or "")
+        self.entry_variant.set_text(str(page.variant_id) if page.variant_id is not None else "")
         self.zoom_scale.set_value(self._zoom)
         self.zoom_label.set_text(f"{int(self._zoom * 100)} %")
         self._update_image()
@@ -3073,6 +3088,40 @@ class MarkedPageWindow(Gtk.Window):
         page.value = score.value
         page.total = score.total
         page.complete = score.complete
+        self._load_page()
+        if self.on_navigate is not None:
+            self.on_navigate(self.idx)
+
+    def _on_apply_variant_id(self, _btn) -> None:
+        if self.idx < 0 or self.idx >= len(self.pages):
+            return
+        _label, page = self.pages[self.idx]
+        vid_text = self.entry_variant.get_text().strip()
+        if not vid_text:
+            return
+        try:
+            variant_id = int(vid_text)
+        except ValueError:
+            self.lbl_variant.set_text("Variante : invalide")
+            return
+
+        # Mettre à jour la variante
+        page.variant_id = variant_id
+
+        # Si l'alignement a réussi mais que la correction n'a pas pu lire le code-barres
+        if page.adjust is not None and page.matrix_inv is not None:
+            # Recharger les marks avec la nouvelle variante
+            scanner.show_marks(page, self._project)
+            scanner.auto_marks(page, page.matrix_inv, clair=int(self.clair_spin.get_value()))
+
+            # Recalculer la note
+            from qcm_papier.marking import score_page
+
+            score = score_page(self._project, page.marks, variant_id=page.variant_id, student_id=page.student_id)
+            page.value = score.value
+            page.total = score.total
+            page.complete = score.complete
+
         self._load_page()
         if self.on_navigate is not None:
             self.on_navigate(self.idx)
