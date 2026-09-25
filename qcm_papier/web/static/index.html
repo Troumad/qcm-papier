@@ -14,6 +14,7 @@
   <nav class="tabs" role="tablist">
     <button data-tab="file" role="tab">Fichier</button>
     <button data-tab="info" role="tab">Informations</button>
+    <button data-tab="header-footer" role="tab">En-tête et pied de page</button>
     <button data-tab="structure" role="tab" class="active">Structure</button>
     <button data-tab="generate" role="tab">Génération</button>
     <button data-tab="correct" role="tab">Correction</button>
@@ -69,6 +70,28 @@
         <label>Gauche <input name="margin_left" type="number" min="5" max="25" step="1"></label>
         <label>Droite <input name="margin_right" type="number" min="5" max="25" step="1"></label>
         <label>Basse <input name="margin_bottom" type="number" min="5" max="25" step="1"></label>
+      </fieldset>
+    </form>
+  </section>
+
+  <!-- En-tête et pied de page -->
+  <section id="tab-header-footer" class="tab" hidden>
+    <h2>En-tête et pied de page</h2>
+    <form id="hf-form">
+      <fieldset>
+        <legend>En-tête</legend>
+        <div class="hf-grid" data-zone="header"></div>
+      </fieldset>
+      <fieldset>
+        <legend>Macros disponibles (modifiables à l'onglet Informations)</legend>
+        <p class="muted">Cliquez sur une macro pour l'insérer dans la zone de texte active : elle sera remplacée
+          par la valeur du champ d'information correspondant.</p>
+        <div id="hf-macros" class="macros"></div>
+      </fieldset>
+      <fieldset>
+        <legend>Pied de page</legend>
+        <label class="check"><input type="checkbox" name="footer_enabled"> Afficher un pied de page</label>
+        <div class="hf-grid" data-zone="footer"></div>
       </fieldset>
     </form>
   </section>
@@ -335,6 +358,9 @@
     <span id="v-student"></span>
     <strong id="v-note"></strong>
     <span id="v-status"></span>
+    <hr>
+    <label>N° de variante <input id="v-variant-id" inputmode="numeric" maxlength="6" placeholder="ex. 1000"></label>
+    <button id="v-apply-variant">Appliquer</button>
     <hr>
     <label>N° étudiant <input id="v-student-id" maxlength="8" placeholder="p0000000"></label>
     <button id="v-apply-student">Appliquer</button>

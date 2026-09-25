@@ -176,6 +176,7 @@ def create_app(session: Session | None = None) -> FastAPI:
                 "path": sess.project_path,
                 "name": os.path.basename(sess.project_path) if sess.project_path else None,
                 "settings": editing.settings_form(sess.project.settings),
+                "header_footer": editing.header_footer_view(sess.project.settings),
                 "structure": editing.structure_view(sess.project),
                 "variants": sess.variant_ids(),
             }
@@ -354,6 +355,11 @@ def create_app(session: Session | None = None) -> FastAPI:
     @app.post("/api/pages/{i}/student")
     def page_student(i: int, data: dict[str, str] = Body(...)) -> dict[str, Any]:
         s().set_student_id(i, data.get("student_id", ""))
+        return s().page_info(i)
+
+    @app.post("/api/pages/{i}/variant")
+    def page_variant(i: int, data: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        s().set_variant_id(i, str(data.get("variant_id", "")))
         return s().page_info(i)
 
     @app.post("/api/pages/{i}/align")
