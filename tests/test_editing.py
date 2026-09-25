@@ -82,6 +82,19 @@ def test_settings_form_aller_retour():
     assert editing.settings_form(settings) == form
 
 
+def test_entete_et_pied_de_page_dans_le_formulaire():
+    settings = ProjectSettings(module_short="")
+    form = editing.settings_form(settings)
+    assert form["header_left"] == "" and form["footer_enabled"] is True
+    editing.apply_settings_form(settings, {"header_middle": "Examen ${name_short}", "footer_enabled": False})
+    assert settings.header_middle == "Examen ${name_short}"
+    assert settings.footer_enabled is False
+    view = editing.header_footer_view(settings)
+    assert view["defaults"]["header_left"].startswith("${university}")
+    macros = {m["macro"]: m["value"] for m in view["macros"]}
+    assert macros["course_short"] == "OML1"  # champ vide : valeur proposée par l'interface
+
+
 def test_settings_form_refuse_une_valeur_invalide():
     with pytest.raises(ValueError):
         editing.apply_settings_form(ProjectSettings(), {"exercise_dir": "diagonale"})
