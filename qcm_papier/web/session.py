@@ -423,6 +423,36 @@ class Session:
             page.value, page.total, page.complete = score.value, score.total, score.complete
             self.notes = self._collect_notes()
 
+    def set_variant_id(self, index: int, variant_text: str) -> None:
+        """Saisie manuelle du n° de variante (code-barres illisible), comme la fenêtre GTK agrandie.
+
+        Si la page est alignée, relit les cases de cette variante, le n° étudiant, puis recalcule la note.
+        """
+        try:
+            variant_id = int(str(variant_text).strip())
+        except ValueError:
+            raise ValueError("N° de variante invalide.") from None
+        with self.lock:
+            if self.project.variants.variant(variant_id) is None:
+                raise ValueError(f"Variante {variant_id} absente du projet.")
+            page = self.pages[index].page
+            page.variant_id = variant_id
+            if page.adjust is not None and page.matrix_inv is not None:
+                # show_marks ajoute aux marks existants : on repart de zéro pour ne pas les doubler.
+                page.marks = []
+                scanner.show_marks(page, self.project)
+                scanner.auto_marks(page, page.matrix_inv, clair=self.clair)
+                if page.matrix is not None:
+                    scanner.read_student_id(page, self.project.variants, page.matrix_inv, 41, 241)
+                    student = self.project.students.get(page.student_id) if page.student_id else None
+                    if student is not None:
+                        page.student_eid = student.eid
+                        page.student_name = student.name
+                        page.student_firstname = student.firstname
+                score = score_page(self.project, page.marks, variant_id=page.variant_id, student_id=page.student_id)
+                page.value, page.total, page.complete = score.value, score.total, score.complete
+            self.notes = self._collect_notes()
+
     def manual_align(self, index: int, points: list[tuple[float, float]]) -> bool:
         with self.lock:
             page = self.pages[index].page

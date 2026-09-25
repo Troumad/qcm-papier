@@ -425,6 +425,7 @@
     $("#v-status").textContent = `Statut : ${info.status}`;
     $("#v-status").className = info.failed || !info.complete ? "status error" : "status ok";
     $("#v-student-id").value = info.student_id || "";
+    $("#v-variant-id").value = info.variant ?? "";
     $("#v-prev").disabled = adjacent(index, -1) === index;
     $("#v-next").disabled = adjacent(index, 1) === index;
     vImg.onload = layoutStage;
@@ -453,6 +454,11 @@
   }, { passive: false });
   $("#v-prev").addEventListener("click", () => guard(async () => { await loadViewer(adjacent(viewer.index, -1)); showPage(viewer.index); }));
   $("#v-next").addEventListener("click", () => guard(async () => { await loadViewer(adjacent(viewer.index, 1)); showPage(viewer.index); }));
+  // Code-barres illisible : la variante saisie relit les cases, le n° étudiant et la note.
+  $("#v-apply-variant").addEventListener("click", () => guard(async () => {
+    await api("POST", `/api/pages/${viewer.index}/variant`, { variant_id: $("#v-variant-id").value });
+    await afterPageChange(viewer.index);
+  }));
   $("#v-apply-student").addEventListener("click", () => guard(async () => {
     await api("POST", `/api/pages/${viewer.index}/student`, { student_id: $("#v-student-id").value });
     await afterPageChange(viewer.index);

@@ -54,6 +54,17 @@ fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 0 0 .8re
 .grow { flex: 1; }
 .grid-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: .6rem .9rem; }
 .margins { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .8rem; }
+textarea { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border);
+  border-radius: 5px; padding: .3rem .45rem; resize: vertical; min-width: 0; }
+.hf-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem .9rem; margin-top: .4rem; }
+@media (max-width: 760px) { .hf-grid { grid-template-columns: 1fr; } }
+.hf-col { display: flex; flex-direction: column; gap: .35rem; }
+.hf-col button { align-self: center; }
+.hf-grid textarea.center { text-align: center; }
+.hf-grid textarea.right { text-align: right; }
+.hf-grid:has(textarea:disabled) { opacity: .5; }
+.macros { display: flex; flex-wrap: wrap; gap: .35rem; }
+.macros button { font: .85rem ui-monospace, monospace; padding: .2rem .5rem; }
 .columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1rem; }
 
 .split { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(300px, 1fr); gap: 1rem; }

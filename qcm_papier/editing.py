@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from . import generator
 from .model import Choice, Exercise, Project, ProjectSettings, Question
 
 # ---------------------------------------------------------------------------
@@ -306,6 +307,16 @@ GENERATION_FIELDS = {
 
 MARGINS = ("margin_top", "margin_left", "margin_right", "margin_bottom")
 
+# En-tête et pied de page : textes avec macros ``${...}`` (onglet GTK « Entête et pied de page »).
+HEADER_FOOTER_DEFAULTS = {
+    "header_left": generator.HEADER_LEFT_DEFAULT,
+    "header_middle": generator.HEADER_MIDDLE_DEFAULT,
+    "header_right": generator.HEADER_RIGHT_DEFAULT,
+    "footer_left": generator.FOOTER_LEFT_DEFAULT,
+    "footer_middle": generator.FOOTER_MIDDLE_DEFAULT,
+    "footer_right": generator.FOOTER_RIGHT_DEFAULT,
+}
+
 
 def apply_info_defaults(settings: ProjectSettings) -> None:
     """Remplit les informations vides avec les valeurs proposées (comme GTK à l'ouverture)."""
@@ -335,6 +346,8 @@ def settings_form(settings: ProjectSettings) -> dict[str, Any]:
     form: dict[str, Any] = {key: getattr(settings, key) for key in INFO_FIELDS}
     form.update({key: getattr(settings, key) for key in GENERATION_FIELDS})
     form.update({key: float(getattr(settings, key) or 10) for key in MARGINS})
+    form.update({key: getattr(settings, key) for key in HEADER_FOOTER_DEFAULTS})
+    form["footer_enabled"] = bool(settings.footer_enabled)
     form["paper_format"] = settings.paper_format
     if settings.paper_both:
         form["paper_orientation"] = "both"
@@ -358,6 +371,10 @@ def apply_settings_form(settings: ProjectSettings, form: dict[str, Any]) -> None
             setattr(settings, key, GENERATION_FIELDS[key](value))
         elif key in MARGINS:
             setattr(settings, key, float(value))
+        elif key in HEADER_FOOTER_DEFAULTS:
+            setattr(settings, key, str(value))
+        elif key == "footer_enabled":
+            settings.footer_enabled = bool(value)
         elif key == "paper_format":
             if value not in ("a3", "a4", "a5"):
                 raise ValueError(f"Format de papier inconnu : {value}")
@@ -380,3 +397,12 @@ def apply_settings_form(settings: ProjectSettings, form: dict[str, Any]) -> None
                 setattr(settings, f"{key}_{v}", v == value)
         else:
             raise ValueError(f"Paramètre inconnu : {key}")
+
+
+def header_footer_view(settings: ProjectSettings) -> dict[str, Any]:
+    """Modèles par défaut et macros disponibles, avec la valeur que chacune prendra."""
+    macros = [
+        {"macro": macro, "value": str(getattr(settings, field) or "") or INFO_DEFAULTS.get(field, "")}
+        for macro, field in generator._HEADER_MACROS.items()
+    ]
+    return {"defaults": HEADER_FOOTER_DEFAULTS, "macros": macros}
