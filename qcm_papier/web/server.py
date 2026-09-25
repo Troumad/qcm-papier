@@ -176,6 +176,7 @@ def create_app(session: Session | None = None) -> FastAPI:
                 "path": sess.project_path,
                 "name": os.path.basename(sess.project_path) if sess.project_path else None,
                 "settings": editing.settings_form(sess.project.settings),
+                "header_footer": editing.header_footer_view(sess.project.settings),
                 "structure": editing.structure_view(sess.project),
                 "variants": sess.variant_ids(),
             }

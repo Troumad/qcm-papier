@@ -458,6 +458,7 @@
   }, { passive: false });
   $("#v-prev").addEventListener("click", () => guard(async () => { await loadViewer(adjacent(viewer.index, -1)); showPage(viewer.index); }));
   $("#v-next").addEventListener("click", () => guard(async () => { await loadViewer(adjacent(viewer.index, 1)); showPage(viewer.index); }));
+  // Code-barres illisible : la variante saisie relit les cases, le n° étudiant et la note.
   $("#v-apply-student").addEventListener("click", () => guard(async () => {
     await api("POST", `/api/pages/${viewer.index}/student`, { student_id: $("#v-student-id").value });
     await afterPageChange(viewer.index);
