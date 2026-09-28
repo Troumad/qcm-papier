@@ -134,8 +134,14 @@ def test_apercu_sans_appel_prealable(client):
 
 
 def test_ouverture_projet_et_telechargement(client):
-    with open(PROJECT, "rb") as f:
-        data = client.post("/api/project/open", files={"file": ("OML1_bis.json", f, "application/json")}).json()
+    # Projet construit par l'API : math/ n'est pas versionné, donc absent en CI.
+    client.post("/api/structure/exercises")
+    client.put("/api/settings", json={"generate_count": 1, "generate_variants": ""})
+    client.post("/api/generate/variants")
+    projet = client.get("/api/project/download").content
+    client.post("/api/project/new")
+    fichier = ("projet.json", io.BytesIO(projet), "application/json")
+    data = client.post("/api/project/open", files={"file": fichier}).json()
     assert data["variants"]
     assert data["path"] is None
     assert client.post("/api/project/save").status_code == 400
