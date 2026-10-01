@@ -25,7 +25,7 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, Gio, GLib, Gtk
 
-from .. import generator, pdf_writer, scanner, scodoc
+from .. import generator, markdown_pango, pdf_writer, scanner, scodoc
 from .. import project as project_mod
 from ..marking import score_page
 from ..model import Project
@@ -1762,7 +1762,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self._build_help_tab()
 
     def _build_help_tab(self) -> None:
-        """Onglet Aide : affiche le contenu de README.md en texte brut."""
+        """Onglet Aide : affiche le contenu de README.md mis en forme (Markdown → Pango)."""
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
         scroll.set_hexpand(True)
@@ -1779,7 +1779,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         if path:
             try:
                 with open(path, encoding="utf-8") as f:
-                    buf.set_text(f.read())
+                    buf.insert_markup(buf.get_start_iter(), markdown_pango.render(f.read()), -1)
             except Exception as e:
                 buf.set_text(f"Impossible de charger l'aide ({path}) : {e}")
         else:

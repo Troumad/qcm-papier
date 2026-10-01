@@ -178,7 +178,7 @@ class StructureEditor(Gtk.Box):
             selected_iter = None
             for i, exercise in enumerate(self.project.structure):
                 ex_min, ex_max = exercise.get_mark_range()
-                ex_label = f"Exercice {i+1} : {exercise.name} {ex_min:.1f} 🡕 {ex_max:.1f}"
+                ex_label = f"Exercice {i+1} : {exercise.name} {ex_min:.1f} ↗ {ex_max:.1f}"
                 ex_up = '<span size="larger"><b>↑</b></span>' if i > 0 else ""
                 ex_down = '<span size="larger"><b>↓</b></span>' if i < n_ex - 1 else ""
                 ex_iter = self.store.append(None, [ex_label, "exercise", exercise, "", "", ex_up, ex_down])
@@ -219,7 +219,7 @@ class StructureEditor(Gtk.Box):
         choices_str = " ".join(
             [f'<span foreground="{self._get_choice_color(c)}">({c.name})</span>' for c in question.choices]
         )
-        return f"  Q{j+1} : {question.name} {q_min} 🡕 {q_max} {choices_str}"
+        return f"  Q{j+1} : {question.name} {q_min} ↗ {q_max} {choices_str}"
 
     def _choice_label_color(self, state_index):
         """Couleur d'un choix selon l'index du menu déroulant (0/1/2)."""
@@ -252,7 +252,7 @@ class StructureEditor(Gtk.Box):
             color = self._choice_label_color(d.get_selected())
             parts.append(f'<span foreground="{color}">({c.name})</span>')
         choices_str = " ".join(parts)
-        q_label = f"  Q{q_index+1} : {question.name} {q_min} 🡕 {q_max} {choices_str}"
+        q_label = f"  Q{q_index+1} : {question.name} {q_min} ↗ {q_max} {choices_str}"
         # Retrouver l'itérateur correspondant à cette question.
         ex_iter = self.store.get_iter_first()
         while ex_iter is not None:
@@ -308,7 +308,7 @@ class StructureEditor(Gtk.Box):
     def _update_interval_label(self):
         """Met à jour le label d'intervalle de notes."""
         global_min, global_max = self.project.get_mark_range()
-        self.label_interval.set_text(f"Intervalle : {global_min:.1f} 🡕 {global_max:.1f}")
+        self.label_interval.set_text(f"Intervalle : {global_min:.1f} ↗ {global_max:.1f}")
 
     def _on_add_exercise(self, _btn):
         """Ajoute un nouvel exercice avec 8 choix par défaut."""
