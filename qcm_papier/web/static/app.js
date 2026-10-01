@@ -375,12 +375,34 @@ function renderProps() {
     el("label", {}, "Nom", textInput(question.name, (v) => patch({ name: v }))),
     el("div", { class: "row wrap" },
       el("label", {}, "Gain", numberInput(question.gain, (v) => patch({ gain: v }))),
-      el("label", {}, question.type === "multiple_progressive" ? "Malus par réponse fausse" : "Malus de la question", numberInput(question.penalty, (v) => patch({ penalty: v }))),
-      el("button", { onclick: () => guard(() => structureCall("POST", `${qUrl}/choices`)) }, "Ajouter un choix"),
-      el("button", { onclick: () => guard(() => structureCall("DELETE", `${qUrl}/choices`)) }, "Enlever un choix")),
+      // Réponse libre : ni malus ni choix, les points sont saisis à la correction.
+      ...(question.type === "manual" ? [] : [
+        el("label", {}, question.type === "multiple_progressive" ? "Malus par réponse fausse" : "Malus de la question", numberInput(question.penalty, (v) => patch({ penalty: v }))),
+        el("button", { onclick: () => guard(() => structureCall("POST", `${qUrl}/choices`)) }, "Ajouter un choix"),
+        el("button", { onclick: () => guard(() => structureCall("DELETE", `${qUrl}/choices`)) }, "Enlever un choix"),
+      ])),
     el("label", {}, "Type de question", typeSelect),
-    el("h2", {}, "Choix"),
-    states,
+  );
+  if (question.type !== "manual") {
+    panel.append(el("h2", {}, "Choix"), states);
+    return;
+  }
+  const sizeInput = (value, key) => el("input", {
+    type: "number", min: "5", max: "400", step: "5", value,
+    onchange: (ev) => patch({ [key]: Number(ev.target.value) }),
+  });
+  const helpArea = (value, key, placeholder) => el("textarea", {
+    rows: "3", placeholder, onchange: (ev) => patch({ [key]: ev.target.value }),
+  }, value);
+  panel.append(
+    el("h2", {}, "Cadre de réponse"),
+    el("div", { class: "row wrap" },
+      el("label", {}, "Largeur (mm)", sizeInput(question.width, "width")),
+      el("label", {}, "Hauteur (mm)", sizeInput(question.height, "height"))),
+    el("h2", {}, "Aide à la correction"),
+    el("p", { class: "muted" }, "Facultatif, jamais imprimé : affiché à côté des réponses scannées lors de la notation (Markdown)."),
+    el("label", {}, "Réponse attendue", helpArea(question.expected, "expected", "Ex. : f'(x) = 2x, donc f croissante sur ℝ+")),
+    el("label", {}, "Éléments de correction", helpArea(question.grading_notes, "grading_notes", "Ex. : 1 pt pour la dérivée, 1 pt pour la conclusion")),
   );
 }
 

@@ -188,11 +188,23 @@ def set_question_type(question: Question, kind: str) -> None:
     question.multiple_exact = kind == "multiple_exact"
     question.multiple_progressive = kind == "multiple_progressive"
     question.manual = kind == "manual"
+    if question.manual and (question.width <= 0 or question.height <= 0):
+        # Sans cadre, rien à scanner ni à noter.
+        question.width, question.height = MANUAL_BOX_DEFAULT
     normalize_single_choices(question)
 
 
 EXERCISE_FIELDS = {"name": str, "header": str, "validation": bool, "gain": float, "threshold": float, "min0": bool}
-QUESTION_FIELDS = {"name": str, "gain": float, "penalty": float}
+QUESTION_FIELDS = {
+    "name": str,
+    "gain": float,
+    "penalty": float,
+    "width": float,
+    "height": float,
+    "expected": str,
+    "grading_notes": str,
+}
+MANUAL_BOX_DEFAULT = (80.0, 30.0)  # mm
 
 
 def _update(obj: Any, fields: dict[str, type], data: dict[str, Any]) -> None:
@@ -209,6 +221,9 @@ def update_exercise(exercise: Exercise, data: dict[str, Any]) -> None:
 def update_question(question: Question, data: dict[str, Any]) -> None:
     data = dict(data)
     kind = data.pop("type", None)
+    for key in ("width", "height"):
+        if key in data and float(data[key]) <= 0:
+            raise ValueError("La taille du cadre de réponse doit être positive.")
     _update(question, QUESTION_FIELDS, data)
     if kind is not None:
         set_question_type(question, kind)
@@ -231,6 +246,10 @@ def structure_view(project: Project) -> dict[str, Any]:
                     "type": question_type(question),
                     "range": [q_min, q_max],
                     "choices": [{"name": c.name, "state": choice_state(c)} for c in question.choices],
+                    "width": question.width,
+                    "height": question.height,
+                    "expected": question.expected,
+                    "grading_notes": question.grading_notes,
                 }
             )
         exercises.append(
