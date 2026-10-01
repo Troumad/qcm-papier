@@ -16,7 +16,7 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, GLib, Gtk
 
-from .. import manual_grading
+from .. import manual_grading, markdown_pango
 from ..model import Project
 
 ANSWER_MAX_WIDTH = 560  # px : largeur maximale du cadre affiché
@@ -162,9 +162,9 @@ class ManualGradingWindow(Gtk.Window):
             self.help_panel.set_visible(False)
             return
         e, q, _exercise, question = self.questions[self.current]
-        none = "Non renseigné (onglet Structure)."
-        self.expected_label.set_text(question.expected or none)
-        self.notes_label.set_text(question.grading_notes or none)
+        none = "<i>Non renseigné (onglet Structure).</i>"
+        self.expected_label.set_markup(markdown_pango.render(question.expected) if question.expected else none)
+        self.notes_label.set_markup(markdown_pango.render(question.grading_notes) if question.grading_notes else none)
         rows = self._rows_of(e, q)
         if self.todo_check.get_active():
             rows = [(i, mark) for i, mark in rows if mark.get("value") is None]
