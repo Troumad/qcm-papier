@@ -373,7 +373,8 @@ uv run qcm-papier serve -p math/2026/OML1_bis.json   # avec un projet ouvert
   à cocher. **Seulement les réponses à noter** cache les copies déjà notées.
 - Tant qu'une réponse libre n'est pas notée, la copie reste **incomplète**. Les
   points saisis sont conservés dans la sauvegarde de correction (`.zip`).
-- La notation des réponses libres n'existe pas encore dans l'interface GTK.
+- Dans l'interface GTK, le bouton **Réponses libres…** de l'onglet Correction
+  ouvre la même notation dans une fenêtre dédiée.
 
 ### Sauvegarde et vérification des copies
 

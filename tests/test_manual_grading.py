@@ -190,3 +190,13 @@ def test_intervalle_de_notes_d_une_question_ouverte():
     qcm = model.Question(gain=1.0, choices=[model.Choice(correct=True, neutral=False)])
     exercise = model.Exercise(questions=[qcm, question])
     assert exercise.get_mark_range() == (0.0, 3.0)
+
+
+def test_lecture_des_points_tapes_au_clavier():
+    from qcm_papier.manual_grading import parse_points
+
+    assert parse_points("1,5") == 1.5
+    assert parse_points(" 2 ") == 2.0
+    assert parse_points("") is None
+    with pytest.raises(ValueError):
+        parse_points("abc")
