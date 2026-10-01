@@ -25,6 +25,9 @@
     if (state.job.running) schedulePoll();
   }
 
+  // Les pages ont changé : la notation des réponses libres se recharge.
+  const pagesChanged = () => document.dispatchEvent(new CustomEvent("qcm:correction-refreshed"));
+
   function schedulePoll() {
     clearTimeout(pollTimer);
     pollTimer = setTimeout(() => guard(async () => {
@@ -33,6 +36,7 @@
       if (wasRunning && !state.job.running) {
         if (state.job.error) toast(state.job.error, true);
         if (state.results.length) showPage(Math.max(0, Math.min(current, state.results.length - 1)));
+        pagesChanged();
       }
     }), 500);
   }
@@ -352,6 +356,7 @@
     $("#dlg-remove").close();
     await refresh(await api("POST", "/api/copies/remove", { indices }));
     if (state.results.length) showPage(0);
+    pagesChanged();
   }));
 
   // -------------------------------------------------------------------------
@@ -434,6 +439,7 @@
 
   async function afterPageChange(index) {
     await refresh();
+    pagesChanged();
     if (current < 0) { $("#dlg-viewer").close(); return; }
     showPage(current);
     await loadViewer(current);
@@ -502,9 +508,15 @@
   // Démarrage
   // -------------------------------------------------------------------------
   onTab("correct", () => guard(() => refresh()));
+  // Points saisis pour une réponse libre : notes et statuts du tableau à jour.
+  document.addEventListener("qcm:correction-changed", () => guard(async () => {
+    await refresh();
+    if (current >= 0) showPage(current);
+  }));
   document.addEventListener("project-reset", () => guard(async () => {
     clearTimeout(pollTimer); current = -1;
     $("#dlg-viewer").close();
     await refresh();
+    pagesChanged();
   }));
 })();
