@@ -358,6 +358,23 @@ uv run qcm-papier serve -p math/2026/OML1_bis.json   # avec un projet ouvert
 - Dans le tableau des résultats, un clic affiche la page, un double-clic
   l'ouvre en grand (zoom, n° étudiant, alignement manuel).
 
+### Questions à réponse libre
+
+- Dans l'onglet **Structure**, le type « Correction manuelle (réponse libre) »
+  imprime un cadre dont on règle la largeur et la hauteur (en mm). Deux champs
+  facultatifs, **Réponse attendue** et **Éléments de correction** (Markdown),
+  servent d'aide au correcteur : ils ne sont jamais imprimés sur le sujet.
+- Après la correction automatique, la partie **Questions à réponse libre** de
+  l'onglet **Correction** affiche, question par question, le cadre de réponse
+  découpé dans chaque copie. Les points se saisissent avec les boutons
+  **0**, **½** et le maximum, ou au clavier (Entrée passe à la copie suivante),
+  entre 0 et le gain de la question.
+- L'aide à la correction s'affiche à côté des réponses et se masque d'une case
+  à cocher. **Seulement les réponses à noter** cache les copies déjà notées.
+- Tant qu'une réponse libre n'est pas notée, la copie reste **incomplète**. Les
+  points saisis sont conservés dans la sauvegarde de correction (`.zip`).
+- La notation des réponses libres n'existe pas encore dans l'interface GTK.
+
 ### Sauvegarde et vérification des copies
 
 - L'en-tête distingue le **projet non enregistré** de la **correction non

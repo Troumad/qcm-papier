@@ -192,6 +192,25 @@
       <button id="btn-enlarge">Agrandir</button>
     </div>
     <div class="preview"><img id="page-preview" alt="Page corrigée" hidden></div>
+
+    <section id="manual-grading" class="manual" hidden aria-labelledby="manual-title">
+      <h2 id="manual-title">Questions à réponse libre</h2>
+      <div class="row wrap">
+        <label>Question <select id="manual-question"></select></label>
+        <label class="check"><input id="manual-todo" type="checkbox"> Seulement les réponses à noter</label>
+        <label class="check"><input id="manual-help-toggle" type="checkbox" checked> Aide à la correction</label>
+        <span id="manual-progress" role="status" class="muted"></span>
+      </div>
+      <div class="manual-layout">
+        <ol id="manual-rows" class="manual-rows"></ol>
+        <aside id="manual-help" class="manual-help panel">
+          <h3>Réponse attendue</h3>
+          <div id="manual-expected" class="markdown"></div>
+          <h3>Éléments de correction</h3>
+          <div id="manual-notes" class="markdown"></div>
+        </aside>
+      </div>
+    </section>
   </section>
 
   <!-- Réglages -->
@@ -379,6 +398,7 @@
 <script src="/static/persistence.js"></script>
 <script src="/static/review.js"></script>
 <script src="/static/correction.js"></script>
+<script src="/static/manual.js"></script>
 <script src="/static/preview.js"></script>
 <script src="/static/settings.js"></script>
 </body>
