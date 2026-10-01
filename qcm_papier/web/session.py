@@ -22,7 +22,7 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .. import editing, generator, pdf_preview, pdf_writer, scanner, scodoc, scodoc_api, scodoc_config
+from .. import editing, generator, manual_grading, pdf_preview, pdf_writer, scanner, scodoc, scodoc_api, scodoc_config
 from .. import project as project_mod
 from ..marking import score_page
 from ..model import Project
@@ -465,78 +465,45 @@ class Session:
     # ------------------------------------------------------------------
     # Questions à réponse libre : points saisis par le correcteur
     # ------------------------------------------------------------------
-    @staticmethod
-    def _manual_mark(page: scanner.ScannedPage, e: int, q: int) -> dict | None:
-        for mark in page.marks:
-            if mark.get("e") == e and mark.get("q") == q and mark.get("w") is not None:
-                return mark
-        return None
-
-    def _manual_question(self, e: int, q: int):
-        question = self.project.structure[e].questions[q]
-        if not question.manual:
-            raise ValueError("Cette question n'est pas à réponse libre.")
-        return question
-
     def manual_grading(self) -> list[dict[str, Any]]:
         """Questions à réponse libre avec, pour chacune, les copies où le cadre a été repéré."""
         with self.lock:
             questions = []
-            for e, exercise in enumerate(self.project.structure):
-                for q, question in enumerate(exercise.questions):
-                    if not question.manual:
+            for e, q, exercise, question in manual_grading.open_questions(self.project):
+                rows = []
+                for index, marked in enumerate(self.pages):
+                    mark = manual_grading.answer_mark(marked.page, e, q)
+                    if mark is None:
                         continue
-                    rows = []
-                    for index, marked in enumerate(self.pages):
-                        mark = self._manual_mark(marked.page, e, q)
-                        if mark is None or marked.page.matrix_inv is None:
-                            continue
-                        info = self.page_info(index)
-                        rows.append(
-                            {
-                                "index": index,
-                                "student": info["student"],
-                                "file": info["file"],
-                                "value": mark.get("value"),
-                            }
-                        )
-                    questions.append(
+                    info = self.page_info(index)
+                    rows.append(
                         {
-                            "e": e,
-                            "q": q,
-                            "exercise": exercise.name,
-                            "name": question.name,
-                            "gain": float(question.gain),
-                            "expected": question.expected,
-                            "grading_notes": question.grading_notes,
-                            "remaining": sum(1 for row in rows if row["value"] is None),
-                            "rows": rows,
+                            "index": index,
+                            "student": info["student"],
+                            "file": info["file"],
+                            "value": mark.get("value"),
                         }
                     )
+                questions.append(
+                    {
+                        "e": e,
+                        "q": q,
+                        "exercise": exercise.name,
+                        "name": question.name,
+                        "gain": float(question.gain),
+                        "expected": question.expected,
+                        "grading_notes": question.grading_notes,
+                        "remaining": sum(1 for row in rows if row["value"] is None),
+                        "rows": rows,
+                    }
+                )
             return questions
 
-    def manual_image(self, index: int, e: int, q: int, margin_mm: float = 3.0) -> bytes:
-        """PNG du cadre de réponse découpé dans le scan (avec une petite marge)."""
+    def manual_image(self, index: int, e: int, q: int) -> bytes:
+        """PNG du cadre de réponse découpé dans le scan."""
         with self.lock:
-            self._manual_question(e, q)
-            page = self.pages[index].page
-            mark = self._manual_mark(page, e, q)
-            m = page.matrix_inv
-            if mark is None or m is None or page.img is None:
-                raise ValueError("Cadre de réponse introuvable sur cette page.")
-            x0, y0 = mark["x"] - margin_mm, mark["y"] - margin_mm
-            x1, y1 = mark["x"] + mark["w"] + margin_mm, mark["y"] + mark["h"] + margin_mm
-            corners = [m.apply(x, y) for x in (x0, x1) for y in (y0, y1)]
-            img = page.img.img
-            box = (
-                max(0, int(min(cx for cx, _ in corners))),
-                max(0, int(min(cy for _, cy in corners))),
-                min(img.width, int(max(cx for cx, _ in corners)) + 1),
-                min(img.height, int(max(cy for _, cy in corners)) + 1),
-            )
-            if box[2] <= box[0] or box[3] <= box[1]:
-                raise ValueError("Cadre de réponse hors de la page.")
-            crop = img.crop(box)
+            manual_grading.manual_question(self.project, e, q)
+            crop = manual_grading.crop_answer(self.pages[index].page, e, q)
         buf = io.BytesIO()
         crop.save(buf, format="PNG")
         return buf.getvalue()
@@ -544,21 +511,7 @@ class Session:
     def set_manual_value(self, index: int, e: int, q: int, value: Any) -> None:
         """Points d'une réponse libre (None efface la saisie), bornés par le gain de la question."""
         with self.lock:
-            question = self._manual_question(e, q)
-            if value is not None:
-                try:
-                    value = float(value)
-                except (TypeError, ValueError):
-                    raise ValueError("Points invalides.") from None
-                if not 0 <= value <= float(question.gain):
-                    raise ValueError(f"Les points doivent être compris entre 0 et {question.gain:g}.")
-            page = self.pages[index].page
-            mark = self._manual_mark(page, e, q)
-            if mark is None:
-                raise ValueError("Cadre de réponse introuvable sur cette page.")
-            mark["value"] = value
-            score = score_page(self.project, page.marks, variant_id=page.variant_id, student_id=page.student_id)
-            page.value, page.total, page.complete = score.value, score.total, score.complete
+            manual_grading.set_answer_value(self.project, self.pages[index].page, e, q, value)
             self.notes = self._collect_notes()
             self.correction_revision += 1
 
