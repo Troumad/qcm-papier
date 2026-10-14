@@ -64,6 +64,17 @@ def test_numero_etudiant_manuel_et_images(corrected):
     assert corrected.page_image(0, raw=True).startswith(b"\x89PNG")
 
 
+def test_variante_manuelle(corrected):
+    # Une page alignée dont on force la variante doit être corrigée avec elle.
+    corrected.set_variant(0, "3152")
+    info = corrected.page_info(0)
+    assert info["variant"] == 3152
+    assert info["note"] is not None
+    # Variante inconnue : refusée.
+    with pytest.raises(ValueError):
+        corrected.set_variant(0, "999999")
+
+
 def test_zip_refuse_un_chemin_hors_dossier(tmp_path):
     import io
     import zipfile

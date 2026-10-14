@@ -423,6 +423,22 @@ class Session:
             page.value, page.total, page.complete = score.value, score.total, score.complete
             self.notes = self._collect_notes()
 
+    def set_variant(self, index: int, variant_id: str | int) -> None:
+        variant_id = str(variant_id).strip()
+        if not variant_id:
+            raise ValueError("Variante vide.")
+        try:
+            vid = int(variant_id)
+        except ValueError:
+            vid = -1
+        with self.lock:
+            page = self.pages[index].page
+            if self.project.variants.variant(vid) is None:
+                raise ValueError(f"Variante inconnue : {variant_id}")
+            if not scanner.correct_with_variant(page, self.project, vid, clair=self.clair):
+                raise ValueError("Correction impossible : page non alignée.")
+            self.notes = self._collect_notes()
+
     def manual_align(self, index: int, points: list[tuple[float, float]]) -> bool:
         with self.lock:
             page = self.pages[index].page

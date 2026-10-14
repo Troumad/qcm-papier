@@ -381,7 +381,11 @@ def align_auto(page: ScannedPage, variants: dict) -> bool:
                     if i == 1:
                         val1 = 1
         if (val1 == 2 and val > 3) or (val1 == 1 and val > 4):
-            align_viewer(page, variants)
+            try:
+                align_viewer(page, variants)
+            except RuntimeError:
+                page.adjust = None
+                return False
             return True
         return False
 
@@ -849,6 +853,53 @@ def align_manual(page: ScannedPage, variants: dict, points: list[tuple[float, fl
     except RuntimeError:
         return False
     return page.adjust is not None
+
+
+def correct_with_variant(
+    page: ScannedPage,
+    project: Project,
+    variant_id: int,
+    check_manual_active: bool = False,
+    clair: float = CLAIR,
+) -> bool:
+    """Force la variante d'une page puis relance la correction.
+
+    Utilise quand le code-barres est illisible : la variante est donnee par
+    l'utilisateur, on verifie qu'elle existe, puis on reprend la correction
+    (n etudiant, cases, note) avec l'alignement deja calcule.
+    """
+    if page.ignore:
+        return False
+    if project.variants.variant(variant_id) is None:
+        return False
+    manual_marks = getattr(page, "manual_marks", None)
+    if page.matrix_inv is None:
+        matrix = compute_viewport(page, project.variants, page.img.width, page.img.height)["matrix"]
+        page.matrix = matrix
+        page.matrix_inv = matrix.inverse()
+    page.clear_marks()
+    page.variant_id = int(variant_id)
+    page.manual_marks = manual_marks
+    read_student_id(page, project.variants, page.matrix_inv, 41, 241)
+    if page.student_id is not None:
+        student = project.students.get(page.student_id)
+        if student is not None:
+            page.student_eid = student.eid
+            page.student_name = student.name
+            page.student_firstname = student.firstname
+    show_marks(page, project)
+    auto_marks(page, page.matrix_inv, clair=clair)
+    score = score_page(
+        project,
+        page.marks,
+        variant_id=page.variant_id,
+        student_id=page.student_id,
+        check_manual_active=check_manual_active,
+    )
+    page.value = score.value
+    page.total = score.total
+    page.complete = score.complete
+    return True
 
 
 def correct_with_manual_align(

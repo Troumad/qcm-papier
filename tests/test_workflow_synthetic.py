@@ -22,6 +22,37 @@ def wait(client):
     raise AssertionError("Correction trop longue")
 
 
+def test_variante_manuelle_api(project_path, tmp_path):
+    """Forcer une variante sur une page alignée relance la correction."""
+    pdf = tmp_path / "sujet.pdf"
+    cli.main(["generate", "-p", project_path, "-o", str(pdf), "--save-project", project_path])
+    (tmp_path / "session2").mkdir()
+    session = Session(work_dir=str(tmp_path / "session2"))
+    with TestClient(create_app(session), base_url="http://127.0.0.1:8060") as client:
+        assert (
+            client.post(
+                "/api/project/open", files={"file": ("projet.json", Path(project_path).read_bytes())}
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                "/api/copies", files=[("files", ("sujet.pdf", pdf.read_bytes(), "application/pdf"))]
+            ).status_code
+            == 200
+        )
+        assert client.post("/api/correction/start").status_code == 200
+        wait(client)
+        # La copie (le sujet lui-même) est alignée : on force la variante 42.
+        response = client.post("/api/pages/0/variant", json={"variant_id": "42"})
+        assert response.status_code == 200
+        assert response.json()["variant"] == 42
+        assert response.json()["note"] == 0
+        # Variante inconnue : refusée avec un message d'erreur.
+        response = client.post("/api/pages/0/variant", json={"variant_id": "999999"})
+        assert response.status_code != 200
+
+
 def test_correction_images_et_reprise_api(project_path, tmp_path):
     pdf = tmp_path / "sujet.pdf"
     cli.main(["generate", "-p", project_path, "-o", str(pdf), "--save-project", project_path])
