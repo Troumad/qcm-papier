@@ -1365,6 +1365,13 @@ def show_marks(page: ScannedPage, project: Project) -> None:
 # ---------------------------------------------------------------------------
 
 
+def final_value(page) -> float | None:
+    """Note finale d'une page : note brute moins le malus eventuel."""
+    if page.value is None:
+        return None
+    return float(page.value) - float(getattr(page, "malus", 0.0) or 0.0)
+
+
 def _apply_correction(
     page: ScannedPage, project: Project, check_manual_active: bool = False, clair: float = CLAIR
 ) -> bool:

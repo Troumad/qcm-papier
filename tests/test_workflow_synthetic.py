@@ -47,7 +47,7 @@ def test_variante_manuelle_api(project_path, tmp_path):
         response = client.post("/api/pages/0/variant", json={"variant_id": "42"})
         assert response.status_code == 200
         assert response.json()["variant"] == 42
-        assert response.json()["note"] == 0
+        assert response.json()["note"] == -1  # malus de 1 (n° étudiant illisible)
         # Variante inconnue : refusée avec un message d'erreur.
         response = client.post("/api/pages/0/variant", json={"variant_id": "999999"})
         assert response.status_code != 200
@@ -97,10 +97,12 @@ def test_correction_images_et_reprise_api(project_path, tmp_path):
         state = wait(client)
         assert len(state["results"]) == 1
         assert state["results"][0]["variant"] == 42
-        assert state["results"][0]["note"] == 0
+        # Sujet vierge : n° étudiant illisible -> malus de 1 appliqué à la note.
+        assert state["results"][0]["note"] == -1
+        assert state["results"][0]["malus"] == 1
         response = client.post("/api/pages/0/student", json={"student_id": "p1234567"})
         assert response.json()["student_id"] == "p1234567"
-        assert session.notes == {"p1234567": 0.0}
+        assert session.notes == {"p1234567": -1.0}  # malus de 1 (n° étudiant illisible)
         assert client.get("/api/pages/0/image").content.startswith(b"\x89PNG")
         assert session.page_image(0, raw=True).startswith(b"\x89PNG")
         before = session.results()

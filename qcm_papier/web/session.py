@@ -312,7 +312,7 @@ class Session:
             page = marked.page
             key = page.student_eid or page.student_id
             if key and page.value is not None and failure_reason(page) is None:
-                notes.setdefault(key, float(page.value))
+                notes.setdefault(key, float(scanner.final_value(page)))
         return notes
 
     def page_info(self, index: int) -> dict[str, Any]:
@@ -326,7 +326,7 @@ class Session:
             "variant": page.variant_id,
             "student_id": page.student_id,
             "student": name or page.student_id or "",
-            "note": page.value if page.matrix_inv is not None else None,
+            "note": scanner.final_value(page) if page.matrix_inv is not None else None,
             "total": page.total,
             "complete": page.complete,
             "malus": page.malus,

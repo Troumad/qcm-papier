@@ -2073,7 +2073,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             eid = getattr(page, "student_eid", None)
             if not eid:
                 continue
-            note = getattr(page, "value", None)
+            note = scanner.final_value(page)
             if note is None:
                 continue
             if eid not in notes:
@@ -2142,7 +2142,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                     if info:
                         info["n_ok"] += 1
                     eid = page.student_eid or page.student_id or ""
-                    note = page.value if page.value is not None else 0.0
+                    note = scanner.final_value(page) if page.value is not None else 0.0
                     if eid:
                         notes[eid] = note
                     self.results_store.append(
@@ -2171,7 +2171,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                     # l'afficher même si le n° étudiant manque (copie corrigée).
                     note_txt = ""
                     if page.matrix_inv is not None and page.variant_id is not None and page.value is not None:
-                        note_txt = f"{page.value:.2f}"
+                        note_txt = f"{scanner.final_value(page):.2f}"
                     self.results_store.append(
                         [
                             fname,
@@ -2270,7 +2270,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self.results_store.clear()
         for idx, (_label, page) in enumerate(self.marked_pages):
             fname = os.path.basename(getattr(page, "copy_path", "") or "")
-            note = page.value if page.value is not None else 0.0
+            note = scanner.final_value(page) if page.value is not None else 0.0
             failed = page.matrix_inv is None or page.variant_id is None or page.student_id is None
             if failed:
                 reason = "Échec alignement"
@@ -2282,7 +2282,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                 # l'afficher même si le n° étudiant manque (copie corrigée).
                 note_txt = ""
                 if page.matrix_inv is not None and page.variant_id is not None and page.value is not None:
-                    note_txt = f"{page.value:.2f}"
+                    note_txt = f"{scanner.final_value(page):.2f}"
                 self.results_store.append(
                     [fname, str(page.variant_id or ""), "", note_txt, reason, f"{getattr(page, 'malus', 0.0):g}", idx]
                 )
@@ -2382,10 +2382,10 @@ class QcmWindow(Gtk.ApplicationWindow):
                     # La note est calculée dès que l'alignement et la variante sont OK :
                     # l'afficher même si le n° étudiant manque (copie corrigée).
                     if page.matrix_inv is not None and page.variant_id is not None and page.value is not None:
-                        row[3] = f"{page.value:.2f}"
+                        row[3] = f"{scanner.final_value(page):.2f}"
                 else:
                     row[2] = _student_display(page)
-                    row[3] = f"{page.value:.2f}"
+                    row[3] = f"{scanner.final_value(page):.2f}"
                     row[4] = "complète" if page.complete else "incomplète"
                 row[5] = f"{getattr(page, 'malus', 0.0):g}"
                 break
@@ -2642,7 +2642,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                 if info:
                     info["n_ok"] += 1
                 eid = page.student_eid or page.student_id or ""
-                note = page.value if page.value is not None else 0.0
+                note = scanner.final_value(page) if page.value is not None else 0.0
                 if eid:
                     notes[eid] = note
                 self.results_store.append(
@@ -3093,6 +3093,7 @@ class MarkedPageWindow(Gtk.Window):
         n = len(self.pages)
         self.lbl_index.set_markup(f"<b>Copie {self.idx + 1} / {n}</b>")
         failed = page.matrix_inv is None or page.variant_id is None or page.student_id is None
+        corrected = page.matrix_inv is not None and page.variant_id is not None
         if failed:
             reason = "Échec alignement"
             if page.variant_id is not None and page.student_id is None:
@@ -3101,8 +3102,16 @@ class MarkedPageWindow(Gtk.Window):
                 reason = "Code-barres non trouvé"
             self.lbl_variant.set_text(f"Variante : {page.variant_id or '—'}")
             self.lbl_student.set_markup(f"<span color='#F00'><b>⚠ {reason}</b></span>")
-            self.lbl_note.set_markup("<b><span size='large'>Note : —</span></b>")
-            self.lbl_status.set_markup("<span color='#F00'>Non corrigée</span>")
+            final = scanner.final_value(page)
+            if corrected and final is not None:
+                # Copie corrigée (alignée + variante lue) : afficher la note
+                # finale (brute moins malus) même si le n° étudiant manque.
+                total = page.total if page.total is not None else 20.0
+                self.lbl_note.set_markup(f"<b><span size='large'>Note : {final:.2f} / {total:.0f}</span></b>")
+                self.lbl_status.set_markup("Statut : <span color='#F00'>incomplète</span>")
+            else:
+                self.lbl_note.set_markup("<b><span size='large'>Note : —</span></b>")
+                self.lbl_status.set_markup("<span color='#F00'>Non corrigée</span>")
         else:
             self.lbl_variant.set_text(f"Variante : {page.variant_id}")
             sid = page.student_id or "—"
@@ -3110,7 +3119,7 @@ class MarkedPageWindow(Gtk.Window):
             if page.student_name or page.student_firstname:
                 name = f"\n{page.student_name or ''} {page.student_firstname or ''}".strip()
             self.lbl_student.set_markup(f"Étudiant : {sid}{name}")
-            note = page.value if page.value is not None else 0.0
+            note = scanner.final_value(page) if page.value is not None else 0.0
             total = page.total if page.total is not None else 20.0
             color = "#0F0" if page.complete else "#F00"
             self.lbl_note.set_markup(f"<b><span size='large'>Note : {note:.2f} / {total:.0f}</span></b>")
