@@ -2167,8 +2167,21 @@ class QcmWindow(Gtk.ApplicationWindow):
                         reason = "Code-barres non trouvé"
                     elif page.student_id is None:
                         reason = "N° étudiant non trouvé"
+                    # La note est calculée dès que l'alignement et la variante sont OK :
+                    # l'afficher même si le n° étudiant manque (copie corrigée).
+                    note_txt = ""
+                    if page.matrix_inv is not None and page.variant_id is not None and page.value is not None:
+                        note_txt = f"{page.value:.2f}"
                     self.results_store.append(
-                        [fname, "", "", "", reason, f"{getattr(page, 'malus', 0.0):g}", len(self.marked_pages)]
+                        [
+                            fname,
+                            str(page.variant_id or ""),
+                            "",
+                            note_txt,
+                            reason,
+                            f"{getattr(page, 'malus', 0.0):g}",
+                            len(self.marked_pages),
+                        ]
                     )
                     label = f"{fname} ⚠ {reason}"
                     self.marked_pages.append((label, page))
@@ -2265,7 +2278,14 @@ class QcmWindow(Gtk.ApplicationWindow):
                     reason = "N° étudiant non trouvé"
                 elif page.variant_id is None:
                     reason = "Code-barres non trouvé"
-                self.results_store.append([fname, "", "", "", reason, f"{getattr(page, 'malus', 0.0):g}", idx])
+                # La note est calculée dès que l'alignement et la variante sont OK :
+                # l'afficher même si le n° étudiant manque (copie corrigée).
+                note_txt = ""
+                if page.matrix_inv is not None and page.variant_id is not None and page.value is not None:
+                    note_txt = f"{page.value:.2f}"
+                self.results_store.append(
+                    [fname, str(page.variant_id or ""), "", note_txt, reason, f"{getattr(page, 'malus', 0.0):g}", idx]
+                )
             else:
                 self.results_store.append(
                     [
@@ -2274,6 +2294,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                         _student_display(page),
                         f"{note:.2f}",
                         "complète" if page.complete else "incomplète",
+                        f"{getattr(page, 'malus', 0.0):g}",
                         idx,
                     ]
                 )
