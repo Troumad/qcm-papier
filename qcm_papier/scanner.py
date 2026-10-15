@@ -1020,11 +1020,21 @@ def _correlate_character(
 
 
 def read_barcode_line(
-    pimg: PixelImage, matrix: Matrix, layout: Layout, left_x: float, left_y: float, right_x: float, right_y: float
+    pimg: PixelImage,
+    matrix: Matrix,
+    layout: Layout,
+    left_x: float,
+    left_y: float,
+    right_x: float,
+    right_y: float,
 ) -> str:
-    """Lit une ligne de code-barres et renvoie le texte dÃÂ©codÃÂ©.
+    """Lit une ligne de code-barres et renvoie le texte decode.
 
-    Version optimisÃÂ©e utilisant des tableaux NumPy.
+    Essaie plusieurs resolutions de barres (nominale, puis ajustee de +/-6 %
+    et +/-12 %) : un scan legerement flou ou etale change la largeur des
+    barres etroites et fait echouer la correlation a la resolution nominale.
+    Renvoie le premier decodage valide (gardes '*' aux deux extremites, bonne
+    longueur), sinon le decodage nominal.
     """
     dist_x = right_x - left_x
     dist_y = right_y - left_y
@@ -1038,25 +1048,51 @@ def read_barcode_line(
     canvas_h = abs(cr_y - cl_y) + 1
     canvas_dist = math.sqrt(canvas_w * canvas_w + canvas_h * canvas_h)
     scale = dist / canvas_dist if canvas_dist else 1.0
-
     x_coords, g_values = _bresenham_pixels(pimg, cl_x, cl_y, cr_x, cr_y, scale, cl_x, cl_y)
     if len(x_coords) < 2:
         return ""
 
-    # Calculer les poids (w) pour tous les pixels
+    # Rogner les extremites de la ligne qui tombent dans une zone massivement
+    # noire (bord du scanner) : une longue serie de pixels sombres deborde la
+    # correlation des gardes '*' et empeche la detection du code-barres.
     n = len(x_coords)
-    weights = np.zeros(n, dtype=np.float64)
-    if n > 2:
-        weights[1:-1] = np.abs(x_coords[:-2] - x_coords[2:]) / 2
-    weights[0] = 0.0
-    weights[-1] = 0.0
+    dark_run = g_values > 64
+    lo = 0
+    while lo < n and dark_run[lo]:
+        lo += 1
+    hi = n
+    while hi > lo and dark_run[hi - 1]:
+        hi -= 1
+    if hi - lo < n:
+        x_coords = x_coords[lo:hi]
+        g_values = g_values[lo:hi]
+        if len(x_coords) < 2:
+            return ""
 
     barcode_angle = math.atan2(left_y - right_y, left_x - right_x)
     cos_a = math.cos(barcode_angle)
-    res = abs(layout.barcode_resolution / cos_a) if cos_a != 0 else layout.barcode_resolution
+    res_nominal = abs(layout.barcode_resolution / cos_a) if cos_a != 0 else layout.barcode_resolution
 
-    correlate_threshold = 16 * layout.barcode_resolution * 128 * 0.5
+    best = ""
+    for factor in (1.0, 0.94, 1.06, 0.88, 1.12):
+        res = res_nominal * factor
+        val = _decode_barcode_res(x_coords, g_values, layout, res, res_nominal)
+        if val and val.startswith("*") and val.endswith("*") and len(val) == layout.barcode_length:
+            return val
+        if not best and val:
+            best = val
+    return best
 
+
+def _decode_barcode_res(
+    x_coords: np.ndarray,
+    g_values: np.ndarray,
+    layout: Layout,
+    res: float,
+    res_nominal: float,
+) -> str:
+    """Decode la ligne a la resolution ``res`` donnee (recherche des gardes '*')."""
+    correlate_threshold = 16 * res_nominal * 128 * 0.5
     # Recherche du '*' de dÃÂ©but.
     first_pos = None
     first_weight = None
