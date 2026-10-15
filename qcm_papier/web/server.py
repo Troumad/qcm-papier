@@ -356,6 +356,16 @@ def create_app(session: Session | None = None) -> FastAPI:
         s().set_student_id(i, data.get("student_id", ""))
         return s().page_info(i)
 
+    @app.post("/api/pages/{i}/variant")
+    def page_variant(i: int, data: dict[str, str] = Body(...)) -> dict[str, Any]:
+        s().set_variant(i, data.get("variant_id", ""))
+        return s().page_info(i)
+
+    @app.post("/api/pages/{i}/malus")
+    def page_malus(i: int, data: dict[str, float] = Body(...)) -> dict[str, Any]:
+        s().set_malus(i, data.get("malus", 0.0))
+        return s().page_info(i)
+
     @app.post("/api/pages/{i}/align")
     def page_align(i: int, data: dict[str, list[list[float]]] = Body(...)) -> dict[str, Any]:
         points = [(float(x), float(y)) for x, y in data.get("points", [])]

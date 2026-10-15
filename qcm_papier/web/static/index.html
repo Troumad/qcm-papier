@@ -157,7 +157,7 @@
       <table id="results">
         <thead><tr>
           <th data-sort="file">Fichier</th><th data-sort="variant">Variante</th>
-          <th data-sort="student">Étudiant</th><th data-sort="note">Note</th><th data-sort="status">Statut</th>
+          <th data-sort="student">Étudiant</th><th data-sort="note">Note</th><th data-sort="malus">Malus</th><th data-sort="status">Statut</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -338,6 +338,10 @@
     <hr>
     <label>N° étudiant <input id="v-student-id" maxlength="8" placeholder="p0000000"></label>
     <button id="v-apply-student">Appliquer</button>
+    <label>Variante <input id="v-variant-id" type="number" min="1" placeholder="n° variante"></label>
+    <button id="v-apply-variant">Corriger avec cette variante</button>
+    <label>Malus <input id="v-malus" type="number" min="0" step="1" value="0"></label>
+    <button id="v-apply-malus">Appliquer le malus</button>
     <hr>
     <button id="v-align" aria-pressed="false">Alignement manuel</button>
     <p id="v-align-label" class="status"></p>

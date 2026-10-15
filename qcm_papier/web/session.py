@@ -312,7 +312,7 @@ class Session:
             page = marked.page
             key = page.student_eid or page.student_id
             if key and page.value is not None and failure_reason(page) is None:
-                notes.setdefault(key, float(page.value))
+                notes.setdefault(key, float(scanner.final_value(page)))
         return notes
 
     def page_info(self, index: int) -> dict[str, Any]:
@@ -326,9 +326,10 @@ class Session:
             "variant": page.variant_id,
             "student_id": page.student_id,
             "student": name or page.student_id or "",
-            "note": page.value if page.matrix_inv is not None else None,
+            "note": scanner.final_value(page) if page.matrix_inv is not None else None,
             "total": page.total,
             "complete": page.complete,
+            "malus": page.malus,
             "status": reason or ("complète" if page.complete else "incomplète"),
             "failed": reason is not None,
             "aligned": page.matrix_inv is not None,
@@ -422,6 +423,27 @@ class Session:
             score = score_page(self.project, page.marks, variant_id=page.variant_id, student_id=page.student_id)
             page.value, page.total, page.complete = score.value, score.total, score.complete
             self.notes = self._collect_notes()
+
+    def set_variant(self, index: int, variant_id: str | int) -> None:
+        variant_id = str(variant_id).strip()
+        if not variant_id:
+            raise ValueError("Variante vide.")
+        try:
+            vid = int(variant_id)
+        except ValueError:
+            vid = -1
+        with self.lock:
+            page = self.pages[index].page
+            if self.project.variants.variant(vid) is None:
+                raise ValueError(f"Variante inconnue : {variant_id}")
+            if not scanner.correct_with_variant(page, self.project, vid, clair=self.clair):
+                raise ValueError("Correction impossible : page non alignée.")
+            self.notes = self._collect_notes()
+
+    def set_malus(self, index: int, malus: float) -> None:
+        with self.lock:
+            page = self.pages[index].page
+            page.malus = max(0.0, float(malus))
 
     def manual_align(self, index: int, points: list[tuple[float, float]]) -> bool:
         with self.lock:

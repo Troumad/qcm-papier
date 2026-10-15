@@ -220,6 +220,7 @@ class ScannedPage:
     value: float | None = None
     total: float | None = None
     complete: bool = False
+    malus: float = 0.0
     copy_path: str | None = None
 
     def clear_marks(self) -> None:
@@ -381,7 +382,11 @@ def align_auto(page: ScannedPage, variants: dict) -> bool:
                     if i == 1:
                         val1 = 1
         if (val1 == 2 and val > 3) or (val1 == 1 and val > 4):
-            align_viewer(page, variants)
+            try:
+                align_viewer(page, variants)
+            except RuntimeError:
+                page.adjust = None
+                return False
             return True
         return False
 
@@ -851,6 +856,55 @@ def align_manual(page: ScannedPage, variants: dict, points: list[tuple[float, fl
     return page.adjust is not None
 
 
+def correct_with_variant(
+    page: ScannedPage,
+    project: Project,
+    variant_id: int,
+    check_manual_active: bool = False,
+    clair: float = CLAIR,
+) -> bool:
+    """Force la variante d'une page puis relance la correction.
+
+    Utilise quand le code-barres est illisible : la variante est donnee par
+    l'utilisateur, on verifie qu'elle existe, puis on reprend la correction
+    (n etudiant, cases, note) avec l'alignement deja calcule.
+    """
+    if page.ignore:
+        return False
+    if project.variants.variant(variant_id) is None:
+        return False
+    manual_marks = getattr(page, "manual_marks", None)
+    if page.matrix_inv is None:
+        matrix = compute_viewport(page, project.variants, page.img.width, page.img.height)["matrix"]
+        page.matrix = matrix
+        page.matrix_inv = matrix.inverse()
+    page.clear_marks()
+    page.variant_id = int(variant_id)
+    page.manual_marks = manual_marks
+    read_student_id(page, project.variants, page.matrix_inv, 41, 241)
+    if page.student_id is None:
+        page.malus = 1.0
+    if page.student_id is not None:
+        student = project.students.get(page.student_id)
+        if student is not None:
+            page.student_eid = student.eid
+            page.student_name = student.name
+            page.student_firstname = student.firstname
+    show_marks(page, project)
+    auto_marks(page, page.matrix_inv, clair=clair)
+    score = score_page(
+        project,
+        page.marks,
+        variant_id=page.variant_id,
+        student_id=page.student_id,
+        check_manual_active=check_manual_active,
+    )
+    page.value = score.value
+    page.total = score.total
+    page.complete = score.complete
+    return True
+
+
 def correct_with_manual_align(
     page: ScannedPage,
     project: Project,
@@ -969,11 +1023,21 @@ def _correlate_character(
 
 
 def read_barcode_line(
-    pimg: PixelImage, matrix: Matrix, layout: Layout, left_x: float, left_y: float, right_x: float, right_y: float
+    pimg: PixelImage,
+    matrix: Matrix,
+    layout: Layout,
+    left_x: float,
+    left_y: float,
+    right_x: float,
+    right_y: float,
 ) -> str:
-    """Lit une ligne de code-barres et renvoie le texte dÃÂ©codÃÂ©.
+    """Lit une ligne de code-barres et renvoie le texte decode.
 
-    Version optimisÃÂ©e utilisant des tableaux NumPy.
+    Essaie plusieurs resolutions de barres (nominale, puis ajustee de +/-6 %
+    et +/-12 %) : un scan legerement flou ou etale change la largeur des
+    barres etroites et fait echouer la correlation a la resolution nominale.
+    Renvoie le premier decodage valide (gardes '*' aux deux extremites, bonne
+    longueur), sinon le decodage nominal.
     """
     dist_x = right_x - left_x
     dist_y = right_y - left_y
@@ -987,25 +1051,51 @@ def read_barcode_line(
     canvas_h = abs(cr_y - cl_y) + 1
     canvas_dist = math.sqrt(canvas_w * canvas_w + canvas_h * canvas_h)
     scale = dist / canvas_dist if canvas_dist else 1.0
-
     x_coords, g_values = _bresenham_pixels(pimg, cl_x, cl_y, cr_x, cr_y, scale, cl_x, cl_y)
     if len(x_coords) < 2:
         return ""
 
-    # Calculer les poids (w) pour tous les pixels
+    # Rogner les extremites de la ligne qui tombent dans une zone massivement
+    # noire (bord du scanner) : une longue serie de pixels sombres deborde la
+    # correlation des gardes '*' et empeche la detection du code-barres.
     n = len(x_coords)
-    weights = np.zeros(n, dtype=np.float64)
-    if n > 2:
-        weights[1:-1] = np.abs(x_coords[:-2] - x_coords[2:]) / 2
-    weights[0] = 0.0
-    weights[-1] = 0.0
+    dark_run = g_values > 64
+    lo = 0
+    while lo < n and dark_run[lo]:
+        lo += 1
+    hi = n
+    while hi > lo and dark_run[hi - 1]:
+        hi -= 1
+    if hi - lo < n:
+        x_coords = x_coords[lo:hi]
+        g_values = g_values[lo:hi]
+        if len(x_coords) < 2:
+            return ""
 
     barcode_angle = math.atan2(left_y - right_y, left_x - right_x)
     cos_a = math.cos(barcode_angle)
-    res = abs(layout.barcode_resolution / cos_a) if cos_a != 0 else layout.barcode_resolution
+    res_nominal = abs(layout.barcode_resolution / cos_a) if cos_a != 0 else layout.barcode_resolution
 
-    correlate_threshold = 16 * layout.barcode_resolution * 128 * 0.5
+    best = ""
+    for factor in (1.0, 0.94, 1.06, 0.88, 1.12):
+        res = res_nominal * factor
+        val = _decode_barcode_res(x_coords, g_values, layout, res, res_nominal)
+        if val and val.startswith("*") and val.endswith("*") and len(val) == layout.barcode_length:
+            return val
+        if not best and val:
+            best = val
+    return best
 
+
+def _decode_barcode_res(
+    x_coords: np.ndarray,
+    g_values: np.ndarray,
+    layout: Layout,
+    res: float,
+    res_nominal: float,
+) -> str:
+    """Decode la ligne a la resolution ``res`` donnee (recherche des gardes '*')."""
+    correlate_threshold = 16 * res_nominal * 128 * 0.5
     # Recherche du '*' de dÃÂ©but.
     first_pos = None
     first_weight = None
@@ -1275,6 +1365,13 @@ def show_marks(page: ScannedPage, project: Project) -> None:
 # ---------------------------------------------------------------------------
 
 
+def final_value(page) -> float | None:
+    """Note finale d'une page : note brute moins le malus eventuel."""
+    if page.value is None:
+        return None
+    return float(page.value) - float(getattr(page, "malus", 0.0) or 0.0)
+
+
 def _apply_correction(
     page: ScannedPage, project: Project, check_manual_active: bool = False, clair: float = CLAIR
 ) -> bool:
@@ -1294,6 +1391,8 @@ def _apply_correction(
     if not read_barcode(page, vs, matrix):
         return False
     read_student_id(page, vs, matrix_inv, 41, 241)
+    if page.student_id is None:
+        page.malus = 1.0
     if page.student_id is not None:
         student = project.students.get(page.student_id)
         if student is not None:
@@ -1501,6 +1600,7 @@ def _page_to_state(page: ScannedPage) -> dict:
         "value": page.value,
         "total": page.total,
         "complete": page.complete,
+        "malus": page.malus,
         "matrix": _matrix_to_dict(page.matrix) if page.matrix else None,
         "matrix_inv": _matrix_to_dict(page.matrix_inv) if page.matrix_inv else None,
         "marks": [],
@@ -1542,6 +1642,7 @@ def _page_from_state(page: ScannedPage, state: dict) -> None:
     page.value = state.get("value")
     page.total = state.get("total")
     page.complete = state.get("complete", False)
+    page.malus = float(state.get("malus", 0.0) or 0.0)
     if state.get("matrix"):
         page.matrix = _matrix_from_dict(state["matrix"])
     if state.get("matrix_inv"):
