@@ -329,6 +329,7 @@ class Session:
             "note": page.value if page.matrix_inv is not None else None,
             "total": page.total,
             "complete": page.complete,
+            "malus": page.malus,
             "status": reason or ("complète" if page.complete else "incomplète"),
             "failed": reason is not None,
             "aligned": page.matrix_inv is not None,
@@ -438,6 +439,11 @@ class Session:
             if not scanner.correct_with_variant(page, self.project, vid, clair=self.clair):
                 raise ValueError("Correction impossible : page non alignée.")
             self.notes = self._collect_notes()
+
+    def set_malus(self, index: int, malus: float) -> None:
+        with self.lock:
+            page = self.pages[index].page
+            page.malus = max(0.0, float(malus))
 
     def manual_align(self, index: int, points: list[tuple[float, float]]) -> bool:
         with self.lock:

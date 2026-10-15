@@ -53,6 +53,28 @@ def test_variante_manuelle_api(project_path, tmp_path):
         assert response.status_code != 200
 
 
+def test_malus_api(project_path, tmp_path):
+    """Le malus est exposé, modifiable, et survit à la sauvegarde/reprise."""
+    pdf = tmp_path / "sujet.pdf"
+    cli.main(["generate", "-p", project_path, "-o", str(pdf), "--save-project", project_path])
+    (tmp_path / "session3").mkdir()
+    session = Session(work_dir=str(tmp_path / "session3"))
+    with TestClient(create_app(session), base_url="http://127.0.0.1:8060") as client:
+        client.post("/api/project/open", files={"file": ("projet.json", Path(project_path).read_bytes())})
+        client.post("/api/copies", files=[("files", ("sujet.pdf", pdf.read_bytes(), "application/pdf"))])
+        client.post("/api/correction/start")
+        wait(client)
+        info = client.get("/api/pages/0").json()
+        # Sujet vierge : n° étudiant illisible -> malus automatique à 1.
+        assert info["malus"] == 1
+        response = client.post("/api/pages/0/malus", json={"malus": 2})
+        assert response.json()["malus"] == 2
+        archive = client.get("/api/state/save")
+        client.post("/api/state/load", files={"file": ("correction.zip", archive.content)})
+        wait(client)
+        assert client.get("/api/pages/0").json()["malus"] == 2
+
+
 def test_correction_images_et_reprise_api(project_path, tmp_path):
     pdf = tmp_path / "sujet.pdf"
     cli.main(["generate", "-p", project_path, "-o", str(pdf), "--save-project", project_path])

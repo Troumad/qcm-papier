@@ -74,7 +74,9 @@
   }
 
   function pageLabel(r) {
-    return r.failed && r.note === null ? `${r.file} ⚠ ${r.status}` : `${r.file} v${r.variant} ${r.student_id || ""}`;
+    if (r.failed && r.note === null) return `${r.file} ⚠ ${r.status}`;
+    const note = r.note === null ? "" : ` ${r.note.toFixed(2)}`;
+    return `${r.file} v${r.variant} ${r.student_id || ""}${note}`;
   }
 
   function renderResults() {
@@ -90,6 +92,7 @@
         el("td", {}, r.variant ?? ""),
         el("td", {}, r.student),
         el("td", {}, r.note === null ? "" : r.note.toFixed(2)),
+        el("td", {}, String(r.malus ?? 0)),
         el("td", { class: r.failed ? "failed" : "" }, r.status));
       row.classList.toggle("selected", r.index === current);
       return row;
@@ -426,6 +429,7 @@
     $("#v-status").className = info.failed || !info.complete ? "status error" : "status ok";
     $("#v-student-id").value = info.student_id || "";
     $("#v-variant-id").value = info.variant ?? "";
+    $("#v-malus").value = String(info.malus ?? 0);
     $("#v-prev").disabled = adjacent(index, -1) === index;
     $("#v-next").disabled = adjacent(index, 1) === index;
     vImg.onload = layoutStage;
@@ -460,6 +464,10 @@
   }));
   $("#v-apply-variant").addEventListener("click", () => guard(async () => {
     await api("POST", `/api/pages/${viewer.index}/variant`, { variant_id: $("#v-variant-id").value });
+    await afterPageChange(viewer.index);
+  }));
+  $("#v-apply-malus").addEventListener("click", () => guard(async () => {
+    await api("POST", `/api/pages/${viewer.index}/malus`, { malus: Number($("#v-malus").value || 0) });
     await afterPageChange(viewer.index);
   }));
 

@@ -220,6 +220,7 @@ class ScannedPage:
     value: float | None = None
     total: float | None = None
     complete: bool = False
+    malus: float = 0.0
     copy_path: str | None = None
 
     def clear_marks(self) -> None:
@@ -881,6 +882,8 @@ def correct_with_variant(
     page.variant_id = int(variant_id)
     page.manual_marks = manual_marks
     read_student_id(page, project.variants, page.matrix_inv, 41, 241)
+    if page.student_id is None:
+        page.malus = 1.0
     if page.student_id is not None:
         student = project.students.get(page.student_id)
         if student is not None:
@@ -1381,6 +1384,8 @@ def _apply_correction(
     if not read_barcode(page, vs, matrix):
         return False
     read_student_id(page, vs, matrix_inv, 41, 241)
+    if page.student_id is None:
+        page.malus = 1.0
     if page.student_id is not None:
         student = project.students.get(page.student_id)
         if student is not None:
@@ -1588,6 +1593,7 @@ def _page_to_state(page: ScannedPage) -> dict:
         "value": page.value,
         "total": page.total,
         "complete": page.complete,
+        "malus": page.malus,
         "matrix": _matrix_to_dict(page.matrix) if page.matrix else None,
         "matrix_inv": _matrix_to_dict(page.matrix_inv) if page.matrix_inv else None,
         "marks": [],
@@ -1629,6 +1635,7 @@ def _page_from_state(page: ScannedPage, state: dict) -> None:
     page.value = state.get("value")
     page.total = state.get("total")
     page.complete = state.get("complete", False)
+    page.malus = float(state.get("malus", 0.0) or 0.0)
     if state.get("matrix"):
         page.matrix = _matrix_from_dict(state["matrix"])
     if state.get("matrix_inv"):
