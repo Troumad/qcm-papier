@@ -2554,8 +2554,11 @@ class QcmWindow(Gtk.ApplicationWindow):
                     )
                 else:
                     status.set_markup(f"<span color='#080'>Copie envoyée à {name or email}.</span>")
-            else:
-                status.set_markup(f"<span color='#C00'>Échec : {reports[0].error if reports else '?'}</span>")
+                # Le mail est parti : désactiver Envoyer pour éviter un
+                # double envoi accidentel au même étudiant.
+                btn_send.set_sensitive(False)
+                return
+            status.set_markup(f"<span color='#C00'>Échec : {reports[0].error if reports else '?'}</span>")
             btn_send.set_sensitive(True)
 
         btn_cancel.connect("clicked", lambda _b: win.destroy())
@@ -2902,6 +2905,10 @@ class QcmWindow(Gtk.ApplicationWindow):
             else:
                 status.set_markup(f"<span color='#080'>{ok} mail(s) envoyé(s) avec succès.</span>")
                 self.marking_status.set_text(f"Envoi terminé : {ok} copie(s) envoyée(s) par mail.")
+                # Tout est parti : plus rien à envoyer — on désactive le
+                # bouton pour éviter un double envoi accidentel.
+                btn_send.set_sensitive(False)
+                return
             btn_send.set_sensitive(True)
             btn_cancel.set_label("Fermer")
 
