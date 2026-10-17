@@ -25,7 +25,7 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, Gio, GLib, Gtk
 
-from .. import generator, markdown_pango, pdf_writer, scanner, scodoc
+from .. import generator, mail_config, markdown_pango, pdf_writer, scanner, scodoc
 from .. import project as project_mod
 from ..marking import score_page
 from ..model import Project
@@ -1665,6 +1665,8 @@ class QcmWindow(Gtk.ApplicationWindow):
         btn_save_state.connect("clicked", self._on_save_state)
         btn_load_state = Gtk.Button(label="Recharger…")
         btn_load_state.connect("clicked", self._on_load_state)
+        btn_mail = Gtk.Button(label="Compte mail…")
+        btn_mail.connect("clicked", self._on_mail_account)
         files_box.append(btn_load)
         files_box.append(btn_correct)
         files_box.append(btn_students)
@@ -1672,6 +1674,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         files_box.append(btn_remove)
         files_box.append(btn_save_state)
         files_box.append(btn_load_state)
+        files_box.append(btn_mail)
         box.append(files_box)
 
         clair_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -2429,6 +2432,123 @@ class QcmWindow(Gtk.ApplicationWindow):
                     row[5] = "complète" if page.complete else "incomplète"
                 row[6] = f"{getattr(page, 'malus', 0.0):g}"
                 break
+
+    def _on_mail_account(self, _btn) -> None:
+        """Ouvre le dialogue de configuration du compte mail (envoi des copies).
+
+        Serveur, port, login, expéditeur et mot de passe (saisie masquée).
+        Le mot de passe est rangé dans le trousseau du système, jamais écrit
+        dans un fichier ; les autres réglages sont mémorisés durablement.
+        """
+        win = Gtk.Window(title="Compte mail (envoi des copies)", transient_for=self, modal=True, default_width=520)
+        main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        main.set_margin_start(12)
+        main.set_margin_end(12)
+        main.set_margin_top(12)
+        main.set_margin_bottom(12)
+        win.set_child(main)
+
+        grid = Gtk.Grid()
+        grid.set_row_spacing(8)
+        grid.set_column_spacing(8)
+        main.append(grid)
+
+        lbl_host = Gtk.Label(label="Serveur SMTP :")
+        lbl_host.set_xalign(1)
+        entry_host = Gtk.Entry()
+        entry_host.set_placeholder_text("smtp.univ.fr")
+        lbl_port = Gtk.Label(label="Port :")
+        lbl_port.set_xalign(1)
+        entry_port = Gtk.Entry()
+        entry_port.set_placeholder_text("587")
+        entry_port.set_width_chars(6)
+        lbl_login = Gtk.Label(label="Login :")
+        lbl_login.set_xalign(1)
+        entry_login = Gtk.Entry()
+        lbl_sender = Gtk.Label(label="Expéditeur :")
+        lbl_sender.set_xalign(1)
+        entry_sender = Gtk.Entry()
+        entry_sender.set_placeholder_text("prenom.nom@univ.fr")
+        lbl_passwd = Gtk.Label(label="Mot de passe :")
+        lbl_passwd.set_xalign(1)
+        entry_passwd = Gtk.Entry()
+        entry_passwd.set_visibility(False)
+        entry_passwd.set_input_purpose(Gtk.InputPurpose.PASSWORD)
+        chk_starttls = Gtk.CheckButton(label="Chiffrement STARTTLS")
+        chk_starttls.set_active(True)
+
+        widgets = [
+            (lbl_host, 0, 0, 1, 1),
+            (entry_host, 1, 0, 1, 1),
+            (lbl_port, 0, 1, 1, 1),
+            (entry_port, 1, 1, 1, 1),
+            (lbl_login, 0, 2, 1, 1),
+            (entry_login, 1, 2, 1, 1),
+            (lbl_sender, 0, 3, 1, 1),
+            (entry_sender, 1, 3, 1, 1),
+            (lbl_passwd, 0, 4, 1, 1),
+            (entry_passwd, 1, 4, 1, 1),
+            (chk_starttls, 1, 5, 1, 1),
+        ]
+        for widget, col, row, w, h in widgets:
+            grid.attach(widget, col, row, w, h)
+
+        try:
+            account = mail_config.load_account()
+        except mail_config.MailConfigError:
+            account = mail_config.MailAccount()
+        if account.host:
+            entry_host.set_text(account.host)
+        entry_port.set_text(str(account.port or 587))
+        if account.username:
+            entry_login.set_text(account.username)
+        if account.sender:
+            entry_sender.set_text(account.sender)
+        chk_starttls.set_active(account.starttls)
+
+        status = Gtk.Label(label="")
+        status.set_wrap(True)
+        main.append(status)
+        if account.complete:
+            status.set_markup(
+                f"<span color='#080'>Compte configuré ({account.username} sur {account.host}).\n"
+                f"Trousseau : {mail_config.keyring_name()}</span>"
+            )
+        elif account.host or account.username:
+            status.set_markup("<span color='#C00'>Compte incomplet : mot de passe manquant.</span>")
+
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        btn_box.set_halign(Gtk.Align.END)
+        btn_cancel = Gtk.Button(label="Annuler")
+        btn_save = Gtk.Button(label="Enregistrer")
+        btn_save.get_style_context().add_class("suggested-action")
+        btn_box.append(btn_cancel)
+        btn_box.append(btn_save)
+        main.append(btn_box)
+
+        def _save(_b) -> None:
+            try:
+                mail_config.save_account(
+                    entry_host.get_text(),
+                    entry_port.get_text(),
+                    entry_login.get_text(),
+                    entry_sender.get_text(),
+                    entry_passwd.get_text() or None,
+                    starttls=chk_starttls.get_active(),
+                )
+            except mail_config.MailConfigError as e:
+                status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
+                return
+            account = mail_config.load_account()
+            status.set_markup(
+                f"<span color='#080'>Compte enregistré ({account.username} sur {account.host}).\n"
+                f"Le mot de passe est dans le trousseau système, pas dans un fichier.\n"
+                f"Trousseau : {mail_config.keyring_name()}</span>"
+            )
+
+        btn_cancel.connect("clicked", lambda _b: win.destroy())
+        btn_save.connect("clicked", _save)
+        win.present()
 
     def _on_export_scodoc(self, _btn) -> None:
         if not self._last_notes:
