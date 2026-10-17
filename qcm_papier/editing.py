@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from . import generator
 from .model import Choice, Exercise, Project, ProjectSettings, Question
 
 # ---------------------------------------------------------------------------
@@ -187,11 +188,23 @@ def set_question_type(question: Question, kind: str) -> None:
     question.multiple_exact = kind == "multiple_exact"
     question.multiple_progressive = kind == "multiple_progressive"
     question.manual = kind == "manual"
+    if question.manual and (question.width <= 0 or question.height <= 0):
+        # Sans cadre, rien à scanner ni à noter.
+        question.width, question.height = MANUAL_BOX_DEFAULT
     normalize_single_choices(question)
 
 
 EXERCISE_FIELDS = {"name": str, "header": str, "validation": bool, "gain": float, "threshold": float, "min0": bool}
-QUESTION_FIELDS = {"name": str, "gain": float, "penalty": float}
+QUESTION_FIELDS = {
+    "name": str,
+    "gain": float,
+    "penalty": float,
+    "width": float,
+    "height": float,
+    "expected": str,
+    "grading_notes": str,
+}
+MANUAL_BOX_DEFAULT = (80.0, 30.0)  # mm
 
 
 def _update(obj: Any, fields: dict[str, type], data: dict[str, Any]) -> None:
@@ -208,6 +221,9 @@ def update_exercise(exercise: Exercise, data: dict[str, Any]) -> None:
 def update_question(question: Question, data: dict[str, Any]) -> None:
     data = dict(data)
     kind = data.pop("type", None)
+    for key in ("width", "height"):
+        if key in data and float(data[key]) <= 0:
+            raise ValueError("La taille du cadre de réponse doit être positive.")
     _update(question, QUESTION_FIELDS, data)
     if kind is not None:
         set_question_type(question, kind)
@@ -230,6 +246,10 @@ def structure_view(project: Project) -> dict[str, Any]:
                     "type": question_type(question),
                     "range": [q_min, q_max],
                     "choices": [{"name": c.name, "state": choice_state(c)} for c in question.choices],
+                    "width": question.width,
+                    "height": question.height,
+                    "expected": question.expected,
+                    "grading_notes": question.grading_notes,
                 }
             )
         exercises.append(
@@ -306,6 +326,16 @@ GENERATION_FIELDS = {
 
 MARGINS = ("margin_top", "margin_left", "margin_right", "margin_bottom")
 
+# En-tête et pied de page : textes avec macros ``${...}`` (onglet GTK « Entête et pied de page »).
+HEADER_FOOTER_DEFAULTS = {
+    "header_left": generator.HEADER_LEFT_DEFAULT,
+    "header_middle": generator.HEADER_MIDDLE_DEFAULT,
+    "header_right": generator.HEADER_RIGHT_DEFAULT,
+    "footer_left": generator.FOOTER_LEFT_DEFAULT,
+    "footer_middle": generator.FOOTER_MIDDLE_DEFAULT,
+    "footer_right": generator.FOOTER_RIGHT_DEFAULT,
+}
+
 
 def apply_info_defaults(settings: ProjectSettings) -> None:
     """Remplit les informations vides avec les valeurs proposées (comme GTK à l'ouverture)."""
@@ -335,6 +365,8 @@ def settings_form(settings: ProjectSettings) -> dict[str, Any]:
     form: dict[str, Any] = {key: getattr(settings, key) for key in INFO_FIELDS}
     form.update({key: getattr(settings, key) for key in GENERATION_FIELDS})
     form.update({key: float(getattr(settings, key) or 10) for key in MARGINS})
+    form.update({key: getattr(settings, key) for key in HEADER_FOOTER_DEFAULTS})
+    form["footer_enabled"] = bool(settings.footer_enabled)
     form["paper_format"] = settings.paper_format
     if settings.paper_both:
         form["paper_orientation"] = "both"
@@ -358,6 +390,10 @@ def apply_settings_form(settings: ProjectSettings, form: dict[str, Any]) -> None
             setattr(settings, key, GENERATION_FIELDS[key](value))
         elif key in MARGINS:
             setattr(settings, key, float(value))
+        elif key in HEADER_FOOTER_DEFAULTS:
+            setattr(settings, key, str(value))
+        elif key == "footer_enabled":
+            settings.footer_enabled = bool(value)
         elif key == "paper_format":
             if value not in ("a3", "a4", "a5"):
                 raise ValueError(f"Format de papier inconnu : {value}")
@@ -380,3 +416,12 @@ def apply_settings_form(settings: ProjectSettings, form: dict[str, Any]) -> None
                 setattr(settings, f"{key}_{v}", v == value)
         else:
             raise ValueError(f"Paramètre inconnu : {key}")
+
+
+def header_footer_view(settings: ProjectSettings) -> dict[str, Any]:
+    """Modèles par défaut et macros disponibles, avec la valeur que chacune prendra."""
+    macros = [
+        {"macro": macro, "value": str(getattr(settings, field) or "") or INFO_DEFAULTS.get(field, "")}
+        for macro, field in generator._HEADER_MACROS.items()
+    ]
+    return {"defaults": HEADER_FOOTER_DEFAULTS, "macros": macros}

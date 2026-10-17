@@ -25,11 +25,12 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, Gio, GLib, Gtk
 
-from .. import generator, pdf_writer, scanner, scodoc
+from .. import generator, mail_config, mailing, markdown_pango, pdf_writer, scanner, scodoc
 from .. import project as project_mod
 from ..marking import score_page
 from ..model import Project
 from .editor import StructureEditor
+from .manual_window import ManualGradingWindow
 
 
 def _file_dialog(parent, title: str, action, filters=None, initial_name=None, initial_folder=None):
@@ -125,6 +126,20 @@ def _label_font(size: int = 16):
             return ImageFont.truetype("DejaVuSans.ttf", size)
         except Exception:
             return ImageFont.load_default()
+
+
+def _student_email(page) -> str:
+    """Adresse email de l'étudiant (levée d'anonymat), sinon vide."""
+    return getattr(page, "student_email", None) or ""
+
+
+def _send_mark(page) -> str:
+    """Marque de la colonne Envoi : « ✉ » si la copie est envoyable."""
+    if not _student_email(page):
+        return ""
+    if page.matrix_inv is None or page.variant_id is None:
+        return ""
+    return "✉"
 
 
 def _student_display(page) -> str:
@@ -1659,6 +1674,10 @@ class QcmWindow(Gtk.ApplicationWindow):
         btn_save_state.connect("clicked", self._on_save_state)
         btn_load_state = Gtk.Button(label="Recharger…")
         btn_load_state.connect("clicked", self._on_load_state)
+        btn_mail = Gtk.Button(label="Compte mail…")
+        btn_mail.connect("clicked", self._on_mail_account)
+        btn_send_mail = Gtk.Button(label="Envoyer les copies par mail…")
+        btn_send_mail.connect("clicked", self._on_send_copies_mail)
         files_box.append(btn_load)
         files_box.append(btn_correct)
         files_box.append(btn_students)
@@ -1666,6 +1685,8 @@ class QcmWindow(Gtk.ApplicationWindow):
         files_box.append(btn_remove)
         files_box.append(btn_save_state)
         files_box.append(btn_load_state)
+        files_box.append(btn_mail)
+        files_box.append(btn_send_mail)
         box.append(files_box)
 
         clair_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -1694,14 +1715,14 @@ class QcmWindow(Gtk.ApplicationWindow):
         box.append(self.marking_status)
 
         # Résultats
-        self.results_store = Gtk.ListStore(str, str, str, str, str, str, int)
+        self.results_store = Gtk.ListStore(str, str, str, str, str, str, str, int, str)
         results_tree = Gtk.TreeView(model=self.results_store)
 
         # Tri numérique pour la colonne Note (stockée en texte) : id de tri 100
         # pour ne pas confondre avec les indices de colonnes.
         def _note_sort_func(_model, a, b, _d):
-            va = _model.get_value(a, 3)
-            vb = _model.get_value(b, 3)
+            va = _model.get_value(a, 4)
+            vb = _model.get_value(b, 4)
             try:
                 fa = float(va)
                 fb = float(vb)
@@ -1715,17 +1736,28 @@ class QcmWindow(Gtk.ApplicationWindow):
             ("Fichier", 0, 0),
             ("Variante", 1, 1),
             ("Étudiant", 2, 2),
-            ("Note", 3, 100),
-            ("Malus", 5, 5),
-            ("Statut", 4, 4),
+            ("Email", 3, 3),
+            ("Note", 4, 100),
+            ("Malus", 6, 6),
+            ("Statut", 5, 5),
         ]:
             col = Gtk.TreeViewColumn(title, Gtk.CellRendererText(), text=text_col)
             col.set_resizable(True)
             col.set_sort_column_id(sort_col)
             results_tree.append_column(col)
+        send_renderer = Gtk.CellRendererText()
+        send_renderer.set_property("xalign", 0.5)
+        self.send_column = Gtk.TreeViewColumn("Envoi", send_renderer, text=8)
+        send_renderer.set_property("foreground-rgba", Gdk.RGBA(0.0, 0.4, 0.0, 1.0))
+        results_tree.append_column(self.send_column)
+
         sel = results_tree.get_selection()
         sel.connect("changed", self._on_result_selected)
         results_tree.connect("row-activated", self._on_result_activated)
+        click = Gtk.GestureClick()
+        click.set_button(1)
+        click.connect("pressed", self._on_results_click)
+        results_tree.add_controller(click)
         self.results_tree = results_tree
         scroll2 = Gtk.ScrolledWindow()
         scroll2.set_vexpand(True)
@@ -1743,9 +1775,13 @@ class QcmWindow(Gtk.ApplicationWindow):
         btn_next.connect("clicked", lambda _b: self._show_marked_page(+1))
         btn_enlarge = Gtk.Button(label="Agrandir")
         btn_enlarge.connect("clicked", self._on_enlarge_page)
+        btn_manual = Gtk.Button(label="Réponses libres…")
+        btn_manual.set_tooltip_text("Noter les questions à réponse libre, question par question")
+        btn_manual.connect("clicked", self._on_manual_grading)
         view_box.append(btn_prev)
         view_box.append(btn_next)
         view_box.append(btn_enlarge)
+        view_box.append(btn_manual)
         box.append(view_box)
 
         self.marked_pages: list = []
@@ -1761,7 +1797,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self._build_help_tab()
 
     def _build_help_tab(self) -> None:
-        """Onglet Aide : affiche le contenu de README.md en texte brut."""
+        """Onglet Aide : affiche le contenu de README.md mis en forme (Markdown → Pango)."""
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
         scroll.set_hexpand(True)
@@ -1778,7 +1814,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         if path:
             try:
                 with open(path, encoding="utf-8") as f:
-                    buf.set_text(f.read())
+                    buf.insert_markup(buf.get_start_iter(), markdown_pango.render(f.read()), -1)
             except Exception as e:
                 buf.set_text(f"Impossible de charger l'aide ({path}) : {e}")
         else:
@@ -2014,9 +2050,28 @@ class QcmWindow(Gtk.ApplicationWindow):
                 return
             n = len(self.project.students)
             n_matched = self._apply_anonymat()
-            status.set_markup(
-                f"<span color='#080'>{n} étudiant(s) chargé(s), {n_matched} copie(s) identifiée(s).</span>"
+            win.destroy()
+            info = Gtk.Window(title="Levée d'anonymat Scodoc", transient_for=self, modal=True, default_width=380)
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+            box.set_margin_start(12)
+            box.set_margin_end(12)
+            box.set_margin_top(12)
+            box.set_margin_bottom(12)
+            info.set_child(box)
+            box.append(
+                Gtk.Label(
+                    label=(
+                        f"{n} étudiant(s) chargé(s) depuis la table Scodoc.\n"
+                        f"{n_matched} copie(s) identifiée(s) (nom, prénom, EID et email associés)."
+                    )
+                )
             )
+            btn_close_info = Gtk.Button(label="Fermer")
+            btn_close_info.get_style_context().add_class("suggested-action")
+            btn_close_info.set_halign(Gtk.Align.END)
+            btn_close_info.connect("clicked", lambda _b: info.destroy())
+            box.append(btn_close_info)
+            info.present()
 
         def _close(_b) -> None:
             win.destroy()
@@ -2042,16 +2097,19 @@ class QcmWindow(Gtk.ApplicationWindow):
             page.student_eid = student.eid
             page.student_name = student.name
             page.student_firstname = student.firstname
+            page.student_email = student.email
             n_matched += 1
         # Rafraîchit le tableau des résultats (colonne Étudiant).
         for row in self.results_store:
-            idx = row[6]
+            idx = row[7]
             if not isinstance(idx, int) or not (0 <= idx < len(self.marked_pages)):
                 continue
             _label, page = self.marked_pages[idx]
             failed = page.matrix_inv is None or page.variant_id is None or page.student_id is None
             if not failed:
                 row[2] = _student_display(page)
+                row[3] = _student_email(page)
+                row[8] = _send_mark(page)
         # Reconstruit la table des notes indexée par EID, pour que l'export
         # Scodoc (qui cherche les notes par '!EID') trouve les bons étudiants.
         # Avant la levée d'anonymat, _last_notes était indexé par student_id.
@@ -2124,7 +2182,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                 pages = scanner.load_pages_from_file(copy_path, dpi=150)
             except Exception as e:
                 n_err += 1
-                self.results_store.append([fname, "", "", "", f"Erreur : {e}", "0", -1])
+                self.results_store.append([fname, "", "", "", "", f"Erreur : {e}", "0", -1, ""])
                 if info:
                     info["n_err"] = 1
                     info["n_pages"] = 1
@@ -2150,10 +2208,12 @@ class QcmWindow(Gtk.ApplicationWindow):
                             fname,
                             str(page.variant_id or ""),
                             _student_display(page),
+                            _student_email(page),
                             f"{note:.2f}",
                             "complète" if page.complete else "incomplète",
                             f"{getattr(page, 'malus', 0.0):g}",
                             len(self.marked_pages),
+                            _send_mark(page),
                         ]
                     )
                     label = f"{fname} v{page.variant_id} {page.student_id or ''}"
@@ -2177,10 +2237,12 @@ class QcmWindow(Gtk.ApplicationWindow):
                             fname,
                             str(page.variant_id or ""),
                             "",
+                            "",
                             note_txt,
                             reason,
                             f"{getattr(page, 'malus', 0.0):g}",
                             len(self.marked_pages),
+                            _send_mark(page),
                         ]
                     )
                     label = f"{fname} ⚠ {reason}"
@@ -2284,7 +2346,17 @@ class QcmWindow(Gtk.ApplicationWindow):
                 if page.matrix_inv is not None and page.variant_id is not None and page.value is not None:
                     note_txt = f"{scanner.final_value(page):.2f}"
                 self.results_store.append(
-                    [fname, str(page.variant_id or ""), "", note_txt, reason, f"{getattr(page, 'malus', 0.0):g}", idx]
+                    [
+                        fname,
+                        str(page.variant_id or ""),
+                        "",
+                        "",
+                        note_txt,
+                        reason,
+                        f"{getattr(page, 'malus', 0.0):g}",
+                        idx,
+                        _send_mark(page),
+                    ]
                 )
             else:
                 self.results_store.append(
@@ -2292,19 +2364,209 @@ class QcmWindow(Gtk.ApplicationWindow):
                         fname,
                         str(page.variant_id or ""),
                         _student_display(page),
+                        _student_email(page),
                         f"{note:.2f}",
                         "complète" if page.complete else "incomplète",
                         f"{getattr(page, 'malus', 0.0):g}",
                         idx,
+                        _send_mark(page),
                     ]
                 )
         self._refresh_page_selector()
+
+    def _on_results_click(self, _gesture, _n, x, y) -> None:
+        """Clic dans le tableau des résultats : sur « ✉ », envoyer la copie."""
+        # get_path_at_pos attend des coordonnées relatives à la fenêtre bin
+        # (sous l'en-tête) ; le clic fournit des coordonnées du widget — sans
+        # conversion, la hauteur de l'en-tête décale le clic d'une ligne.
+        try:
+            bx, by = self.results_tree.convert_widget_to_bin_window_coords(x, y)
+        except AttributeError:
+            bx, by = x, y
+        hit = self.results_tree.get_path_at_pos(bx, by)
+        if hit is None:
+            return
+        path, column, _cx, _cy = hit
+        if column is not self.send_column:
+            return
+        model = self.results_tree.get_model()
+        tree_iter = model.get_iter(path)
+        page_idx = model.get_value(tree_iter, 7)
+        if not isinstance(page_idx, int) or not (0 <= page_idx < len(self.marked_pages)):
+            return
+        _label, page = self.marked_pages[page_idx]
+        if not _send_mark(page):
+            self.marking_status.set_text("Envoi impossible : pas d'email pour cet étudiant (levée d'anonymat ?).")
+            return
+        self._send_one_copy_dialog(page_idx)
+
+    def _send_one_copy_dialog(self, page_idx: int) -> None:
+        """Dialogue d'envoi de la copie d'un seul étudiant (bouton ✉ / visionneuse)."""
+        _label, page = self.marked_pages[page_idx]
+        email = _student_email(page)
+        name = f"{page.student_name or ''} {page.student_firstname or ''}".strip()
+        ds_name = self.project.settings.evaluation_full or self.project.settings.evaluation_short
+
+        win = Gtk.Window(title=f"Envoyer la copie à {name or email}", transient_for=self, modal=True, default_width=620)
+        main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        main.set_margin_start(12)
+        main.set_margin_end(12)
+        main.set_margin_top(12)
+        main.set_margin_bottom(12)
+        win.set_child(main)
+
+        try:
+            account = mail_config.load_account()
+            sender_line = (
+                f"Expéditeur : {account.sender} — serveur {account.host}:{account.port}"
+                if account.complete
+                else "Compte mail non configuré : utilisez le bouton ci-dessous."
+            )
+        except mail_config.MailConfigError as e:
+            sender_line = f"Compte mail illisible : {e}"
+        account_ok = account.complete
+        note_txt = f"Copie : {os.path.basename(getattr(page, 'copy_path', '') or '')}"
+        if page.total is not None and scanner.final_value(page) is not None:
+            note_txt += f" — note {scanner.final_value(page):g}/{page.total:g}"
+            if page.total and abs(float(page.total) - 20.0) > 1e-9:
+                from ..marking import scale_note
+
+                note_txt += f" (ramenée sur 20 : {scale_note(scanner.final_value(page), float(page.total)):.2f}/20)"
+        plain = f"Destinataire : {name} <{email}>\n{note_txt}\n{sender_line}"
+        info = Gtk.Label(label=plain)
+        addr_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        lbl_addr = Gtk.Label(label="Adresse de réception :")
+        entry_addr = Gtk.Entry()
+        entry_addr.set_text(email)
+        entry_addr.set_hexpand(True)
+        addr_box.append(lbl_addr)
+        addr_box.append(entry_addr)
+        if account_ok:
+            main.append(info)
+        else:
+            escaped = GLib.markup_escape_text(plain)
+            info.set_markup(
+                escaped.replace(
+                    GLib.markup_escape_text(sender_line),
+                    f"<span color='#C00'>{GLib.markup_escape_text(sender_line)}</span>",
+                )
+            )
+            main.append(info)
+        main.append(addr_box)
+        if not account_ok:
+            btn_cfg = Gtk.Button(label="Configurer le compte mail…")
+            btn_cfg.get_style_context().add_class("suggested-action")
+            btn_cfg.set_halign(Gtk.Align.CENTER)
+            btn_cfg.connect(
+                "clicked",
+                lambda _b: (win.destroy(), self._on_mail_account(None)),
+            )
+            main.append(btn_cfg)
+
+        entry_subject = Gtk.Entry()
+        entry_subject.set_text(f"Votre copie corrigée — {ds_name}" if ds_name else "Votre copie corrigée")
+        main.append(entry_subject)
+
+        main.append(Gtk.Label(label="Message de présentation :"))
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_hexpand(True)
+        view = Gtk.TextView()
+        buf = view.get_buffer()
+        buf.set_text("Bonjour,\n\nVeuillez trouver en pièce jointe votre copie corrigée.\n\nCordialement.")
+        view.set_wrap_mode(Gtk.WrapMode.WORD)
+        scroll.set_min_content_height(120)
+        scroll.set_child(view)
+        main.append(scroll)
+
+        chk_breakdown = Gtk.CheckButton(label="Inclure le décompte des points par question")
+        chk_breakdown.set_active(True)
+        main.append(chk_breakdown)
+        chk_selftest = Gtk.CheckButton(label="Test : m'envoyer ce mail à moi-même (expéditeur)")
+        chk_selftest.set_active(False)
+        main.append(chk_selftest)
+
+        pass_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        lbl_pass = Gtk.Label(label="Mot de passe SMTP :")
+        entry_pass = Gtk.Entry()
+        entry_pass.set_visibility(False)
+        entry_pass.set_input_purpose(Gtk.InputPurpose.PASSWORD)
+        entry_pass.set_placeholder_text("jamais mémorisé")
+        entry_pass.set_hexpand(True)
+        pass_box.append(lbl_pass)
+        pass_box.append(entry_pass)
+        main.append(pass_box)
+
+        status = Gtk.Label(label="")
+        status.set_wrap(True)
+        main.append(status)
+
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        btn_box.set_halign(Gtk.Align.END)
+        btn_cancel = Gtk.Button(label="Fermer")
+        btn_send = Gtk.Button(label="Envoyer")
+        btn_send.get_style_context().add_class("suggested-action")
+        btn_box.append(btn_cancel)
+        btn_box.append(btn_send)
+        main.append(btn_box)
+
+        def _send(_b) -> None:
+            btn_send.set_sensitive(False)
+            if not entry_pass.get_text():
+                self._warn_no_password(status, btn_send)
+                return
+            status.set_text("Envoi…")
+            self._ui_flush()
+            body = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+            dest_email = entry_addr.get_text().strip() or email
+            recipient = mailing.Recipient(email=dest_email, name=name, pages=[page])
+            to = recipient
+            if chk_selftest.get_active():
+                try:
+                    account = mail_config.load_account()
+                except mail_config.MailConfigError as e:
+                    status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
+                    btn_send.set_sensitive(True)
+                    return
+                to = mailing.Recipient(
+                    email=account.sender or account.username,
+                    name=f"[Test → {recipient.display}]",
+                    pages=recipient.pages,
+                )
+            try:
+                reports = mailing.send_all(
+                    [to],
+                    entry_subject.get_text() or "Votre copie corrigée",
+                    body,
+                    project=self.project,
+                    ds_name=ds_name,
+                    include_breakdown=chk_breakdown.get_active(),
+                    password=entry_pass.get_text() or None,
+                )
+            except mailing.MailingError as e:
+                status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
+                btn_send.set_sensitive(True)
+                return
+            if reports and reports[0].sent:
+                if chk_selftest.get_active():
+                    status.set_markup(
+                        f"<span color='#080'>Mail de test envoyé à {to.email} " f"(copie de {name or email}).</span>"
+                    )
+                else:
+                    status.set_markup(f"<span color='#080'>Copie envoyée à {name or email}.</span>")
+            else:
+                status.set_markup(f"<span color='#C00'>Échec : {reports[0].error if reports else '?'}</span>")
+            btn_send.set_sensitive(True)
+
+        btn_cancel.connect("clicked", lambda _b: win.destroy())
+        btn_send.connect("clicked", _send)
+        win.present()
 
     def _on_result_selected(self, selection) -> None:
         model, tree_iter = selection.get_selected()
         if tree_iter is None or model is None:
             return
-        page_idx = model.get_value(tree_iter, 6)
+        page_idx = model.get_value(tree_iter, 7)
         if page_idx is not None and 0 <= page_idx < len(self.marked_pages):
             self.page_selector.set_selected(page_idx)
             self._display_marked_page(page_idx)
@@ -2316,7 +2578,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         tree_iter = model.get_iter(path)
         if tree_iter is None:
             return
-        page_idx = model.get_value(tree_iter, 6)
+        page_idx = model.get_value(tree_iter, 7)
         if page_idx is not None and 0 <= page_idx < len(self.marked_pages):
             win = MarkedPageWindow(
                 self.marked_pages, page_idx, self, on_navigate=self._enlarge_navigate, project=self.project
@@ -2358,6 +2620,20 @@ class QcmWindow(Gtk.ApplicationWindow):
         win = MarkedPageWindow(self.marked_pages, idx, self, on_navigate=self._enlarge_navigate, project=self.project)
         win.present()
 
+    def _on_manual_grading(self, _btn) -> None:
+        if not self.marked_pages:
+            self.marking_status.set_text("Lancez d'abord la correction des copies.")
+            return
+
+        def describe(idx: int) -> tuple[str, str]:
+            label, page = self.marked_pages[idx]
+            return _student_display(page), label
+
+        win = ManualGradingWindow(
+            self.project, self.marked_pages, describe, on_change=self._update_result_row, parent=self
+        )
+        win.present()
+
     def _enlarge_navigate(self, idx: int) -> None:
         if 0 <= idx < len(self.marked_pages):
             self.page_selector.set_selected(idx)
@@ -2371,24 +2647,368 @@ class QcmWindow(Gtk.ApplicationWindow):
         _label, page = self.marked_pages[marked_idx]
         failed = page.matrix_inv is None or page.variant_id is None or page.student_id is None
         for row in self.results_store:
-            if row[6] == marked_idx:
+            if row[7] == marked_idx:
                 if failed:
                     reason = "Échec alignement"
                     if page.variant_id is not None and page.student_id is None:
                         reason = "N° étudiant non trouvé"
                     elif page.variant_id is None:
                         reason = "Code-barres non trouvé"
-                    row[4] = reason
+                    row[5] = reason
                     # La note est calculée dès que l'alignement et la variante sont OK :
                     # l'afficher même si le n° étudiant manque (copie corrigée).
                     if page.matrix_inv is not None and page.variant_id is not None and page.value is not None:
-                        row[3] = f"{scanner.final_value(page):.2f}"
+                        row[4] = f"{scanner.final_value(page):.2f}"
                 else:
                     row[2] = _student_display(page)
-                    row[3] = f"{scanner.final_value(page):.2f}"
-                    row[4] = "complète" if page.complete else "incomplète"
-                row[5] = f"{getattr(page, 'malus', 0.0):g}"
+                    row[3] = _student_email(page)
+                    row[4] = f"{scanner.final_value(page):.2f}"
+                    row[5] = "complète" if page.complete else "incomplète"
+                row[6] = f"{getattr(page, 'malus', 0.0):g}"
                 break
+
+    def _warn_no_password(self, status, retry_btn) -> None:
+        """Gros avertissement : mot de passe SMTP absent.
+
+        Sans mot de passe, le serveur refusera presque toujours l'envoi
+        (authentification obligatoire). On bloque ici pour éviter les
+        166 échecs en cascade et un compte-rendu illisible.
+        """
+        status.set_markup(
+            "<span color='#F00' size='14000' weight='bold'>"
+            "⚠ MOT DE PASSE MANQUANT !</span>\n"
+            "<span color='#C00' weight='bold'>"
+            "Saisissez votre mot de passe SMTP dans le champ « Mot de passe SMTP » "
+            "— il n'est jamais mémorisé, il faut le saisir à chaque envoi.</span>"
+        )
+        retry_btn.set_sensitive(True)
+
+    def _on_send_copies_mail(self, _btn) -> None:
+        """Ouvre le dialogue d'envoi des copies corrigées par mail (PNG).
+
+        Les pages corrigées sont regroupées par adresse email d'étudiant ;
+        chaque étudiant reçoit un mail individuel avec ses copies en
+        pièces jointes (jamais plusieurs destinataires visibles).
+        """
+        if not self.marked_pages:
+            self.marking_status.set_text("Lancez d'abord la correction des copies.")
+            return
+        all_recipients = mailing.group_by_email(self.marked_pages)
+        if not all_recipients:
+            self.marking_status.set_text(
+                "Aucune adresse : chargez la table étudiants (levée d'anonymat) puis corrigez."
+            )
+            return
+        already = [r for r in all_recipients if r.email in self.project.mailed]
+        recipients = [r for r in all_recipients if r.email not in self.project.mailed] or all_recipients
+        win = Gtk.Window(title="Envoyer les copies par mail", transient_for=self, modal=True, default_width=620)
+        main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        main.set_margin_start(12)
+        main.set_margin_end(12)
+        main.set_margin_top(12)
+        main.set_margin_bottom(12)
+        win.set_child(main)
+
+        try:
+            account = mail_config.load_account()
+            sender_line = (
+                f"Expéditeur : {account.sender} — serveur {account.host}:{account.port}"
+                if account.complete
+                else "Compte mail non configuré : utilisez le bouton « Compte mail… »."
+            )
+        except mail_config.MailConfigError as e:
+            sender_line = f"Compte mail illisible : {e}"
+        account_ok = account.complete
+        n_pages = sum(len(r.pages) for r in recipients)
+        already_line = ""
+        if already:
+            already_line = f"{len(already)} étudiant(s) ont déjà reçu leur copie (mémorisés dans le projet).\n"
+        plain = (
+            f"{len(recipients)} destinataire(s), {n_pages} copie(s) corrigée(s) au total.\n"
+            f"{already_line}"
+            f"{sender_line}\n"
+            "Chaque étudiant reçoit un mail individuel avec ses copies (PNG) en pièces jointes."
+        )
+        summary = Gtk.Label(label=plain)
+        if account_ok:
+            main.append(summary)
+        else:
+            escaped = GLib.markup_escape_text(plain)
+            summary.set_markup(
+                escaped.replace(
+                    GLib.markup_escape_text(sender_line),
+                    f"<span color='#C00'>{GLib.markup_escape_text(sender_line)}</span>",
+                )
+            )
+            main.append(summary)
+        if not account_ok:
+            btn_cfg = Gtk.Button(label="Configurer le compte mail…")
+            btn_cfg.get_style_context().add_class("suggested-action")
+            btn_cfg.set_halign(Gtk.Align.CENTER)
+            btn_cfg.connect(
+                "clicked",
+                lambda _b: (win.destroy(), self._on_mail_account(None)),
+            )
+            main.append(btn_cfg)
+
+        ds_name = self.project.settings.evaluation_full or self.project.settings.evaluation_short
+        entry_subject = Gtk.Entry()
+        entry_subject.set_text(f"Votre copie corrigée — {ds_name}" if ds_name else "Votre copie corrigée")
+        main.append(entry_subject)
+
+        chk_breakdown = Gtk.CheckButton(label="Inclure le décompte des points par question")
+        chk_breakdown.set_active(True)
+        chk_selftest = Gtk.CheckButton(
+            label="Test : m'envoyer à moi-même les mêmes mails que les étudiants (un par étudiant)"
+        )
+        chk_selftest.set_active(False)
+        chk_resend = Gtk.CheckButton(label="Renvoyer aussi aux étudiants ayant déjà reçu leur copie")
+        chk_resend.set_active(False)
+        chk_resend.set_visible(bool(already))
+        main.append(chk_breakdown)
+        main.append(chk_selftest)
+        main.append(chk_resend)
+
+        # Mot de passe SMTP : masqué ; pré-remplir n'est pas possible (jamais
+        # relu), on demande la saisie à chaque envoi.
+        pass_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        lbl_pass = Gtk.Label(label="Mot de passe SMTP :")
+        entry_pass = Gtk.Entry()
+        entry_pass.set_visibility(False)
+        entry_pass.set_input_purpose(Gtk.InputPurpose.PASSWORD)
+        entry_pass.set_placeholder_text("saisi à chaque envoi, jamais mémorisé")
+        entry_pass.set_hexpand(True)
+        pass_box.append(lbl_pass)
+        pass_box.append(entry_pass)
+        main.append(pass_box)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_hexpand(True)
+        view = Gtk.TextView()
+        buf = view.get_buffer()
+        buf.set_text("Bonjour,\n\nVeuillez trouver en pièce jointe votre copie corrigée.\n\nCordialement.")
+        view.set_wrap_mode(Gtk.WrapMode.WORD)
+        scroll.set_child(view)
+        main.append(scroll)
+
+        status = Gtk.Label(label="")
+        status.set_wrap(True)
+        main.append(status)
+
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        btn_box.set_halign(Gtk.Align.END)
+        btn_cancel = Gtk.Button(label="Fermer")
+        btn_send = Gtk.Button(label="Envoyer")
+        btn_send.get_style_context().add_class("suggested-action")
+        btn_box.append(btn_cancel)
+        btn_box.append(btn_send)
+        main.append(btn_box)
+
+        def _send(_b) -> None:
+            btn_send.set_sensitive(False)
+            if not entry_pass.get_text():
+                self._warn_no_password(status, btn_send)
+                return
+            body = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+            subject = entry_subject.get_text() or "Votre copie corrigée"
+            to_send = recipients
+            if chk_resend.get_visible() and chk_resend.get_active():
+                to_send = all_recipients
+            if chk_selftest.get_active():
+                try:
+                    account = mail_config.load_account()
+                except mail_config.MailConfigError as e:
+                    status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
+                    btn_send.set_sensitive(True)
+                    return
+                to_send = [
+                    mailing.Recipient(
+                        email=account.sender or account.username,
+                        name=f"[Test → {r.display}]",
+                        pages=r.pages,
+                    )
+                    for r in to_send
+                ]
+            status.set_text("Connexion au serveur SMTP…")
+            self._ui_flush()
+            cancel_flag: list = []
+            skip_flag: list = []
+            btn_skip = Gtk.Button(label="Passer au suivant")
+            btn_skip.get_style_context().add_class("destructive-action")
+            btn_skip.set_visible(False)
+            btn_box.append(btn_skip)
+            btn_skip.connect("clicked", lambda _b: skip_flag.append(True))
+            btn_cancel.set_label("Annuler l'envoi")
+            btn_cancel.connect("clicked", lambda _b: cancel_flag.append(True))
+
+            def _progress(i, total, ok, failed, retry=0):
+                base = f"Envoi {i}/{total} ({ok} envoyé(s), {failed} échec(s))"
+                if retry:
+                    base += " — serveur limité, nouvel essai dans 10 s"
+                    btn_skip.set_visible(True)
+                else:
+                    btn_skip.set_visible(False)
+                self.marking_status.set_text(f"Envoi des copies : {base}…")
+                status.set_text(f"{base}…")
+                self._ui_flush()
+
+            self._ui_flush()
+            try:
+                reports = mailing.send_all(
+                    to_send,
+                    subject,
+                    body,
+                    project=self.project,
+                    ds_name=ds_name,
+                    include_breakdown=chk_breakdown.get_active(),
+                    password=entry_pass.get_text() or None,
+                    progress=_progress,
+                    mailed=self.project.mailed,
+                    cancelled=cancel_flag,
+                    skip=skip_flag,
+                )
+            except mailing.MailingError as e:
+                status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
+                btn_send.set_sensitive(True)
+                return
+            ok = sum(1 for r in reports if r.sent)
+            failed = [r for r in reports if not r.sent]
+            if failed:
+                kinds: dict[str, list[str]] = {}
+                for r in failed:
+                    kinds.setdefault(r.error_kind, []).append(r.recipient.display)
+                lines = [f"{ok} envoyé(s), {len(failed)} échec(s) :"]
+                for kind, names in kinds.items():
+                    lines.append(f"\n• {kind} ({len(names)}) : {', '.join(names[:5])}")
+                    if len(names) > 5:
+                        lines.append(f"  … et {len(names) - 5} autre(s)")
+                if cancel_flag:
+                    lines.append("\nEnvoi interrompu : les destinataires restants n'ont pas été contactés.")
+                status.set_markup(
+                    "<span color='#C00'>" + "\n".join(GLib.markup_escape_text(li) for li in lines) + "</span>"
+                )
+                self.marking_status.set_text(
+                    f"Envoi interrompu : {ok} envoyé(s), {len(failed)} échec(s). "
+                    "Les envoyés sont mémorisés : relancez pour ne reprendre que les absents."
+                )
+            else:
+                status.set_markup(f"<span color='#080'>{ok} mail(s) envoyé(s) avec succès.</span>")
+                self.marking_status.set_text(f"Envoi terminé : {ok} copie(s) envoyée(s) par mail.")
+            btn_send.set_sensitive(True)
+            btn_cancel.set_label("Fermer")
+
+        btn_cancel.connect("clicked", lambda _b: win.destroy())
+        btn_send.connect("clicked", _send)
+        win.present()
+
+    def _on_mail_account(self, _btn) -> None:
+        """Ouvre le dialogue de configuration du compte mail (envoi des copies).
+
+        Serveur, port, login, expéditeur et mot de passe (saisie masquée).
+        Le mot de passe est rangé dans le trousseau du système, jamais écrit
+        dans un fichier ; les autres réglages sont mémorisés durablement.
+        """
+        win = Gtk.Window(title="Compte mail (envoi des copies)", transient_for=self, modal=True, default_width=760)
+        main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        main.set_margin_start(12)
+        main.set_margin_end(12)
+        main.set_margin_top(12)
+        main.set_margin_bottom(12)
+        win.set_child(main)
+
+        grid = Gtk.Grid()
+        grid.set_row_spacing(8)
+        grid.set_column_spacing(8)
+        grid.set_hexpand(True)
+        main.append(grid)
+
+        lbl_host = Gtk.Label(label="Serveur SMTP :")
+        lbl_host.set_xalign(1)
+        entry_host = Gtk.Entry()
+        entry_host.set_hexpand(True)
+        entry_host.set_placeholder_text("smtp.univ.fr")
+        lbl_port = Gtk.Label(label="Port :")
+        lbl_port.set_xalign(1)
+        entry_port = Gtk.Entry()
+        entry_port.set_placeholder_text("587")
+        entry_port.set_width_chars(6)
+        lbl_login = Gtk.Label(label="Login :")
+        lbl_login.set_xalign(1)
+        entry_login = Gtk.Entry()
+        entry_login.set_hexpand(True)
+        lbl_sender = Gtk.Label(label="Expéditeur :")
+        lbl_sender.set_xalign(1)
+        entry_sender = Gtk.Entry()
+        entry_sender.set_hexpand(True)
+        entry_sender.set_width_chars(48)
+        entry_sender.set_placeholder_text("prenom.nom@univ.fr")
+        chk_starttls = Gtk.CheckButton(label="Chiffrement STARTTLS")
+        chk_starttls.set_active(True)
+
+        widgets = [
+            (lbl_host, 0, 0, 1, 1),
+            (entry_host, 1, 0, 1, 1),
+            (lbl_port, 0, 1, 1, 1),
+            (entry_port, 1, 1, 1, 1),
+            (lbl_login, 0, 2, 1, 1),
+            (entry_login, 1, 2, 1, 1),
+            (lbl_sender, 0, 3, 1, 1),
+            (entry_sender, 1, 3, 1, 1),
+            (chk_starttls, 1, 4, 1, 1),
+        ]
+        for widget, col, row, w, h in widgets:
+            grid.attach(widget, col, row, w, h)
+
+        try:
+            account = mail_config.load_account()
+        except mail_config.MailConfigError:
+            account = mail_config.MailAccount()
+        if account.host:
+            entry_host.set_text(account.host)
+        entry_port.set_text(str(account.port or 587))
+        if account.username:
+            entry_login.set_text(account.username)
+        if account.sender:
+            entry_sender.set_text(account.sender)
+        chk_starttls.set_active(account.starttls)
+
+        status = Gtk.Label(label="")
+        status.set_wrap(True)
+        main.append(status)
+        if account.complete:
+            status.set_markup(
+                f"<span color='#080'>Compte configuré ({account.username} sur {account.host}).\n"
+                "Le mot de passe n'est jamais stocké : il sera demandé à chaque envoi.</span>"
+            )
+
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        btn_box.set_halign(Gtk.Align.END)
+        btn_cancel = Gtk.Button(label="Annuler")
+        btn_save = Gtk.Button(label="Enregistrer")
+        btn_save.get_style_context().add_class("suggested-action")
+        btn_box.append(btn_cancel)
+        btn_box.append(btn_save)
+        main.append(btn_box)
+
+        def _save(_b) -> None:
+            try:
+                mail_config.save_account(
+                    entry_host.get_text(),
+                    entry_port.get_text(),
+                    entry_login.get_text(),
+                    entry_sender.get_text(),
+                    starttls=chk_starttls.get_active(),
+                )
+            except mail_config.MailConfigError as e:
+                status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
+                return
+            mail_config.load_account()
+            win.destroy()
+
+        btn_cancel.connect("clicked", lambda _b: win.destroy())
+        btn_save.connect("clicked", _save)
+        win.present()
 
     def _on_export_scodoc(self, _btn) -> None:
         if not self._last_notes:
@@ -2545,7 +3165,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         try:
             pages = [p for _lbl, p in self.marked_pages]
             copy_paths = [p.copy_path or "" for _lbl, p in self.marked_pages]
-            scanner.save_correction_state(pages, copy_paths, path)
+            scanner.save_correction_state(pages, copy_paths, path, project_path=self.project_path or "")
             self.marking_status.set_text(f"État sauvegardé : {path}")
         except Exception as e:
             self.marking_status.set_text(f"Erreur : {e}")
@@ -2556,6 +3176,9 @@ class QcmWindow(Gtk.ApplicationWindow):
         )
         if path is None:
             return
+        self._on_load_state_path(path)
+
+    def _on_load_state_path(self, path: str) -> None:
         # Si aucune copie n'est chargée, on pré-remplit la liste des copies
         # à partir des chemins enregistrés dans la sauvegarde (sans cocher
         # la case de correction : les notes sont déjà dans la sauvegarde).
@@ -2581,60 +3204,37 @@ class QcmWindow(Gtk.ApplicationWindow):
             if not self.copies:
                 self.marking_status.set_text("Aucune copie dans la sauvegarde.")
                 return
+        # Restauration directe depuis la sauvegarde : les images et
+        # l'état de correction y sont déjà enregistrés — inutile de
+        # rescanner les copies (l'ancien comportement redécodait chaque
+        # PDF à 150 dpi puis écrasait le résultat par la sauvegarde).
+        try:
+            saved = scanner.load_all_pages_from_state(path)
+        except Exception as e:
+            self.marking_status.set_text(f"Erreur lecture sauvegarde : {e}")
+            return
         self.results_store.clear()
         self.marked_pages = []
         notes: dict[str, float] = {}
         n_ok = 0
-        n_err = 0
         n_skip = 0
-        total = len(self.copies)
-        for copy_idx, copy_path in enumerate(self.copies, 1):
+        total = len(saved)
+        for copy_idx, (copy_path, pages) in enumerate(sorted(saved.items()), 1):
             fname = os.path.basename(copy_path)
             info = self.copy_rows.get(copy_path)
             self.marking_status.set_text(f"Rechargement {copy_idx}/{total} : {fname}")
-            self._scroll_to_copy(copy_path)
             self._ui_flush()
-            try:
-                pages = scanner.load_pages_from_file(copy_path, dpi=150)
-            except Exception as e:
-                n_err += 1
-                self.results_store.append([fname, "", "", "", f"Erreur : {e}", "0", -1])
-                if info:
-                    info["n_err"] = 1
-                    info["n_pages"] = 1
-                    self._update_copy_row(copy_path)
-                continue
             if info:
                 info["n_ok"] = 0
                 info["n_err"] = 0
                 info["n_pages"] = len(pages)
-            for page_idx, page in enumerate(pages):
-                page.copy_path = copy_path
-                restored = scanner.load_correction_state(copy_path, page, path, page_index=page_idx)
-                if not restored:
-                    n_err += 1
-                    if info:
-                        info["n_err"] += 1
-                    self.results_store.append(
-                        [fname, "", "", "", "Non trouvée dans la sauvegarde", "0", len(self.marked_pages)]
-                    )
-                    continue
+            for page in pages:
                 # Page non corrigée (alignement échoué) : on l'affiche
                 # quand même (statut « Non lue ») pour qu'on puisse l'ouvrir
                 # et la corriger manuellement.
                 if page.variant_id is None and not page.marks:
                     n_skip += 1
-                    self.results_store.append(
-                        [
-                            fname,
-                            "",
-                            "",
-                            "",
-                            "Non lue",
-                            "0",
-                            len(self.marked_pages),
-                        ]
-                    )
+                    self.results_store.append([fname, "", "", "", "", "Non lue", "0", len(self.marked_pages), ""])
                     label = f"{fname} ⚠ Non lue"
                     self.marked_pages.append((label, page))
                     continue
@@ -2650,10 +3250,12 @@ class QcmWindow(Gtk.ApplicationWindow):
                         fname,
                         str(page.variant_id or ""),
                         _student_display(page),
+                        _student_email(page),
                         f"{note:.2f}",
                         "complète" if page.complete else "incomplète",
                         f"{getattr(page, 'malus', 0.0):g}",
                         len(self.marked_pages),
+                        _send_mark(page),
                     ]
                 )
                 label = f"{fname} v{page.variant_id} {page.student_id or ''}"
@@ -2664,7 +3266,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             if info:
                 info["check"].set_active(False)
         self._last_notes = notes
-        self.marking_status.set_text(f"{n_ok} restaurée(s), {n_err} en erreur, {n_skip} non lue(s).")
+        self.marking_status.set_text(f"{n_ok} restaurée(s), {n_skip} non lue(s).")
         self._refresh_page_selector()
 
     # ------------------------------------------------------------------
@@ -2693,7 +3295,55 @@ class QcmWindow(Gtk.ApplicationWindow):
         path = _file_dialog(self, "Ouvrir un projet", Gtk.FileChooserAction.OPEN, filters=[("Projet JSON", ["*.json"])])
         if path is None:
             return
+        # Un fichier de correction (sauvegarde d'état) n'est pas un projet :
+        # rouvrir le QCM lié puis recharger la correction.
+        import json as _json
+
+        try:
+            with open(path, encoding="utf-8") as f:
+                _data = _json.load(f)
+        except (OSError, _json.JSONDecodeError) as e:
+            self._show_open_error(f"Fichier illisible : {e}")
+            return
+        if isinstance(_data, dict) and "copies" in _data:
+            project_path = str(_data.get("project", "") or "")
+            if project_path and not os.path.isabs(project_path):
+                project_path = os.path.join(os.path.dirname(path), project_path)
+            if not project_path or not os.path.exists(project_path):
+                self._show_open_error(
+                    "Ceci est une sauvegarde de correction, pas un projet QCM.\n"
+                    "Le fichier QCM lié est introuvable"
+                    + (f" : {project_path}" if project_path else " (aucun lien enregistré — sauvegarde ancienne).")
+                )
+                return
+            self._load_project_from_path(project_path)
+            self._on_load_state_path(path)
+            if hasattr(self, "file_status"):
+                self.file_status.set_text(f"Correction ouverte avec son QCM : {os.path.basename(project_path)}")
+            return
+        if not isinstance(_data, dict) or not (
+            "structure" in _data or "settings" in _data or any(k.startswith("info_") for k in _data)
+        ):
+            self._show_open_error("Fichier non reconnu : ni un projet QCM, ni une sauvegarde de correction.")
+            return
         self._load_project_from_path(path)
+
+    def _show_open_error(self, message: str) -> None:
+        win = Gtk.Window(title="Erreur à l'ouverture", transient_for=self, modal=True, default_width=420)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.set_margin_start(12)
+        box.set_margin_end(12)
+        box.set_margin_top(12)
+        box.set_margin_bottom(12)
+        win.set_child(box)
+        lbl = Gtk.Label(label=message)
+        lbl.set_wrap(True)
+        box.append(lbl)
+        btn = Gtk.Button(label="Fermer")
+        btn.set_halign(Gtk.Align.END)
+        btn.connect("clicked", lambda _b: win.destroy())
+        box.append(btn)
+        win.present()
 
     def _load_project_from_path(self, path: str) -> None:
         """Charge un projet depuis un fichier JSON et rafraîchit l'interface."""
@@ -3053,6 +3703,10 @@ class MarkedPageWindow(Gtk.Window):
         nav_box.append(self.btn_next)
         self.side.append(nav_box)
 
+        btn_send = Gtk.Button(label="Envoyer cette copie…")
+        btn_send.connect("clicked", lambda _b: self._on_send_copy())
+        self.side.append(btn_send)
+
         self._load_page()
 
     def _navigate(self, delta: int) -> None:
@@ -3140,6 +3794,16 @@ class MarkedPageWindow(Gtk.Window):
         self.zoom_label.set_text(f"{int(self._zoom * 100)} %")
         self._update_image()
 
+    def _on_send_copy(self) -> None:
+        """Envoie la copie affichée à son étudiant, via le dialogue de la fenêtre principale."""
+        _label, page = self.pages[self.idx]
+        email = _student_email(page)
+        if not email or page.matrix_inv is None or page.variant_id is None:
+            return
+        parent = self._parent_window
+        if parent is not None and hasattr(parent, "_send_one_copy_dialog"):
+            parent._send_one_copy_dialog(self.idx)
+
     def _on_apply_student_id(self, _btn) -> None:
         if self.idx < 0 or self.idx >= len(self.pages):
             return
@@ -3154,6 +3818,9 @@ class MarkedPageWindow(Gtk.Window):
                 page.student_eid = student.eid
                 page.student_name = student.name
                 page.student_firstname = student.firstname
+                page.student_email = student.email
+            else:
+                page.student_email = None
         score = score_page(self._project, page.marks, variant_id=page.variant_id, student_id=page.student_id)
         page.value = score.value
         page.total = score.total
@@ -3172,6 +3839,7 @@ class MarkedPageWindow(Gtk.Window):
             self.lbl_malus_hint.set_text("Malus invalide : nombre attendu.")
             return
         page.malus = max(0.0, malus)
+        page.malus_manual = True
         self._load_page()
         if self.on_navigate is not None:
             self.on_navigate(self.idx)
@@ -3214,6 +3882,7 @@ class MarkedPageWindow(Gtk.Window):
                         page.student_eid = student.eid
                         page.student_name = student.name
                         page.student_firstname = student.firstname
+                        page.student_email = student.email
 
             # Recalculer la note
             from qcm_papier.marking import score_page

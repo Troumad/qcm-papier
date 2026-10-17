@@ -22,7 +22,7 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .. import editing, generator, pdf_preview, pdf_writer, scanner, scodoc, scodoc_api, scodoc_config
+from .. import editing, generator, manual_grading, pdf_preview, pdf_writer, scanner, scodoc, scodoc_api, scodoc_config
 from .. import project as project_mod
 from ..marking import score_page
 from ..model import Project
@@ -326,6 +326,7 @@ class Session:
             "variant": page.variant_id,
             "student_id": page.student_id,
             "student": name or page.student_id or "",
+            "email": page.student_email or "",
             "note": scanner.final_value(page) if page.matrix_inv is not None else None,
             "total": page.total,
             "complete": page.complete,
@@ -385,11 +386,13 @@ class Session:
                     page.student_eid = student.eid
                     page.student_name = student.name
                     page.student_firstname = student.firstname
+                    page.student_email = student.email
                     matched += 1
                 else:
                     page.student_eid = None
                     page.student_name = None
                     page.student_firstname = None
+                    page.student_email = None
             self.notes = self._collect_notes()
         return len(students), matched
 
@@ -416,10 +419,12 @@ class Session:
                 page.student_eid = student.eid
                 page.student_name = student.name
                 page.student_firstname = student.firstname
+                page.student_email = student.email
             else:
                 page.student_eid = None
                 page.student_name = None
                 page.student_firstname = None
+                page.student_email = None
             score = score_page(self.project, page.marks, variant_id=page.variant_id, student_id=page.student_id)
             page.value, page.total, page.complete = score.value, score.total, score.complete
             self.notes = self._collect_notes()
@@ -444,6 +449,8 @@ class Session:
         with self.lock:
             page = self.pages[index].page
             page.malus = max(0.0, float(malus))
+            page.malus_manual = True
+            self.notes = self._collect_notes()
 
     def manual_align(self, index: int, points: list[tuple[float, float]]) -> bool:
         with self.lock:
@@ -453,6 +460,59 @@ class Session:
                 page.manual_marks = list(points)  # type: ignore[attr-defined]
                 self.notes = self._collect_notes()
             return ok
+
+    # ------------------------------------------------------------------
+    # Questions à réponse libre : points saisis par le correcteur
+    # ------------------------------------------------------------------
+    def manual_grading(self) -> list[dict[str, Any]]:
+        """Questions à réponse libre avec, pour chacune, les copies où le cadre a été repéré."""
+        with self.lock:
+            questions = []
+            for e, q, exercise, question in manual_grading.open_questions(self.project):
+                rows = []
+                for index, marked in enumerate(self.pages):
+                    mark = manual_grading.answer_mark(marked.page, e, q)
+                    if mark is None:
+                        continue
+                    info = self.page_info(index)
+                    rows.append(
+                        {
+                            "index": index,
+                            "student": info["student"],
+                            "file": info["file"],
+                            "value": mark.get("value"),
+                        }
+                    )
+                questions.append(
+                    {
+                        "e": e,
+                        "q": q,
+                        "exercise": exercise.name,
+                        "name": question.name,
+                        "gain": float(question.gain),
+                        "expected": question.expected,
+                        "grading_notes": question.grading_notes,
+                        "remaining": sum(1 for row in rows if row["value"] is None),
+                        "rows": rows,
+                    }
+                )
+            return questions
+
+    def manual_image(self, index: int, e: int, q: int) -> bytes:
+        """PNG du cadre de réponse découpé dans le scan."""
+        with self.lock:
+            manual_grading.manual_question(self.project, e, q)
+            crop = manual_grading.crop_answer(self.pages[index].page, e, q)
+        buf = io.BytesIO()
+        crop.save(buf, format="PNG")
+        return buf.getvalue()
+
+    def set_manual_value(self, index: int, e: int, q: int, value: Any) -> None:
+        """Points d'une réponse libre (None efface la saisie), bornés par le gain de la question."""
+        with self.lock:
+            manual_grading.set_answer_value(self.project, self.pages[index].page, e, q, value)
+            self.notes = self._collect_notes()
+            self.correction_revision += 1
 
     def page_image(self, index: int, raw: bool = False) -> bytes:
         """PNG de la page : brute (alignement manuel) ou corrigée avec repères bleus."""

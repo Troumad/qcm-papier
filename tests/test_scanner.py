@@ -133,3 +133,39 @@ def test_align_auto_global_recupere_page_mal_scannee():
     assert scanner.auto_check(page, project) is True
     assert page.variant_id is not None
     assert page.value is not None
+
+
+def test_load_all_pages_from_state(tmp_path):
+    """Restauration directe d'une sauvegarde : pages et images, sans rescan."""
+    from qcm_papier.scanner import ScannedPage, load_all_pages_from_state, save_correction_state
+
+    page = ScannedPage()
+    page.copy_path = str(tmp_path / "copie1.pdf")
+    page.variant_id = 1234
+    page.student_id = "p1234567"
+    page.value = 12.0
+    page.total = 20.0
+    page.complete = True
+    from qcm_papier.scanner import Matrix
+
+    page.matrix = Matrix()
+    page.matrix_inv = Matrix().inverse()
+    page.marks = [{"e": 0, "q": 0, "c": 0, "x": 20.0, "y": 20.0, "r": 2.0, "checked": True}]
+    from PIL import Image as PILImage
+
+    from qcm_papier.scanner import PixelImage
+
+    page.img = PixelImage(PILImage.new("RGB", (40, 40), "white"))
+
+    state_path = str(tmp_path / "correction.json")
+    save_correction_state([page], [page.copy_path], state_path, project_path=str(tmp_path / "qcm.json"))
+
+    loaded = load_all_pages_from_state(state_path)
+    assert str(tmp_path / "copie1.pdf") in loaded
+    pages = loaded[str(tmp_path / "copie1.pdf")]
+    assert len(pages) == 1
+    p = pages[0]
+    assert p.variant_id == 1234
+    assert p.student_id == "p1234567"
+    assert p.value == 12.0
+    assert p.img is not None
