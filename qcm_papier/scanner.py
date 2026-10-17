@@ -214,6 +214,7 @@ class ScannedPage:
     student_eid: str | None = None
     student_name: str | None = None
     student_firstname: str | None = None
+    student_email: str | None = None
     marks: list[dict] = field(default_factory=list)
     matrix: Matrix | None = None
     matrix_inv: Matrix | None = None
@@ -233,6 +234,7 @@ class ScannedPage:
         self.student_eid = None
         self.student_name = None
         self.student_firstname = None
+        self.student_email = None
         self.marks = []
         self.value = None
         self.total = None
@@ -890,6 +892,7 @@ def correct_with_variant(
             page.student_eid = student.eid
             page.student_name = student.name
             page.student_firstname = student.firstname
+            page.student_email = student.email
     show_marks(page, project)
     auto_marks(page, page.matrix_inv, clair=clair)
     score = score_page(
@@ -1404,6 +1407,7 @@ def _apply_correction(
             page.student_eid = student.eid
             page.student_name = student.name
             page.student_firstname = student.firstname
+            page.student_email = student.email
     show_marks(page, project)
     auto_marks(page, matrix_inv, clair=clair)
     score = score_page(
@@ -1601,6 +1605,7 @@ def _page_to_state(page: ScannedPage) -> dict:
         "student_eid": page.student_eid,
         "student_name": page.student_name,
         "student_firstname": page.student_firstname,
+        "student_email": page.student_email,
         "barcode": page.barcode,
         "value": page.value,
         "total": page.total,
@@ -1644,6 +1649,7 @@ def _page_from_state(page: ScannedPage, state: dict) -> None:
     page.student_eid = state.get("student_eid")
     page.student_name = state.get("student_name")
     page.student_firstname = state.get("student_firstname")
+    page.student_email = state.get("student_email")
     page.barcode = state.get("barcode", "")
     page.value = state.get("value")
     page.total = state.get("total")
@@ -1657,11 +1663,13 @@ def _page_from_state(page: ScannedPage, state: dict) -> None:
     page.marks = list(state.get("marks", []))
 
 
-def save_correction_state(pages: list[ScannedPage], copy_paths: list[str], path: str) -> None:
+def save_correction_state(pages: list[ScannedPage], copy_paths: list[str], path: str, project_path: str = "") -> None:
     """Sauvegarde l'état de correction des pages dans un fichier JSON.
 
     Les images des copies sont sauvegardées dans un dossier portant le
     même nom que le fichier JSON (sans extension) à côté de celui-ci.
+    ``project_path`` : chemin du fichier QCM lié à la correction, pour
+    pouvoir rouvrir les deux d'un seul geste.
     """
     import json
 
@@ -1669,6 +1677,8 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str], path:
     img_dir = base + "_images"
     os.makedirs(img_dir, exist_ok=True)
     data = {"copies": [], "image_dir": img_dir}
+    if project_path:
+        data["project"] = project_path
     used_names: set[str] = set()
     # Index de page relatif au fichier (pour distinguer les pages d'un
     # même PDF lors du rechargement).
@@ -1716,6 +1726,42 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str], path:
                 pass
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def load_all_pages_from_state(state_path: str) -> dict[str, list[ScannedPage]]:
+    """Charge toutes les pages corrigées depuis une sauvegarde d'état.
+
+    Renvoie un dict {chemin de copie: [pages]} avec, pour chaque page,
+    l'état restauré (marks, matrices, note) et l'image enregistrée.
+    Aucun rescan des copies : les images de la sauvegarde sont
+    directement réutilisées. La clé « file » de chaque entrée est
+    ramenée en chemin absolu.
+    """
+    import json
+
+    with open(state_path, encoding="utf-8") as f:
+        data = json.load(f)
+    img_dir = data.get("image_dir")
+    base_dir = os.path.dirname(state_path)
+    if img_dir and not os.path.isabs(img_dir):
+        img_dir = os.path.join(base_dir, img_dir)
+    out: dict[str, list[ScannedPage]] = {}
+    for entry in data.get("copies", []):
+        cp = str(entry.get("file", ""))
+        if not cp:
+            continue
+        if not os.path.isabs(cp):
+            cp = os.path.join(base_dir, cp)
+        page = ScannedPage()
+        page.copy_path = cp
+        _page_from_state(page, entry["page"])
+        img_name = entry.get("image")
+        if img_name and img_dir:
+            img_path = os.path.join(img_dir, img_name)
+            if os.path.exists(img_path):
+                page.img = PixelImage(Image.open(img_path))
+        out.setdefault(cp, []).append(page)
+    return out
 
 
 def load_correction_state(copy_path: str, page: ScannedPage, state_path: str, page_index: int = 0) -> bool:

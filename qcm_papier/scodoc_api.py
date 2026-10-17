@@ -150,6 +150,7 @@ def students_from_api(etudiants: list[dict]) -> dict[str, Student]:
             nip=etud.get("code_nip"),
             name=etud.get("nom_usuel") or etud.get("nom"),
             firstname=etud.get("prenom"),
+            email=etud.get("email") or etud.get("mail") or "",
         )
         if student is not None:
             students[student.id] = student
