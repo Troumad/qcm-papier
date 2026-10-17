@@ -165,3 +165,14 @@ def test_note_line_total_deja_20():
     line = mailing.note_line(page)
     assert line == "note brute : 12/20"
     assert "ramenée" not in line
+
+
+def test_project_mailed_persiste():
+    from qcm_papier.model import Project
+
+    p = Project()
+    p.mailed.add("jean@x.fr")
+    d = p.to_dict()
+    assert d["mailed"] == ["jean@x.fr"]
+    p2 = Project.from_dict(d)
+    assert p2.mailed == {"jean@x.fr"}

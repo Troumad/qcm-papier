@@ -2664,12 +2664,14 @@ class QcmWindow(Gtk.ApplicationWindow):
         if not self.marked_pages:
             self.marking_status.set_text("Lancez d'abord la correction des copies.")
             return
-        recipients = mailing.group_by_email(self.marked_pages)
-        if not recipients:
+        all_recipients = mailing.group_by_email(self.marked_pages)
+        if not all_recipients:
             self.marking_status.set_text(
                 "Aucune adresse : chargez la table étudiants (levée d'anonymat) puis corrigez."
             )
             return
+        already = [r for r in all_recipients if r.email in self.project.mailed]
+        recipients = [r for r in all_recipients if r.email not in self.project.mailed] or all_recipients
         win = Gtk.Window(title="Envoyer les copies par mail", transient_for=self, modal=True, default_width=620)
         main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         main.set_margin_start(12)
@@ -2678,7 +2680,6 @@ class QcmWindow(Gtk.ApplicationWindow):
         main.set_margin_bottom(12)
         win.set_child(main)
 
-        n_pages = sum(len(r.pages) for r in recipients)
         try:
             account = mail_config.load_account()
             sender_line = (
@@ -2689,8 +2690,13 @@ class QcmWindow(Gtk.ApplicationWindow):
         except mail_config.MailConfigError as e:
             sender_line = f"Compte mail illisible : {e}"
         account_ok = account.complete
+        n_pages = sum(len(r.pages) for r in recipients)
+        already_line = ""
+        if already:
+            already_line = f"{len(already)} étudiant(s) ont déjà reçu leur copie (mémorisés dans le projet).\n"
         plain = (
             f"{len(recipients)} destinataire(s), {n_pages} copie(s) corrigée(s) au total.\n"
+            f"{already_line}"
             f"{sender_line}\n"
             "Chaque étudiant reçoit un mail individuel avec ses copies (PNG) en pièces jointes."
         )
@@ -2727,8 +2733,12 @@ class QcmWindow(Gtk.ApplicationWindow):
             label="Test : m'envoyer à moi-même les mêmes mails que les étudiants (un par étudiant)"
         )
         chk_selftest.set_active(False)
+        chk_resend = Gtk.CheckButton(label="Renvoyer aussi aux étudiants ayant déjà reçu leur copie")
+        chk_resend.set_active(False)
+        chk_resend.set_visible(bool(already))
         main.append(chk_breakdown)
         main.append(chk_selftest)
+        main.append(chk_resend)
 
         # Mot de passe SMTP : masqué ; pré-remplir n'est pas possible (jamais
         # relu), on demande la saisie à chaque envoi.
@@ -2771,6 +2781,8 @@ class QcmWindow(Gtk.ApplicationWindow):
             body = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
             subject = entry_subject.get_text() or "Votre copie corrigée"
             to_send = recipients
+            if chk_resend.get_visible() and chk_resend.get_active():
+                to_send = all_recipients
             if chk_selftest.get_active():
                 try:
                     account = mail_config.load_account()
@@ -2778,19 +2790,19 @@ class QcmWindow(Gtk.ApplicationWindow):
                     status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
                     btn_send.set_sensitive(True)
                     return
-                # En mode test, on reçoit exactement les mêmes mails que
-                # les étudiants : un mail par étudiant, avec sa copie et
-                # son décompte, seulement l'adresse destinataire change.
                 to_send = [
                     mailing.Recipient(
                         email=account.sender or account.username,
                         name=f"[Test → {r.display}]",
                         pages=r.pages,
                     )
-                    for r in recipients
+                    for r in to_send
                 ]
             status.set_text("Connexion au serveur SMTP…")
             self._ui_flush()
+            cancel_flag: list = []
+            btn_cancel.set_label("Annuler l'envoi")
+            btn_cancel.connect("clicked", lambda _b: cancel_flag.append(True))
 
             def _progress(i, total, ok, failed):
                 self.marking_status.set_text(f"Envoi des copies {i}/{total} ({ok} envoyé(s), {failed} échec(s))…")
@@ -2808,20 +2820,38 @@ class QcmWindow(Gtk.ApplicationWindow):
                     include_breakdown=chk_breakdown.get_active(),
                     password=entry_pass.get_text() or None,
                     progress=_progress,
+                    mailed=self.project.mailed,
+                    cancelled=cancel_flag,
                 )
             except mailing.MailingError as e:
                 status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
                 btn_send.set_sensitive(True)
                 return
             ok = sum(1 for r in reports if r.sent)
-            errors = [f"{r.recipient.display} : {r.error}" for r in reports if not r.sent]
-            if errors:
+            failed = [r for r in reports if not r.sent]
+            if failed:
+                kinds: dict[str, list[str]] = {}
+                for r in failed:
+                    kinds.setdefault(r.error_kind, []).append(r.recipient.display)
+                lines = [f"{ok} envoyé(s), {len(failed)} échec(s) :"]
+                for kind, names in kinds.items():
+                    lines.append(f"\n• {kind} ({len(names)}) : {', '.join(names[:5])}")
+                    if len(names) > 5:
+                        lines.append(f"  … et {len(names) - 5} autre(s)")
+                if cancel_flag:
+                    lines.append("\nEnvoi interrompu : les destinataires restants n'ont pas été contactés.")
                 status.set_markup(
-                    f"<span color='#C00'>{ok} envoyé(s), {len(errors)} échec(s) :\n" + "\n".join(errors) + "</span>"
+                    "<span color='#C00'>" + "\n".join(GLib.markup_escape_text(li) for li in lines) + "</span>"
+                )
+                self.marking_status.set_text(
+                    f"Envoi interrompu : {ok} envoyé(s), {len(failed)} échec(s). "
+                    "Les envoyés sont mémorisés : relancez pour ne reprendre que les absents."
                 )
             else:
-                status.set_markup(f"<span color='#080'>{ok} mail(s) envoyé(s).</span>")
+                status.set_markup(f"<span color='#080'>{ok} mail(s) envoyé(s) avec succès.</span>")
+                self.marking_status.set_text(f"Envoi terminé : {ok} copie(s) envoyée(s) par mail.")
             btn_send.set_sensitive(True)
+            btn_cancel.set_label("Fermer")
 
         btn_cancel.connect("clicked", lambda _b: win.destroy())
         btn_send.connect("clicked", _send)

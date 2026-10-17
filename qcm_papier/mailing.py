@@ -43,6 +43,42 @@ class SendReport:
     sent: bool
     error: str = ""
 
+    @property
+    def mail_key(self) -> str:
+        return self.recipient.email
+
+    @property
+    def error_kind(self) -> str:
+        """Type d'erreur en clair (analyse du code/message SMTP)."""
+        if self.sent or not self.error:
+            return ""
+        e = self.error.lower()
+        if any(k in e for k in ("blacklist", "blocklist", "spamhaus", "barracuda", "dnsbl", "rbl")):
+            return "Blacklist : adresse IP ou domaine sur liste de blocage, contacter l'administrateur"
+        if "blocked" in e or "client host rejected" in e:
+            return "Client bloqué par le serveur : politique anti-spam ou blacklist"
+        if "421" in e and "rate" in e:
+            return "Limite de taux du serveur (421) : envois trop rapides, ralentir ou attendre"
+        if "421" in e:
+            return "Connexion fermée par le serveur (421)"
+        if "451" in e:
+            return "Erreur temporaire du serveur (451) : réessayer plus tard"
+        if "550" in e or "551" in e or "553" in e:
+            return "Adresse refusée (550) : destinataire ou expéditeur invalide"
+        if "552" in e:
+            return "Boîte du destinataire pleine ou message trop volumineux (552)"
+        if "554" in e:
+            return "Message refusé (554) : contenu jugé indésirable ou bloqué"
+        if "535" in e or "authenti" in e:
+            return "Authentification refusée : vérifiez le login et le mot de passe"
+        if "connect() first" in e:
+            return "Connexion perdue avec le serveur"
+        if "timed out" in e or "timeout" in e:
+            return "Délai dépassé : le serveur n'a pas répondu"
+        if "connection" in e or "network" in e or "refus" in e:
+            return "Problème de connexion réseau au serveur"
+        return "Erreur inconnue du serveur"
+
 
 def group_by_email(marked_pages: list) -> list[Recipient]:
     """Regroupe les pages corrigées par adresse email d'étudiant.
@@ -228,12 +264,19 @@ def send_all(
     password: str | None = None,
     ds_name: str = "",
     include_breakdown: bool = False,
+    mailed: set[str] | None = None,
+    cancelled: list | None = None,
 ) -> list[SendReport]:
     """Envoie les copies à chaque destinataire, un mail par étudiant.
 
     Renvoie un rapport par destinataire (envoyé ou erreur). ``progress``
-    (facultatif) est appelé avec ``(index, total, recipient)`` avant chaque
+    (facultatif) est appelé avec ``(index, total, ok, échecs)`` avant chaque
     envoi pour rafraîchir l'interface.
+
+    ``mailed`` : ensemble complété avec l'email de chaque destinataire
+    ayant reçu son mail avec succès (mémorisation pour la reprise).
+    ``cancelled`` : si cette liste devient truthy, l'envoi s'arrête
+    proprement après le mail en cours.
     """
     if not recipients:
         raise MailingError("Aucun destinataire : chargez la table étudiants et corrigez d'abord.")
@@ -263,12 +306,16 @@ def send_all(
     server = smtp_connection(password)
     try:
         for i, recipient in enumerate(recipients, 1):
+            if cancelled is not None and cancelled:
+                break
             if progress is not None:
                 progress(i, total, ok_count, fail_count)
             try:
                 _send_one(server, recipient)
                 reports.append(SendReport(recipient, sent=True))
                 ok_count += 1
+                if mailed is not None:
+                    mailed.add(recipient.email)
             except smtplib.SMTPServerDisconnected:
                 # Connexion coupée par le serveur (limite de taux, délai
                 # d'inactivité…) : on se reconnecte et on retente ce mail.
