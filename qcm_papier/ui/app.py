@@ -2505,6 +2505,9 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         def _send(_b) -> None:
             btn_send.set_sensitive(False)
+            if not entry_pass.get_text():
+                self._warn_no_password(status, btn_send)
+                return
             status.set_text("Envoi…")
             self._ui_flush()
             body = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
@@ -2657,6 +2660,22 @@ class QcmWindow(Gtk.ApplicationWindow):
                 row[6] = f"{getattr(page, 'malus', 0.0):g}"
                 break
 
+    def _warn_no_password(self, status, retry_btn) -> None:
+        """Gros avertissement : mot de passe SMTP absent.
+
+        Sans mot de passe, le serveur refusera presque toujours l'envoi
+        (authentification obligatoire). On bloque ici pour éviter les
+        166 échecs en cascade et un compte-rendu illisible.
+        """
+        status.set_markup(
+            "<span color='#F00' size='14000' weight='bold'>"
+            "⚠ MOT DE PASSE MANQUANT !</span>\n"
+            "<span color='#C00' weight='bold'>"
+            "Saisissez votre mot de passe SMTP dans le champ « Mot de passe SMTP » "
+            "— il n'est jamais mémorisé, il faut le saisir à chaque envoi.</span>"
+        )
+        retry_btn.set_sensitive(True)
+
     def _on_send_copies_mail(self, _btn) -> None:
         """Ouvre le dialogue d'envoi des copies corrigées par mail (PNG).
 
@@ -2781,6 +2800,9 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         def _send(_b) -> None:
             btn_send.set_sensitive(False)
+            if not entry_pass.get_text():
+                self._warn_no_password(status, btn_send)
+                return
             body = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
             subject = entry_subject.get_text() or "Votre copie corrigée"
             to_send = recipients
