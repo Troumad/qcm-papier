@@ -108,6 +108,19 @@ def question_breakdown(project, page) -> str:
     return "\n".join(lines)
 
 
+def malus_line(page) -> str:
+    """Ligne de résumé du malus et de la note d'une page (vide si pas de malus)."""
+    malus = float(getattr(page, "malus", 0.0) or 0.0)
+    if not malus:
+        return ""
+    from . import scanner
+
+    note = scanner.final_value(page)
+    brute = float(page.value) if page.value is not None else 0.0
+    total = float(page.total) if page.total is not None else 0.0
+    return f"Malus : {malus:g} — note brute : {brute:g}/{total:g} — note finale : {note:g}/{total:g}"
+
+
 def build_message(
     recipient: Recipient,
     subject: str,
@@ -132,8 +145,13 @@ def build_message(
     if include_breakdown and project is not None:
         parts = []
         for page in recipient.pages:
-            parts.append(question_breakdown(project, page))
-        breakdown = "\n\n".join(p for p in parts if p)
+            chunk = question_breakdown(project, page)
+            malus = malus_line(page)
+            if malus:
+                chunk = f"{chunk}\n{malus}" if chunk else malus
+            if chunk:
+                parts.append(chunk)
+        breakdown = "\n\n".join(parts)
         if breakdown:
             text += "\n\nDécompte des points par question :\n\n" + breakdown
     msg.set_content(text)

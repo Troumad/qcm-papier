@@ -134,3 +134,17 @@ def test_build_message_avec_ds_et_decompte(monkeypatch):
     assert "DS : DS de mathématiques" in content
     assert "Décompte des points par question" in content
     assert "- Q1 : 2/2" in content
+
+
+def test_malus_line():
+    page = FakePage(email="jean@x.fr")
+    page.value = 12.0
+    page.total = 20.0
+    page.malus = 1.0
+    line = mailing.malus_line(page)
+    assert "Malus : 1" in line
+    assert "note brute : 12/20" in line
+    assert "note finale : 11/20" in line
+
+    page.malus = 0.0
+    assert mailing.malus_line(page) == ""
