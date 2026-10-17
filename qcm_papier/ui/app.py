@@ -2376,7 +2376,14 @@ class QcmWindow(Gtk.ApplicationWindow):
 
     def _on_results_click(self, _gesture, _n, x, y) -> None:
         """Clic dans le tableau des résultats : sur « ✉ », envoyer la copie."""
-        hit = self.results_tree.get_path_at_pos(x, y)
+        # get_path_at_pos attend des coordonnées relatives à la fenêtre bin
+        # (sous l'en-tête) ; le clic fournit des coordonnées du widget — sans
+        # conversion, la hauteur de l'en-tête décale le clic d'une ligne.
+        try:
+            bx, by = self.results_tree.convert_widget_to_bin_window_coords(x, y)
+        except AttributeError:
+            bx, by = x, y
+        hit = self.results_tree.get_path_at_pos(bx, by)
         if hit is None:
             return
         path, column, _cx, _cy = hit
