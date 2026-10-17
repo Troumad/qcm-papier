@@ -243,6 +243,9 @@ def send_all(
     reports: list[SendReport] = []
     total = len(recipients)
 
+    ok_count = 0
+    fail_count = 0
+
     def _send_one(server, recipient):
         msg = build_message(
             recipient,
@@ -261,10 +264,11 @@ def send_all(
     try:
         for i, recipient in enumerate(recipients, 1):
             if progress is not None:
-                progress(i, total, recipient)
+                progress(i, total, ok_count, fail_count)
             try:
                 _send_one(server, recipient)
                 reports.append(SendReport(recipient, sent=True))
+                ok_count += 1
             except smtplib.SMTPServerDisconnected:
                 # Connexion coupée par le serveur (limite de taux, délai
                 # d'inactivité…) : on se reconnecte et on retente ce mail.
@@ -272,8 +276,10 @@ def send_all(
                     server = smtp_connection(password)
                     _send_one(server, recipient)
                     reports.append(SendReport(recipient, sent=True))
+                    ok_count += 1
                 except (smtplib.SMTPException, MailingError) as exc:
                     reports.append(SendReport(recipient, sent=False, error=str(exc)))
+                    fail_count += 1
             except smtplib.SMTPException:
                 # Limite de taux dépassée : le serveur refuse puis ferme.
                 # On attend un peu, on se reconnecte et on retente une fois.
@@ -282,8 +288,10 @@ def send_all(
                     server = smtp_connection(password)
                     _send_one(server, recipient)
                     reports.append(SendReport(recipient, sent=True))
+                    ok_count += 1
                 except (smtplib.SMTPException, MailingError) as exc2:
                     reports.append(SendReport(recipient, sent=False, error=str(exc2)))
+                    fail_count += 1
             time.sleep(1)  # pace les envois pour respecter la limite du serveur
     finally:
         try:

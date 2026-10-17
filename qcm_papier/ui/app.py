@@ -2395,7 +2395,6 @@ class QcmWindow(Gtk.ApplicationWindow):
         _label, page = self.marked_pages[page_idx]
         email = _student_email(page)
         name = f"{page.student_name or ''} {page.student_firstname or ''}".strip()
-        recipient = mailing.Recipient(email=email, name=name, pages=[page])
         ds_name = self.project.settings.evaluation_full or self.project.settings.evaluation_short
 
         win = Gtk.Window(title=f"Envoyer la copie à {name or email}", transient_for=self, modal=True, default_width=620)
@@ -2425,6 +2424,13 @@ class QcmWindow(Gtk.ApplicationWindow):
                 note_txt += f" (ramenée sur 20 : {scale_note(scanner.final_value(page), float(page.total)):.2f}/20)"
         plain = f"Destinataire : {name} <{email}>\n{note_txt}\n{sender_line}"
         info = Gtk.Label(label=plain)
+        addr_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        lbl_addr = Gtk.Label(label="Adresse de réception :")
+        entry_addr = Gtk.Entry()
+        entry_addr.set_text(email)
+        entry_addr.set_hexpand(True)
+        addr_box.append(lbl_addr)
+        addr_box.append(entry_addr)
         if account_ok:
             main.append(info)
         else:
@@ -2436,6 +2442,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                 )
             )
             main.append(info)
+        main.append(addr_box)
         if not account_ok:
             btn_cfg = Gtk.Button(label="Configurer le compte mail…")
             btn_cfg.get_style_context().add_class("suggested-action")
@@ -2498,6 +2505,8 @@ class QcmWindow(Gtk.ApplicationWindow):
             status.set_text("Envoi…")
             self._ui_flush()
             body = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+            dest_email = entry_addr.get_text().strip() or email
+            recipient = mailing.Recipient(email=dest_email, name=name, pages=[page])
             to = recipient
             if chk_selftest.get_active():
                 try:
@@ -2782,6 +2791,13 @@ class QcmWindow(Gtk.ApplicationWindow):
                 ]
             status.set_text("Connexion au serveur SMTP…")
             self._ui_flush()
+
+            def _progress(i, total, ok, failed):
+                self.marking_status.set_text(f"Envoi des copies {i}/{total} ({ok} envoyé(s), {failed} échec(s))…")
+                status.set_text(f"Envoi {i}/{total} ({ok} envoyé(s), {failed} échec(s))…")
+                self._ui_flush()
+
+            self._ui_flush()
             try:
                 reports = mailing.send_all(
                     to_send,
@@ -2791,6 +2807,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                     ds_name=ds_name,
                     include_breakdown=chk_breakdown.get_active(),
                     password=entry_pass.get_text() or None,
+                    progress=_progress,
                 )
             except mailing.MailingError as e:
                 status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
