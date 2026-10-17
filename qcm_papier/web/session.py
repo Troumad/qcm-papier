@@ -444,6 +444,8 @@ class Session:
         with self.lock:
             page = self.pages[index].page
             page.malus = max(0.0, float(malus))
+            page.malus_manual = True
+            self.notes = self._collect_notes()
 
     def manual_align(self, index: int, points: list[tuple[float, float]]) -> bool:
         with self.lock:

@@ -130,3 +130,26 @@ def test_correction_cli_et_reprise(project_path, tmp_path, capsys):
     assert cli.main(args + ["--load", str(saved)]) == 0
     assert "état restauré" in capsys.readouterr().out
     assert output.read_bytes() == initial
+
+
+def test_malus_manuel_met_a_jour_les_notes_et_resiste_a_la_recorrection(project_path, tmp_path):
+    """Un malus saisi à la main est pris en compte dans les notes et n'est pas écrasé."""
+    pdf = tmp_path / "sujet.pdf"
+    cli.main(["generate", "-p", project_path, "-o", str(pdf), "--save-project", project_path])
+    (tmp_path / "session4").mkdir()
+    session = Session(work_dir=str(tmp_path / "session4"))
+    with TestClient(create_app(session), base_url="http://127.0.0.1:8060") as client:
+        client.post("/api/project/open", files={"file": ("projet.json", Path(project_path).read_bytes())})
+        client.post("/api/copies", files=[("files", ("sujet.pdf", pdf.read_bytes(), "application/pdf"))])
+        client.post("/api/correction/start")
+        wait(client)
+        client.post("/api/pages/0/student", json={"student_id": "p1234567"})
+        assert session.notes == {"p1234567": -1.0}
+        # Changer le malus doit mettre à jour les notes exportées.
+        client.post("/api/pages/0/malus", json={"malus": 0})
+        assert session.notes == {"p1234567": 0.0}
+        client.post("/api/pages/0/malus", json={"malus": 3})
+        assert session.notes == {"p1234567": -3.0}
+        # Forcer la variante relance la correction sans écraser le malus manuel.
+        response = client.post("/api/pages/0/variant", json={"variant_id": "42"})
+        assert response.json()["malus"] == 3

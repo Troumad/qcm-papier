@@ -3172,6 +3172,7 @@ class MarkedPageWindow(Gtk.Window):
             self.lbl_malus_hint.set_text("Malus invalide : nombre attendu.")
             return
         page.malus = max(0.0, malus)
+        page.malus_manual = True
         self._load_page()
         if self.on_navigate is not None:
             self.on_navigate(self.idx)

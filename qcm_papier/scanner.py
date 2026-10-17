@@ -221,6 +221,7 @@ class ScannedPage:
     total: float | None = None
     complete: bool = False
     malus: float = 0.0
+    malus_manual: bool = False
     copy_path: str | None = None
 
     def clear_marks(self) -> None:
@@ -882,8 +883,7 @@ def correct_with_variant(
     page.variant_id = int(variant_id)
     page.manual_marks = manual_marks
     read_student_id(page, project.variants, page.matrix_inv, 41, 241)
-    if page.student_id is None:
-        page.malus = 1.0
+    apply_auto_malus(page)
     if page.student_id is not None:
         student = project.students.get(page.student_id)
         if student is not None:
@@ -1365,6 +1365,12 @@ def show_marks(page: ScannedPage, project: Project) -> None:
 # ---------------------------------------------------------------------------
 
 
+def apply_auto_malus(page: ScannedPage) -> None:
+    """Malus automatique : 1 si le n etudiant est illisible, sauf malus saisi a la main."""
+    if not page.malus_manual:
+        page.malus = 1.0 if page.student_id is None else 0.0
+
+
 def final_value(page) -> float | None:
     """Note finale d'une page : note brute moins le malus eventuel."""
     if page.value is None:
@@ -1391,8 +1397,7 @@ def _apply_correction(
     if not read_barcode(page, vs, matrix):
         return False
     read_student_id(page, vs, matrix_inv, 41, 241)
-    if page.student_id is None:
-        page.malus = 1.0
+    apply_auto_malus(page)
     if page.student_id is not None:
         student = project.students.get(page.student_id)
         if student is not None:
@@ -1601,6 +1606,7 @@ def _page_to_state(page: ScannedPage) -> dict:
         "total": page.total,
         "complete": page.complete,
         "malus": page.malus,
+        "malus_manual": page.malus_manual,
         "matrix": _matrix_to_dict(page.matrix) if page.matrix else None,
         "matrix_inv": _matrix_to_dict(page.matrix_inv) if page.matrix_inv else None,
         "marks": [],
@@ -1643,6 +1649,7 @@ def _page_from_state(page: ScannedPage, state: dict) -> None:
     page.total = state.get("total")
     page.complete = state.get("complete", False)
     page.malus = float(state.get("malus", 0.0) or 0.0)
+    page.malus_manual = bool(state.get("malus_manual", False))
     if state.get("matrix"):
         page.matrix = _matrix_from_dict(state["matrix"])
     if state.get("matrix_inv"):
