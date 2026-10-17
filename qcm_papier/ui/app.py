@@ -25,7 +25,7 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, Gio, GLib, Gtk
 
-from .. import generator, mail_config, markdown_pango, pdf_writer, scanner, scodoc
+from .. import generator, mail_config, mailing, markdown_pango, pdf_writer, scanner, scodoc
 from .. import project as project_mod
 from ..marking import score_page
 from ..model import Project
@@ -1667,6 +1667,8 @@ class QcmWindow(Gtk.ApplicationWindow):
         btn_load_state.connect("clicked", self._on_load_state)
         btn_mail = Gtk.Button(label="Compte mail…")
         btn_mail.connect("clicked", self._on_mail_account)
+        btn_send_mail = Gtk.Button(label="Envoyer les copies par mail…")
+        btn_send_mail.connect("clicked", self._on_send_copies_mail)
         files_box.append(btn_load)
         files_box.append(btn_correct)
         files_box.append(btn_students)
@@ -1675,6 +1677,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         files_box.append(btn_save_state)
         files_box.append(btn_load_state)
         files_box.append(btn_mail)
+        files_box.append(btn_send_mail)
         box.append(files_box)
 
         clair_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -2432,6 +2435,93 @@ class QcmWindow(Gtk.ApplicationWindow):
                     row[5] = "complète" if page.complete else "incomplète"
                 row[6] = f"{getattr(page, 'malus', 0.0):g}"
                 break
+
+    def _on_send_copies_mail(self, _btn) -> None:
+        """Ouvre le dialogue d'envoi des copies corrigées par mail (PNG).
+
+        Les pages corrigées sont regroupées par adresse email d'étudiant ;
+        chaque étudiant reçoit un mail individuel avec ses copies en
+        pièces jointes (jamais plusieurs destinataires visibles).
+        """
+        if not self.marked_pages:
+            self.marking_status.set_text("Lancez d'abord la correction des copies.")
+            return
+        recipients = mailing.group_by_email(self.marked_pages)
+        if not recipients:
+            self.marking_status.set_text(
+                "Aucune adresse : chargez la table étudiants (levée d'anonymat) puis corrigez."
+            )
+            return
+        win = Gtk.Window(title="Envoyer les copies par mail", transient_for=self, modal=True, default_width=620)
+        main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        main.set_margin_start(12)
+        main.set_margin_end(12)
+        main.set_margin_top(12)
+        main.set_margin_bottom(12)
+        win.set_child(main)
+
+        n_pages = sum(len(r.pages) for r in recipients)
+        main.append(
+            Gtk.Label(
+                label=(
+                    f"{len(recipients)} destinataire(s), {n_pages} copie(s) corrigée(s) au total.\n"
+                    "Chaque étudiant reçoit un mail individuel avec ses copies (PNG) en pièces jointes."
+                )
+            )
+        )
+
+        entry_subject = Gtk.Entry()
+        entry_subject.set_text("Votre copie corrigée")
+        main.append(entry_subject)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_hexpand(True)
+        view = Gtk.TextView()
+        buf = view.get_buffer()
+        buf.set_text("Bonjour,\n\nVeuillez trouver en pièce jointe votre copie corrigée.\n\nCordialement.")
+        view.set_wrap_mode(Gtk.WrapMode.WORD)
+        scroll.set_child(view)
+        main.append(scroll)
+
+        status = Gtk.Label(label="")
+        status.set_wrap(True)
+        main.append(status)
+
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        btn_box.set_halign(Gtk.Align.END)
+        btn_cancel = Gtk.Button(label="Fermer")
+        btn_send = Gtk.Button(label="Envoyer")
+        btn_send.get_style_context().add_class("suggested-action")
+        btn_box.append(btn_cancel)
+        btn_box.append(btn_send)
+        main.append(btn_box)
+
+        def _send(_b) -> None:
+            btn_send.set_sensitive(False)
+            body = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+            subject = entry_subject.get_text() or "Votre copie corrigée"
+            status.set_text("Connexion au serveur SMTP…")
+            self._ui_flush()
+            try:
+                reports = mailing.send_all(recipients, subject, body)
+            except mailing.MailingError as e:
+                status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
+                btn_send.set_sensitive(True)
+                return
+            ok = sum(1 for r in reports if r.sent)
+            errors = [f"{r.recipient.display} : {r.error}" for r in reports if not r.sent]
+            if errors:
+                status.set_markup(
+                    f"<span color='#C00'>{ok} envoyé(s), {len(errors)} échec(s) :\n" + "\n".join(errors) + "</span>"
+                )
+            else:
+                status.set_markup(f"<span color='#080'>{ok} mail(s) envoyé(s).</span>")
+            btn_send.set_sensitive(True)
+
+        btn_cancel.connect("clicked", lambda _b: win.destroy())
+        btn_send.connect("clicked", _send)
+        win.present()
 
     def _on_mail_account(self, _btn) -> None:
         """Ouvre le dialogue de configuration du compte mail (envoi des copies).
