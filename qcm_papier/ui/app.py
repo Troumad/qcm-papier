@@ -2376,7 +2376,10 @@ class QcmWindow(Gtk.ApplicationWindow):
 
     def _on_results_click(self, _gesture, _n, x, y) -> None:
         """Clic dans le tableau des résultats : sur « ✉ », envoyer la copie."""
-        path, column, _cx, _cy = self.results_tree.get_path_at_pos(x, y)
+        hit = self.results_tree.get_path_at_pos(x, y)
+        if hit is None:
+            return
+        path, column, _cx, _cy = hit
         if column is not self.send_column:
             return
         model = self.results_tree.get_model()
