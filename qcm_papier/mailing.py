@@ -324,10 +324,12 @@ def send_all(
                 server = smtp_connection(password)
             except smtplib.SMTPException as exc:
                 rate_retries += 1
-                if rate_retries >= 3 or (skip_one and skip_one[0]):
+                # Pas de plafond d'essais : si le serveur limite le taux, il
+                # bloquera pareillement le destinataire suivant. Seul le
+                # bouton « Passer au suivant » (ou l'annulation) fait passer.
+                if skip_one and skip_one[0]:
                     reports.append(SendReport(recipient, sent=False, error=str(exc)))
-                    if skip_one:
-                        skip_one.clear()
+                    skip_one.clear()
                     return False
                 # Décompte des secondes d'attente, avec le numéro d'essai.
                 for sec in range(10, 0, -1):

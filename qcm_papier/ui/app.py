@@ -2847,9 +2847,9 @@ class QcmWindow(Gtk.ApplicationWindow):
                 if retry:
                     essai = retry + 1
                     base += (
-                        f" — essai {essai}/3 refusé, nouvel essai dans {seconds or 10} s"
+                        f" — essai {essai} refusé, nouvel essai dans {seconds or 10} s"
                         if seconds
-                        else f" — essai {essai}/3 refusé par le serveur"
+                        else f" — essai {essai} refusé par le serveur"
                     )
                     # Le bouton n'apparaît qu'au deuxième refus : au premier,
                     # on laisse la reconnexion automatique faire son office.
