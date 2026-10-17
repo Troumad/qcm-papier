@@ -1663,11 +1663,13 @@ def _page_from_state(page: ScannedPage, state: dict) -> None:
     page.marks = list(state.get("marks", []))
 
 
-def save_correction_state(pages: list[ScannedPage], copy_paths: list[str], path: str) -> None:
+def save_correction_state(pages: list[ScannedPage], copy_paths: list[str], path: str, project_path: str = "") -> None:
     """Sauvegarde l'état de correction des pages dans un fichier JSON.
 
     Les images des copies sont sauvegardées dans un dossier portant le
     même nom que le fichier JSON (sans extension) à côté de celui-ci.
+    ``project_path`` : chemin du fichier QCM lié à la correction, pour
+    pouvoir rouvrir les deux d'un seul geste.
     """
     import json
 
@@ -1675,6 +1677,8 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str], path:
     img_dir = base + "_images"
     os.makedirs(img_dir, exist_ok=True)
     data = {"copies": [], "image_dir": img_dir}
+    if project_path:
+        data["project"] = project_path
     used_names: set[str] = set()
     # Index de page relatif au fichier (pour distinguer les pages d'un
     # même PDF lors du rechargement).

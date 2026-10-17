@@ -3123,7 +3123,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         try:
             pages = [p for _lbl, p in self.marked_pages]
             copy_paths = [p.copy_path or "" for _lbl, p in self.marked_pages]
-            scanner.save_correction_state(pages, copy_paths, path)
+            scanner.save_correction_state(pages, copy_paths, path, project_path=self.project_path or "")
             self.marking_status.set_text(f"État sauvegardé : {path}")
         except Exception as e:
             self.marking_status.set_text(f"Erreur : {e}")
@@ -3134,6 +3134,9 @@ class QcmWindow(Gtk.ApplicationWindow):
         )
         if path is None:
             return
+        self._on_load_state_path(path)
+
+    def _on_load_state_path(self, path: str) -> None:
         # Si aucune copie n'est chargée, on pré-remplit la liste des copies
         # à partir des chemins enregistrés dans la sauvegarde (sans cocher
         # la case de correction : les notes sont déjà dans la sauvegarde).
@@ -3275,7 +3278,55 @@ class QcmWindow(Gtk.ApplicationWindow):
         path = _file_dialog(self, "Ouvrir un projet", Gtk.FileChooserAction.OPEN, filters=[("Projet JSON", ["*.json"])])
         if path is None:
             return
+        # Un fichier de correction (sauvegarde d'état) n'est pas un projet :
+        # rouvrir le QCM lié puis recharger la correction.
+        import json as _json
+
+        try:
+            with open(path, encoding="utf-8") as f:
+                _data = _json.load(f)
+        except (OSError, _json.JSONDecodeError) as e:
+            self._show_open_error(f"Fichier illisible : {e}")
+            return
+        if isinstance(_data, dict) and "copies" in _data:
+            project_path = str(_data.get("project", "") or "")
+            if project_path and not os.path.isabs(project_path):
+                project_path = os.path.join(os.path.dirname(path), project_path)
+            if not project_path or not os.path.exists(project_path):
+                self._show_open_error(
+                    "Ceci est une sauvegarde de correction, pas un projet QCM.\n"
+                    "Le fichier QCM lié est introuvable"
+                    + (f" : {project_path}" if project_path else " (aucun lien enregistré — sauvegarde ancienne).")
+                )
+                return
+            self._load_project_from_path(project_path)
+            self._on_load_state_path(path)
+            if hasattr(self, "file_status"):
+                self.file_status.set_text(f"Correction ouverte avec son QCM : {os.path.basename(project_path)}")
+            return
+        if not isinstance(_data, dict) or not (
+            "structure" in _data or "settings" in _data or any(k.startswith("info_") for k in _data)
+        ):
+            self._show_open_error("Fichier non reconnu : ni un projet QCM, ni une sauvegarde de correction.")
+            return
         self._load_project_from_path(path)
+
+    def _show_open_error(self, message: str) -> None:
+        win = Gtk.Window(title="Erreur à l'ouverture", transient_for=self, modal=True, default_width=420)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.set_margin_start(12)
+        box.set_margin_end(12)
+        box.set_margin_top(12)
+        box.set_margin_bottom(12)
+        win.set_child(box)
+        lbl = Gtk.Label(label=message)
+        lbl.set_wrap(True)
+        box.append(lbl)
+        btn = Gtk.Button(label="Fermer")
+        btn.set_halign(Gtk.Align.END)
+        btn.connect("clicked", lambda _b: win.destroy())
+        box.append(btn)
+        win.present()
 
     def _load_project_from_path(self, path: str) -> None:
         """Charge un projet depuis un fichier JSON et rafraîchit l'interface."""
