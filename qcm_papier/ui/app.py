@@ -2482,6 +2482,19 @@ class QcmWindow(Gtk.ApplicationWindow):
         main.append(chk_breakdown)
         main.append(chk_selftest)
 
+        # Mot de passe SMTP : masqué ; pré-remplir n'est pas possible (jamais
+        # relu), on demande la saisie à chaque envoi.
+        pass_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        lbl_pass = Gtk.Label(label="Mot de passe SMTP :")
+        entry_pass = Gtk.Entry()
+        entry_pass.set_visibility(False)
+        entry_pass.set_input_purpose(Gtk.InputPurpose.PASSWORD)
+        entry_pass.set_placeholder_text("saisi à chaque envoi, jamais mémorisé")
+        entry_pass.set_hexpand(True)
+        pass_box.append(lbl_pass)
+        pass_box.append(entry_pass)
+        main.append(pass_box)
+
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
         scroll.set_hexpand(True)
@@ -2534,6 +2547,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                     project=self.project,
                     ds_name=ds_name,
                     include_breakdown=chk_breakdown.get_active(),
+                    password=entry_pass.get_text() or None,
                 )
             except mailing.MailingError as e:
                 status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
@@ -2589,11 +2603,6 @@ class QcmWindow(Gtk.ApplicationWindow):
         lbl_sender.set_xalign(1)
         entry_sender = Gtk.Entry()
         entry_sender.set_placeholder_text("prenom.nom@univ.fr")
-        lbl_passwd = Gtk.Label(label="Mot de passe :")
-        lbl_passwd.set_xalign(1)
-        entry_passwd = Gtk.Entry()
-        entry_passwd.set_visibility(False)
-        entry_passwd.set_input_purpose(Gtk.InputPurpose.PASSWORD)
         chk_starttls = Gtk.CheckButton(label="Chiffrement STARTTLS")
         chk_starttls.set_active(True)
 
@@ -2606,9 +2615,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             (entry_login, 1, 2, 1, 1),
             (lbl_sender, 0, 3, 1, 1),
             (entry_sender, 1, 3, 1, 1),
-            (lbl_passwd, 0, 4, 1, 1),
-            (entry_passwd, 1, 4, 1, 1),
-            (chk_starttls, 1, 5, 1, 1),
+            (chk_starttls, 1, 4, 1, 1),
         ]
         for widget, col, row, w, h in widgets:
             grid.attach(widget, col, row, w, h)
@@ -2632,10 +2639,8 @@ class QcmWindow(Gtk.ApplicationWindow):
         if account.complete:
             status.set_markup(
                 f"<span color='#080'>Compte configuré ({account.username} sur {account.host}).\n"
-                f"Trousseau : {mail_config.keyring_name()}</span>"
+                "Le mot de passe n'est jamais stocké : il sera demandé à chaque envoi.</span>"
             )
-        elif account.host or account.username:
-            status.set_markup("<span color='#C00'>Compte incomplet : mot de passe manquant.</span>")
 
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         btn_box.set_halign(Gtk.Align.END)
@@ -2653,7 +2658,6 @@ class QcmWindow(Gtk.ApplicationWindow):
                     entry_port.get_text(),
                     entry_login.get_text(),
                     entry_sender.get_text(),
-                    entry_passwd.get_text() or None,
                     starttls=chk_starttls.get_active(),
                 )
             except mail_config.MailConfigError as e:
@@ -2662,8 +2666,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             account = mail_config.load_account()
             status.set_markup(
                 f"<span color='#080'>Compte enregistré ({account.username} sur {account.host}).\n"
-                f"Le mot de passe est dans le trousseau système, pas dans un fichier.\n"
-                f"Trousseau : {mail_config.keyring_name()}</span>"
+                "Le mot de passe n'est jamais stocké : il sera demandé à chaque envoi.</span>"
             )
 
         btn_cancel.connect("clicked", lambda _b: win.destroy())

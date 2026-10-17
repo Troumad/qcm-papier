@@ -156,19 +156,28 @@ def build_message(
     return msg
 
 
-def smtp_connection():
-    """Connexion SMTP authentifiée à partir du compte enregistré."""
+def smtp_connection(password: str | None = None):
+    """Connexion SMTP authentifiée à partir du compte enregistré.
+
+    ``password`` : mot de passe saisi par l'utilisateur à l'envoi, jamais
+    stocké. Vide : certains serveurs acceptent une session sans
+    authentification (relais interne).
+    """
     account = mail_config.load_account()
     if not account.complete:
         raise MailingError("Compte mail non configuré : bouton « Compte mail… ».")
-    password = mail_config.smtp_password()
+    password = password or ""
     try:
         server = smtplib.SMTP(account.host, account.port, timeout=30)
         if account.starttls:
             server.starttls(context=ssl.create_default_context())
-        server.login(account.username, password)
     except (OSError, smtplib.SMTPException) as exc:
         raise MailingError(f"Connexion à {account.host}:{account.port} impossible : {exc}") from exc
+    if password:
+        try:
+            server.login(account.username, password)
+        except smtplib.SMTPException as exc:
+            raise MailingError(f"Authentification refusée : {exc}") from exc
     return server
 
 
@@ -180,6 +189,7 @@ def send_all(
     sender_name: str = "",
     progress=None,
     project=None,
+    password: str | None = None,
     ds_name: str = "",
     include_breakdown: bool = False,
 ) -> list[SendReport]:
@@ -196,7 +206,7 @@ def send_all(
         sender_email = account.sender or account.username
     reports: list[SendReport] = []
     total = len(recipients)
-    server = smtp_connection()
+    server = smtp_connection(password)
     try:
         for i, recipient in enumerate(recipients, 1):
             if progress is not None:

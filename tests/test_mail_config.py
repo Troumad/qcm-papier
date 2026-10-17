@@ -1,108 +1,68 @@
-"""Compte mail (SMTP) dédié : fichier de réglages + trousseau (factice en test)."""
+"""Compte mail (SMTP) dédié : réglages enregistrés, mot de passe jamais stocké."""
 
 import json
 import os
 
 import pytest
 
-keyring = pytest.importorskip("keyring")
-
-from keyring.backend import KeyringBackend  # noqa: E402
-
 from qcm_papier import mail_config  # noqa: E402
 from qcm_papier.mail_config import MailConfigError  # noqa: E402
 
 
-class MemoryKeyring(KeyringBackend):
-    priority = 1
-
-    def __init__(self):
-        super().__init__()
-        self.store = {}
-
-    def get_password(self, service, username):
-        return self.store.get((service, username))
-
-    def set_password(self, service, username, password):
-        self.store[(service, username)] = password
-
-    def delete_password(self, service, username):
-        self.store.pop((service, username), None)
-
-
 @pytest.fixture
-def ring(tmp_path, monkeypatch):
+def cfg(tmp_path, monkeypatch):
     monkeypatch.setenv("QCM_PAPIER_CONFIG_DIR", str(tmp_path))
-    backend = MemoryKeyring()
-    previous = keyring.get_keyring()
-    keyring.set_keyring(backend)
-    yield backend
-    keyring.set_keyring(previous)
+    return tmp_path
 
 
-def test_compte_absent(ring):
+def test_compte_absent(cfg):
     account = mail_config.load_account()
     assert not account.complete
-    with pytest.raises(MailConfigError, match="non configuré"):
-        mail_config.smtp_password()
 
 
-def test_mot_de_passe_dans_le_trousseau_pas_dans_le_fichier(ring, tmp_path):
+def test_enregistrement_sans_mot_de_passe(cfg):
     account = mail_config.save_account(
-        "smtp.exemple.fr", "587", "prof@exemple.fr", "Prof Sender", "S3cret!", starttls=True
+        "smtp.univ-lyon1.fr", "587", "prenom.nom@univ-lyon1.fr", "prenom.nom@univ-lyon1.fr", starttls=True
     )
-    assert (account.host, account.port, account.username, account.has_password) == (
-        "smtp.exemple.fr",
+    assert (account.host, account.port, account.username, account.sender) == (
+        "smtp.univ-lyon1.fr",
         587,
-        "prof@exemple.fr",
-        True,
+        "prenom.nom@univ-lyon1.fr",
+        "prenom.nom@univ-lyon1.fr",
     )
-    content = (tmp_path / "mail.json").read_text()
-    assert "S3cret!" not in content
-    assert json.loads(content) == {
-        "host": "smtp.exemple.fr",
+    assert account.complete
+    content = (cfg / "mail.json").read_text()
+    data = json.loads(content)
+    assert data == {
+        "host": "smtp.univ-lyon1.fr",
         "port": 587,
-        "username": "prof@exemple.fr",
-        "sender": "Prof Sender",
+        "username": "prenom.nom@univ-lyon1.fr",
+        "sender": "prenom.nom@univ-lyon1.fr",
         "starttls": True,
     }
-    assert ring.store == {("qcm-papier-mail", "prof@exemple.fr"): "S3cret!"}
+    assert "password" not in content and "passwd" not in content
     if os.name != "nt":
-        assert oct(os.stat(tmp_path / "mail.json").st_mode & 0o777) == "0o600"
-    assert mail_config.smtp_password() == "S3cret!"
+        assert oct(os.stat(cfg / "mail.json").st_mode & 0o777) == "0o600"
 
 
-def test_champs_manquants(ring):
+def test_champs_manquants(cfg):
     with pytest.raises(MailConfigError, match="serveur"):
-        mail_config.save_account("", "587", "prof", "sender", "x")
+        mail_config.save_account("", "587", "prof", "sender")
     with pytest.raises(MailConfigError, match="Identifiant"):
-        mail_config.save_account("smtp.exemple.fr", "587", "", "sender", "x")
+        mail_config.save_account("smtp.univ.fr", "587", "", "sender")
     with pytest.raises(MailConfigError, match="expédition"):
-        mail_config.save_account("smtp.exemple.fr", "587", "prof", "", "x")
+        mail_config.save_account("smtp.univ.fr", "587", "prof", "")
 
 
-def test_port_invalide(ring):
+def test_port_invalide(cfg):
     with pytest.raises(MailConfigError, match="Port"):
-        mail_config.save_account("smtp.exemple.fr", "abc", "prof", "sender", "x")
+        mail_config.save_account("smtp.univ.fr", "abc", "prof", "sender")
     with pytest.raises(MailConfigError, match="Port"):
-        mail_config.save_account("smtp.exemple.fr", "99999", "prof", "sender", "x")
+        mail_config.save_account("smtp.univ.fr", "99999", "prof", "sender")
 
 
-def test_changer_de_serveur_exige_un_mot_de_passe(ring):
-    mail_config.save_account("smtp.a.fr", "587", "prof", "Prof Sender", "S3cret!")
-    with pytest.raises(MailConfigError, match="Mot de passe requis"):
-        mail_config.save_account("smtp.b.fr", "587", "prof", "Prof Sender", "")
-    account = mail_config.save_account("smtp.b.fr", "587", "prof", "Prof Sender", "AutreSecret")
-    assert account.host == "smtp.b.fr" and account.has_password
-
-
-def test_conserver_mot_de_passe_du_meme_compte(ring):
-    mail_config.save_account("smtp.a.fr", "587", "prof", "Prof Sender", "secret")
-    assert mail_config.save_account("smtp.a.fr", "587", "prof", "Prof Sender", "").has_password
-
-
-def test_supprimer_le_compte(ring, tmp_path):
-    mail_config.save_account("smtp.a.fr", "587", "prof", "Prof Sender", "x")
+def test_supprimer_le_compte(cfg):
+    mail_config.save_account("smtp.univ.fr", "587", "prof", "prof@univ.fr")
     mail_config.delete_account()
-    assert ring.store == {}
-    assert not (tmp_path / "mail.json").exists()
+    assert not (cfg / "mail.json").exists()
+    assert not mail_config.load_account().complete

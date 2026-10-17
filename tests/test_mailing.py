@@ -71,9 +71,10 @@ def test_build_message_plusieurs_pages(monkeypatch):
     assert names[1].startswith("copie_p1_")
 
 
-def test_send_all_compte_non_configure():
+def test_send_all_compte_non_configure(monkeypatch, tmp_path):
+    monkeypatch.setenv("QCM_PAPIER_CONFIG_DIR", str(tmp_path))
     with pytest.raises(mailing.MailingError, match="non configuré"):
-        mailing.send_all([mailing.Recipient(email="a@x.fr")], "S", "B")
+        mailing.send_all([mailing.Recipient(email="a@x.fr")], "S", "B", password="x")
 
 
 def test_send_all_aucun_destinataire():
