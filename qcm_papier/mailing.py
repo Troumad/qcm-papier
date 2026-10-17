@@ -108,17 +108,34 @@ def question_breakdown(project, page) -> str:
     return "\n".join(lines)
 
 
+def note_line(page) -> str:
+    """Ligne de résumé de la note d'une page : « note : X/T (Y/20) ».
+
+    La note ramenée sur 20 n'est ajoutée que si le total du QCM n'est
+    pas déjà 20. ``with_malus`` ajoute le détail du malus quand il est
+    non nul.
+    """
+    from . import marking, scanner
+
+    note = scanner.final_value(page)
+    brute = float(page.value) if page.value is not None else 0.0
+    total = float(page.total) if page.total is not None else 0.0
+    malus = float(getattr(page, "malus", 0.0) or 0.0)
+    txt = f"note brute : {brute:g}/{total:g}"
+    if malus:
+        txt += f" — malus : {malus:g} — note finale : {note:g}/{total:g}"
+    if total and abs(total - 20.0) > 1e-9:
+        sur20 = marking.scale_note(note or 0.0, total, note_max=20.0, notemax=total)
+        txt += f" — ramenée sur 20 : {sur20:.2f}/20"
+    return txt
+
+
 def malus_line(page) -> str:
     """Ligne de résumé du malus et de la note d'une page (vide si pas de malus)."""
     malus = float(getattr(page, "malus", 0.0) or 0.0)
     if not malus:
         return ""
-    from . import scanner
-
-    note = scanner.final_value(page)
-    brute = float(page.value) if page.value is not None else 0.0
-    total = float(page.total) if page.total is not None else 0.0
-    return f"Malus : {malus:g} — note brute : {brute:g}/{total:g} — note finale : {note:g}/{total:g}"
+    return note_line(page)
 
 
 def build_message(
@@ -146,9 +163,9 @@ def build_message(
         parts = []
         for page in recipient.pages:
             chunk = question_breakdown(project, page)
-            malus = malus_line(page)
-            if malus:
-                chunk = f"{chunk}\n{malus}" if chunk else malus
+            line = note_line(page)
+            if line:
+                chunk = f"{chunk}\n{line}" if chunk else line
             if chunk:
                 parts.append(chunk)
         breakdown = "\n\n".join(parts)

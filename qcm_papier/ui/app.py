@@ -2416,12 +2416,13 @@ class QcmWindow(Gtk.ApplicationWindow):
         except mail_config.MailConfigError as e:
             sender_line = f"Compte mail illisible : {e}"
         account_ok = account.complete
-        note_txt = (
-            f"Copie : {os.path.basename(getattr(page, 'copy_path', '') or '')} — "
-            f"note {scanner.final_value(page):g}/{page.total:g}"
-            if page.total is not None and scanner.final_value(page) is not None
-            else f"Copie : {os.path.basename(getattr(page, 'copy_path', '') or '')}"
-        )
+        note_txt = f"Copie : {os.path.basename(getattr(page, 'copy_path', '') or '')}"
+        if page.total is not None and scanner.final_value(page) is not None:
+            note_txt += f" — note {scanner.final_value(page):g}/{page.total:g}"
+            if page.total and abs(float(page.total) - 20.0) > 1e-9:
+                from ..marking import scale_note
+
+                note_txt += f" (ramenée sur 20 : {scale_note(scanner.final_value(page), float(page.total)):.2f}/20)"
         plain = f"Destinataire : {name} <{email}>\n{note_txt}\n{sender_line}"
         info = Gtk.Label(label=plain)
         if account_ok:

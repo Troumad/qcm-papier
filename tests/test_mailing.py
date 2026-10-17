@@ -16,6 +16,9 @@ class FakePage:
         self.matrix_inv = object() if ok else None
         self.variant_id = 1234 if ok else None
         self.marks = []
+        self.value = 0.0
+        self.total = 0.0
+        self.malus = 0.0
 
 
 def test_group_by_email():
@@ -136,15 +139,29 @@ def test_build_message_avec_ds_et_decompte(monkeypatch):
     assert "- Q1 : 2/2" in content
 
 
-def test_malus_line():
+def test_note_line_avec_malus_et_sur_20():
+    page = FakePage(email="jean@x.fr")
+    page.value = 12.0
+    page.total = 24.0
+    page.malus = 1.0
+    line = mailing.note_line(page)
+    assert "note brute : 12/24" in line
+    assert "malus : 1" in line
+    assert "note finale : 11/24" in line
+    assert "ramenée sur 20 : 9.17/20" in line
+
+    page.malus = 0.0
+    line = mailing.note_line(page)
+    assert "note brute : 12/24" in line
+    assert "note finale" not in line
+    assert "ramenée sur 20 : 10.00/20" in line
+
+
+def test_note_line_total_deja_20():
     page = FakePage(email="jean@x.fr")
     page.value = 12.0
     page.total = 20.0
-    page.malus = 1.0
-    line = mailing.malus_line(page)
-    assert "Malus : 1" in line
-    assert "note brute : 12/20" in line
-    assert "note finale : 11/20" in line
-
     page.malus = 0.0
-    assert mailing.malus_line(page) == ""
+    line = mailing.note_line(page)
+    assert line == "note brute : 12/20"
+    assert "ramenée" not in line
