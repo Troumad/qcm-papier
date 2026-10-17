@@ -2826,12 +2826,24 @@ class QcmWindow(Gtk.ApplicationWindow):
             status.set_text("Connexion au serveur SMTP…")
             self._ui_flush()
             cancel_flag: list = []
+            skip_flag: list = []
+            btn_skip = Gtk.Button(label="Passer au suivant")
+            btn_skip.get_style_context().add_class("destructive-action")
+            btn_skip.set_visible(False)
+            btn_box.append(btn_skip)
+            btn_skip.connect("clicked", lambda _b: skip_flag.append(True))
             btn_cancel.set_label("Annuler l'envoi")
             btn_cancel.connect("clicked", lambda _b: cancel_flag.append(True))
 
-            def _progress(i, total, ok, failed):
-                self.marking_status.set_text(f"Envoi des copies {i}/{total} ({ok} envoyé(s), {failed} échec(s))…")
-                status.set_text(f"Envoi {i}/{total} ({ok} envoyé(s), {failed} échec(s))…")
+            def _progress(i, total, ok, failed, retry=0):
+                base = f"Envoi {i}/{total} ({ok} envoyé(s), {failed} échec(s))"
+                if retry:
+                    base += " — serveur limité, nouvel essai dans 10 s"
+                    btn_skip.set_visible(True)
+                else:
+                    btn_skip.set_visible(False)
+                self.marking_status.set_text(f"Envoi des copies : {base}…")
+                status.set_text(f"{base}…")
                 self._ui_flush()
 
             self._ui_flush()
@@ -2847,6 +2859,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                     progress=_progress,
                     mailed=self.project.mailed,
                     cancelled=cancel_flag,
+                    skip=skip_flag,
                 )
             except mailing.MailingError as e:
                 status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")

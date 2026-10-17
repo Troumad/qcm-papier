@@ -266,6 +266,7 @@ def send_all(
     include_breakdown: bool = False,
     mailed: set[str] | None = None,
     cancelled: list | None = None,
+    skip: list | None = None,
 ) -> list[SendReport]:
     """Envoie les copies à chaque destinataire, un mail par étudiant.
 
@@ -303,42 +304,51 @@ def send_all(
         server.send_message(msg)
         return msg
 
+    # skip[0] : passer au destinataire suivant sans retenter le mail en
+    # cours (bouton « Passer au suivant » du dialogue).
+    skip_one: list = []
+    if skip is not None:
+        skip_one = skip
+
+    def _try_send(recipient):
+        """Un essai d'envoi avec reconnexions ; boucle tant que le serveur
+        limite le taux, avec compteur, sauf « Passer au suivant »."""
+        nonlocal server
+        rate_retries = 0
+        while True:
+            try:
+                _send_one(server, recipient)
+                reports.append(SendReport(recipient, sent=True))
+                return True
+            except smtplib.SMTPServerDisconnected:
+                server = smtp_connection(password)
+            except smtplib.SMTPException as exc:
+                rate_retries += 1
+                if rate_retries >= 3 or (skip_one and skip_one[0]):
+                    reports.append(SendReport(recipient, sent=False, error=str(exc)))
+                    if skip_one:
+                        skip_one.clear()
+                    return False
+                if progress is not None:
+                    progress(i_holder[0], total, ok_count, fail_count, rate_retries)
+                time.sleep(10)
+                server = smtp_connection(password)
+
+    i_holder = [0]
     server = smtp_connection(password)
     try:
         for i, recipient in enumerate(recipients, 1):
             if cancelled is not None and cancelled:
                 break
+            i_holder[0] = i
             if progress is not None:
                 progress(i, total, ok_count, fail_count)
-            try:
-                _send_one(server, recipient)
-                reports.append(SendReport(recipient, sent=True))
+            if _try_send(recipient):
                 ok_count += 1
                 if mailed is not None:
                     mailed.add(recipient.email)
-            except smtplib.SMTPServerDisconnected:
-                # Connexion coupée par le serveur (limite de taux, délai
-                # d'inactivité…) : on se reconnecte et on retente ce mail.
-                try:
-                    server = smtp_connection(password)
-                    _send_one(server, recipient)
-                    reports.append(SendReport(recipient, sent=True))
-                    ok_count += 1
-                except (smtplib.SMTPException, MailingError) as exc:
-                    reports.append(SendReport(recipient, sent=False, error=str(exc)))
-                    fail_count += 1
-            except smtplib.SMTPException:
-                # Limite de taux dépassée : le serveur refuse puis ferme.
-                # On attend un peu, on se reconnecte et on retente une fois.
-                time.sleep(10)
-                try:
-                    server = smtp_connection(password)
-                    _send_one(server, recipient)
-                    reports.append(SendReport(recipient, sent=True))
-                    ok_count += 1
-                except (smtplib.SMTPException, MailingError) as exc2:
-                    reports.append(SendReport(recipient, sent=False, error=str(exc2)))
-                    fail_count += 1
+            else:
+                fail_count += 1
             time.sleep(1)  # pace les envois pour respecter la limite du serveur
     finally:
         try:
