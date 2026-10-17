@@ -135,3 +135,35 @@ def test_find_page_note():
     assert scodoc.find_page_note("12347", notes) == 8.0
     assert scodoc.find_page_note("12346", notes) is None  # note None
     assert scodoc.find_page_note("99999", notes) is None  # absent
+
+
+def test_load_students_table_email(tmp_path):
+    """La colonne email (colonne K de l'export Scodoc) est lue et stockée."""
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["etudid", "code_nip", "nom", "prenom", "email"])
+    ws.append(["12345", "p1000001", "DUPONT", "Jean", "jean.dupont@univ.fr"])
+    ws.append(["12346", "p1000002", "MARTIN", "Marie", "marie.martin@etu.univ.fr"])
+    path = tmp_path / "etudiants.xlsx"
+    wb.save(str(path))
+    students = scodoc.load_students_table(str(path))
+    assert students["p1000001"].email == "jean.dupont@univ.fr"
+    assert students["p1000002"].email == "marie.martin@etu.univ.fr"
+    # L'email est conservé dans la sérialisation du projet.
+    d = students["p1000001"].to_dict()
+    assert d["email"] == "jean.dupont@univ.fr"
+    from qcm_papier.model import Student
+
+    assert Student.from_dict(d).email == "jean.dupont@univ.fr"
+
+
+def test_load_students_table_sans_email(tmp_path):
+    """Sans colonne email, l'import fonctionne et l'email reste vide."""
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["etudid", "code_nip", "nom", "prenom"])
+    ws.append(["12345", "p1000001", "DUPONT", "Jean"])
+    path = tmp_path / "etudiants.xlsx"
+    wb.save(str(path))
+    students = scodoc.load_students_table(str(path))
+    assert students["p1000001"].email == ""

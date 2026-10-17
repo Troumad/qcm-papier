@@ -326,6 +326,7 @@ class Session:
             "variant": page.variant_id,
             "student_id": page.student_id,
             "student": name or page.student_id or "",
+            "email": page.student_email or "",
             "note": scanner.final_value(page) if page.matrix_inv is not None else None,
             "total": page.total,
             "complete": page.complete,
@@ -385,11 +386,13 @@ class Session:
                     page.student_eid = student.eid
                     page.student_name = student.name
                     page.student_firstname = student.firstname
+                    page.student_email = student.email
                     matched += 1
                 else:
                     page.student_eid = None
                     page.student_name = None
                     page.student_firstname = None
+                    page.student_email = None
             self.notes = self._collect_notes()
         return len(students), matched
 
@@ -416,10 +419,12 @@ class Session:
                 page.student_eid = student.eid
                 page.student_name = student.name
                 page.student_firstname = student.firstname
+                page.student_email = student.email
             else:
                 page.student_eid = None
                 page.student_name = None
                 page.student_firstname = None
+                page.student_email = None
             score = score_page(self.project, page.marks, variant_id=page.variant_id, student_id=page.student_id)
             page.value, page.total, page.complete = score.value, score.total, score.complete
             self.notes = self._collect_notes()

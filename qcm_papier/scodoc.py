@@ -28,9 +28,11 @@ _HEADER_EID = "etudid"
 _HEADER_NIP = "code_nip"
 _HEADER_NAME = "nom"
 _HEADER_FIRSTNAME = "prenom"
+# En-têtes possibles de la colonne email (colonne K de l'export Scodoc).
+_HEADER_EMAILS = ("email", "emailstd", "mail", "mailstd")
 
 
-def make_student(eid: Any, nip: Any, name: Any, firstname: Any) -> Student | None:
+def make_student(eid: Any, nip: Any, name: Any, firstname: Any, email: Any = None) -> Student | None:
     """Construit un étudiant de la table ``students`` (None si le NIP manque).
 
     Règle commune à l'import Excel et à l'API ScoDoc.
@@ -51,6 +53,7 @@ def make_student(eid: Any, nip: Any, name: Any, firstname: Any) -> Student | Non
         nip=nip_str,
         name=str(name or ""),
         firstname=str(firstname or ""),
+        email=str(email or ""),
     )
 
 
@@ -67,7 +70,7 @@ def load_students_table(path: str) -> dict[str, Student]:
     header = next(rows, None)
     if header is None:
         return {}
-    col_eid = col_nip = col_name = col_firstname = None
+    col_eid = col_nip = col_name = col_firstname = col_email = None
     for c, value in enumerate(header):
         if value == _HEADER_EID:
             col_eid = c
@@ -77,6 +80,8 @@ def load_students_table(path: str) -> dict[str, Student]:
             col_name = c
         elif value == _HEADER_FIRSTNAME:
             col_firstname = c
+        elif value in _HEADER_EMAILS:
+            col_email = c
     if None in (col_eid, col_nip, col_name, col_firstname):
         raise ValueError("La feuille doit contenir les colonnes 'etudid', 'code_nip', " "'nom', 'prenom'.")
 
@@ -84,7 +89,8 @@ def load_students_table(path: str) -> dict[str, Student]:
     for row in rows:
         if col_eid >= len(row) or col_nip >= len(row):
             continue
-        student = make_student(row[col_eid] or "", row[col_nip], row[col_name], row[col_firstname])
+        email = row[col_email] if col_email is not None and col_email < len(row) else None
+        student = make_student(row[col_eid] or "", row[col_nip], row[col_name], row[col_firstname], email)
         if student is not None:
             students[student.id] = student
     wb.close()

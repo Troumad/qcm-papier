@@ -651,6 +651,7 @@ class Student:
     nip: str = ""  # code_nip (commence par 'p' dans Scodoc)
     name: str = ""
     firstname: str = ""
+    email: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -659,6 +660,7 @@ class Student:
             "nip": self.nip,
             "name": self.name,
             "firstname": self.firstname,
+            "email": self.email,
         }
 
     @classmethod
@@ -669,6 +671,7 @@ class Student:
             nip=str(d.get("nip", "")),
             name=str(d.get("name", "")),
             firstname=str(d.get("firstname", "")),
+            email=str(d.get("email", "")),
         )
 
 
@@ -685,6 +688,8 @@ class Project:
     structure: list[Exercise] = field(default_factory=list)
     variants: VariantStore = field(default_factory=VariantStore)
     students: dict[str, Student] = field(default_factory=dict)
+    # Adresses email (ou n° étudiant) déjà contactées avec succès.
+    mailed: set[str] = field(default_factory=set)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -692,6 +697,7 @@ class Project:
             "variants": self.variants.to_plain_dict(),
             "structure": [e.to_dict() for e in self.structure],
             "students": {k: s.to_dict() for k, s in self.students.items()},
+            "mailed": sorted(self.mailed),
         }
 
     @classmethod
@@ -709,7 +715,8 @@ class Project:
         variants = VariantStore.from_plain_dict(d.get("variants", {}))
         structure = [Exercise.from_dict(e) for e in d.get("structure", [])]
         students = {k: Student.from_dict(v) for k, v in d.get("students", {}).items()}
-        return cls(settings=settings, variants=variants, structure=structure, students=students)
+        mailed = {str(e) for e in d.get("mailed", []) if e}
+        return cls(settings=settings, variants=variants, structure=structure, students=students, mailed=mailed)
 
     def get_mark_range(self) -> tuple[float, float]:
         """Calcule l'intervalle de notes du QCM (min, max).
