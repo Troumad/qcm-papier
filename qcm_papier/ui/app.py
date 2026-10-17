@@ -2496,7 +2496,9 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         chk_breakdown = Gtk.CheckButton(label="Inclure le décompte des points par question")
         chk_breakdown.set_active(True)
-        chk_selftest = Gtk.CheckButton(label="Test : m'envoyer les mails à moi-même (expéditeur)")
+        chk_selftest = Gtk.CheckButton(
+            label="Test : m'envoyer à moi-même les mêmes mails que les étudiants (un par étudiant)"
+        )
         chk_selftest.set_active(False)
         main.append(chk_breakdown)
         main.append(chk_selftest)
@@ -2549,12 +2551,16 @@ class QcmWindow(Gtk.ApplicationWindow):
                     status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
                     btn_send.set_sensitive(True)
                     return
+                # En mode test, on reçoit exactement les mêmes mails que
+                # les étudiants : un mail par étudiant, avec sa copie et
+                # son décompte, seulement l'adresse destinataire change.
                 to_send = [
                     mailing.Recipient(
                         email=account.sender or account.username,
-                        name="Test",
-                        pages=[p for r in recipients for p in r.pages],
+                        name=f"[Test → {r.display}]",
+                        pages=r.pages,
                     )
+                    for r in recipients
                 ]
             status.set_text("Connexion au serveur SMTP…")
             self._ui_flush()
