@@ -329,9 +329,20 @@ def send_all(
                     if skip_one:
                         skip_one.clear()
                     return False
-                if progress is not None:
-                    progress(i_holder[0], total, ok_count, fail_count, rate_retries)
-                time.sleep(10)
+                # Décompte des secondes d'attente, avec le numéro d'essai.
+                for sec in range(10, 0, -1):
+                    if skip_one and skip_one[0]:
+                        break
+                    if progress is not None:
+                        progress(
+                            i_holder[0],
+                            total,
+                            ok_count,
+                            fail_count,
+                            rate_retries,
+                            seconds=sec,
+                        )
+                    time.sleep(1)
                 server = smtp_connection(password)
 
     i_holder = [0]

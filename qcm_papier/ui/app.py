@@ -2842,11 +2842,18 @@ class QcmWindow(Gtk.ApplicationWindow):
             btn_cancel.set_label("Annuler l'envoi")
             btn_cancel.connect("clicked", lambda _b: cancel_flag.append(True))
 
-            def _progress(i, total, ok, failed, retry=0):
+            def _progress(i, total, ok, failed, retry=0, seconds=0):
                 base = f"Envoi {i}/{total} ({ok} envoyé(s), {failed} échec(s))"
                 if retry:
-                    base += " — serveur limité, nouvel essai dans 10 s"
-                    btn_skip.set_visible(True)
+                    essai = retry + 1
+                    base += (
+                        f" — essai {essai}/3 refusé, nouvel essai dans {seconds or 10} s"
+                        if seconds
+                        else f" — essai {essai}/3 refusé par le serveur"
+                    )
+                    # Le bouton n'apparaît qu'au deuxième refus : au premier,
+                    # on laisse la reconnexion automatique faire son office.
+                    btn_skip.set_visible(retry >= 1)
                 else:
                     btn_skip.set_visible(False)
                 self.marking_status.set_text(f"Envoi des copies : {base}…")
