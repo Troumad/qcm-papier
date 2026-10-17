@@ -2422,9 +2422,24 @@ class QcmWindow(Gtk.ApplicationWindow):
         entry_subject.set_text(f"Votre copie corrigée — {ds_name}" if ds_name else "Votre copie corrigée")
         main.append(entry_subject)
 
+        main.append(Gtk.Label(label="Message de présentation :"))
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_hexpand(True)
+        view = Gtk.TextView()
+        buf = view.get_buffer()
+        buf.set_text("Bonjour,\n\nVeuillez trouver en pièce jointe votre copie corrigée.\n\nCordialement.")
+        view.set_wrap_mode(Gtk.WrapMode.WORD)
+        scroll.set_min_content_height(120)
+        scroll.set_child(view)
+        main.append(scroll)
+
         chk_breakdown = Gtk.CheckButton(label="Inclure le décompte des points par question")
         chk_breakdown.set_active(True)
         main.append(chk_breakdown)
+        chk_selftest = Gtk.CheckButton(label="Test : m'envoyer ce mail à moi-même (expéditeur)")
+        chk_selftest.set_active(False)
+        main.append(chk_selftest)
 
         pass_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         lbl_pass = Gtk.Label(label="Mot de passe SMTP :")
@@ -2454,11 +2469,25 @@ class QcmWindow(Gtk.ApplicationWindow):
             btn_send.set_sensitive(False)
             status.set_text("Envoi…")
             self._ui_flush()
+            body = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+            to = recipient
+            if chk_selftest.get_active():
+                try:
+                    account = mail_config.load_account()
+                except mail_config.MailConfigError as e:
+                    status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
+                    btn_send.set_sensitive(True)
+                    return
+                to = mailing.Recipient(
+                    email=account.sender or account.username,
+                    name=f"[Test → {recipient.display}]",
+                    pages=recipient.pages,
+                )
             try:
                 reports = mailing.send_all(
-                    [recipient],
+                    [to],
                     entry_subject.get_text() or "Votre copie corrigée",
-                    "Bonjour,\n\nVeuillez trouver en pièce jointe votre copie corrigée.\n\nCordialement.",
+                    body,
                     project=self.project,
                     ds_name=ds_name,
                     include_breakdown=chk_breakdown.get_active(),
@@ -2469,7 +2498,12 @@ class QcmWindow(Gtk.ApplicationWindow):
                 btn_send.set_sensitive(True)
                 return
             if reports and reports[0].sent:
-                status.set_markup(f"<span color='#080'>Copie envoyée à {name or email}.</span>")
+                if chk_selftest.get_active():
+                    status.set_markup(
+                        f"<span color='#080'>Mail de test envoyé à {to.email} " f"(copie de {name or email}).</span>"
+                    )
+                else:
+                    status.set_markup(f"<span color='#080'>Copie envoyée à {name or email}.</span>")
             else:
                 status.set_markup(f"<span color='#C00'>Échec : {reports[0].error if reports else '?'}</span>")
             btn_send.set_sensitive(True)
