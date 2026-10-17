@@ -128,6 +128,11 @@ def _label_font(size: int = 16):
             return ImageFont.load_default()
 
 
+def _student_email(page) -> str:
+    """Adresse email de l'étudiant (levée d'anonymat), sinon vide."""
+    return getattr(page, "student_email", None) or ""
+
+
 def _student_display(page) -> str:
     """Texte à afficher dans la colonne Étudiant : nom prénom si la levée
     d'anonymat a eu lieu, sinon l'identifiant p******* (anonymat)."""
@@ -1695,14 +1700,14 @@ class QcmWindow(Gtk.ApplicationWindow):
         box.append(self.marking_status)
 
         # Résultats
-        self.results_store = Gtk.ListStore(str, str, str, str, str, str, int)
+        self.results_store = Gtk.ListStore(str, str, str, str, str, str, str, int)
         results_tree = Gtk.TreeView(model=self.results_store)
 
         # Tri numérique pour la colonne Note (stockée en texte) : id de tri 100
         # pour ne pas confondre avec les indices de colonnes.
         def _note_sort_func(_model, a, b, _d):
-            va = _model.get_value(a, 3)
-            vb = _model.get_value(b, 3)
+            va = _model.get_value(a, 4)
+            vb = _model.get_value(b, 4)
             try:
                 fa = float(va)
                 fb = float(vb)
@@ -1716,9 +1721,10 @@ class QcmWindow(Gtk.ApplicationWindow):
             ("Fichier", 0, 0),
             ("Variante", 1, 1),
             ("Étudiant", 2, 2),
-            ("Note", 3, 100),
-            ("Malus", 5, 5),
-            ("Statut", 4, 4),
+            ("Email", 3, 3),
+            ("Note", 4, 100),
+            ("Malus", 6, 6),
+            ("Statut", 5, 5),
         ]:
             col = Gtk.TreeViewColumn(title, Gtk.CellRendererText(), text=text_col)
             col.set_resizable(True)
@@ -2047,16 +2053,18 @@ class QcmWindow(Gtk.ApplicationWindow):
             page.student_eid = student.eid
             page.student_name = student.name
             page.student_firstname = student.firstname
+            page.student_email = student.email
             n_matched += 1
         # Rafraîchit le tableau des résultats (colonne Étudiant).
         for row in self.results_store:
-            idx = row[6]
+            idx = row[7]
             if not isinstance(idx, int) or not (0 <= idx < len(self.marked_pages)):
                 continue
             _label, page = self.marked_pages[idx]
             failed = page.matrix_inv is None or page.variant_id is None or page.student_id is None
             if not failed:
                 row[2] = _student_display(page)
+                row[3] = _student_email(page)
         # Reconstruit la table des notes indexée par EID, pour que l'export
         # Scodoc (qui cherche les notes par '!EID') trouve les bons étudiants.
         # Avant la levée d'anonymat, _last_notes était indexé par student_id.
@@ -2129,7 +2137,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                 pages = scanner.load_pages_from_file(copy_path, dpi=150)
             except Exception as e:
                 n_err += 1
-                self.results_store.append([fname, "", "", "", f"Erreur : {e}", "0", -1])
+                self.results_store.append([fname, "", "", "", "", f"Erreur : {e}", "0", -1])
                 if info:
                     info["n_err"] = 1
                     info["n_pages"] = 1
@@ -2155,6 +2163,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                             fname,
                             str(page.variant_id or ""),
                             _student_display(page),
+                            _student_email(page),
                             f"{note:.2f}",
                             "complète" if page.complete else "incomplète",
                             f"{getattr(page, 'malus', 0.0):g}",
@@ -2181,6 +2190,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                         [
                             fname,
                             str(page.variant_id or ""),
+                            "",
                             "",
                             note_txt,
                             reason,
@@ -2289,7 +2299,16 @@ class QcmWindow(Gtk.ApplicationWindow):
                 if page.matrix_inv is not None and page.variant_id is not None and page.value is not None:
                     note_txt = f"{scanner.final_value(page):.2f}"
                 self.results_store.append(
-                    [fname, str(page.variant_id or ""), "", note_txt, reason, f"{getattr(page, 'malus', 0.0):g}", idx]
+                    [
+                        fname,
+                        str(page.variant_id or ""),
+                        "",
+                        "",
+                        note_txt,
+                        reason,
+                        f"{getattr(page, 'malus', 0.0):g}",
+                        idx,
+                    ]
                 )
             else:
                 self.results_store.append(
@@ -2297,6 +2316,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                         fname,
                         str(page.variant_id or ""),
                         _student_display(page),
+                        _student_email(page),
                         f"{note:.2f}",
                         "complète" if page.complete else "incomplète",
                         f"{getattr(page, 'malus', 0.0):g}",
@@ -2309,7 +2329,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         model, tree_iter = selection.get_selected()
         if tree_iter is None or model is None:
             return
-        page_idx = model.get_value(tree_iter, 6)
+        page_idx = model.get_value(tree_iter, 7)
         if page_idx is not None and 0 <= page_idx < len(self.marked_pages):
             self.page_selector.set_selected(page_idx)
             self._display_marked_page(page_idx)
@@ -2321,7 +2341,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         tree_iter = model.get_iter(path)
         if tree_iter is None:
             return
-        page_idx = model.get_value(tree_iter, 6)
+        page_idx = model.get_value(tree_iter, 7)
         if page_idx is not None and 0 <= page_idx < len(self.marked_pages):
             win = MarkedPageWindow(
                 self.marked_pages, page_idx, self, on_navigate=self._enlarge_navigate, project=self.project
@@ -2390,23 +2410,24 @@ class QcmWindow(Gtk.ApplicationWindow):
         _label, page = self.marked_pages[marked_idx]
         failed = page.matrix_inv is None or page.variant_id is None or page.student_id is None
         for row in self.results_store:
-            if row[6] == marked_idx:
+            if row[7] == marked_idx:
                 if failed:
                     reason = "Échec alignement"
                     if page.variant_id is not None and page.student_id is None:
                         reason = "N° étudiant non trouvé"
                     elif page.variant_id is None:
                         reason = "Code-barres non trouvé"
-                    row[4] = reason
+                    row[5] = reason
                     # La note est calculée dès que l'alignement et la variante sont OK :
                     # l'afficher même si le n° étudiant manque (copie corrigée).
                     if page.matrix_inv is not None and page.variant_id is not None and page.value is not None:
-                        row[3] = f"{scanner.final_value(page):.2f}"
+                        row[4] = f"{scanner.final_value(page):.2f}"
                 else:
                     row[2] = _student_display(page)
-                    row[3] = f"{scanner.final_value(page):.2f}"
-                    row[4] = "complète" if page.complete else "incomplète"
-                row[5] = f"{getattr(page, 'malus', 0.0):g}"
+                    row[3] = _student_email(page)
+                    row[4] = f"{scanner.final_value(page):.2f}"
+                    row[5] = "complète" if page.complete else "incomplète"
+                row[6] = f"{getattr(page, 'malus', 0.0):g}"
                 break
 
     def _on_export_scodoc(self, _btn) -> None:
@@ -2617,7 +2638,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                 pages = scanner.load_pages_from_file(copy_path, dpi=150)
             except Exception as e:
                 n_err += 1
-                self.results_store.append([fname, "", "", "", f"Erreur : {e}", "0", -1])
+                self.results_store.append([fname, "", "", "", "", f"Erreur : {e}", "0", -1])
                 if info:
                     info["n_err"] = 1
                     info["n_pages"] = 1
@@ -2635,7 +2656,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                     if info:
                         info["n_err"] += 1
                     self.results_store.append(
-                        [fname, "", "", "", "Non trouvée dans la sauvegarde", "0", len(self.marked_pages)]
+                        [fname, "", "", "", "", "Non trouvée dans la sauvegarde", "0", len(self.marked_pages)]
                     )
                     continue
                 # Page non corrigée (alignement échoué) : on l'affiche
@@ -2646,6 +2667,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                     self.results_store.append(
                         [
                             fname,
+                            "",
                             "",
                             "",
                             "",
@@ -2669,6 +2691,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                         fname,
                         str(page.variant_id or ""),
                         _student_display(page),
+                        _student_email(page),
                         f"{note:.2f}",
                         "complète" if page.complete else "incomplète",
                         f"{getattr(page, 'malus', 0.0):g}",
@@ -3173,6 +3196,9 @@ class MarkedPageWindow(Gtk.Window):
                 page.student_eid = student.eid
                 page.student_name = student.name
                 page.student_firstname = student.firstname
+                page.student_email = student.email
+            else:
+                page.student_email = None
         score = score_page(self._project, page.marks, variant_id=page.variant_id, student_id=page.student_id)
         page.value = score.value
         page.total = score.total
@@ -3234,6 +3260,7 @@ class MarkedPageWindow(Gtk.Window):
                         page.student_eid = student.eid
                         page.student_name = student.name
                         page.student_firstname = student.firstname
+                        page.student_email = student.email
 
             # Recalculer la note
             from qcm_papier.marking import score_page

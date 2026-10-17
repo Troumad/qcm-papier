@@ -214,6 +214,7 @@ class ScannedPage:
     student_eid: str | None = None
     student_name: str | None = None
     student_firstname: str | None = None
+    student_email: str | None = None
     marks: list[dict] = field(default_factory=list)
     matrix: Matrix | None = None
     matrix_inv: Matrix | None = None
@@ -233,6 +234,7 @@ class ScannedPage:
         self.student_eid = None
         self.student_name = None
         self.student_firstname = None
+        self.student_email = None
         self.marks = []
         self.value = None
         self.total = None
@@ -890,6 +892,7 @@ def correct_with_variant(
             page.student_eid = student.eid
             page.student_name = student.name
             page.student_firstname = student.firstname
+            page.student_email = student.email
     show_marks(page, project)
     auto_marks(page, page.matrix_inv, clair=clair)
     score = score_page(
@@ -1404,6 +1407,7 @@ def _apply_correction(
             page.student_eid = student.eid
             page.student_name = student.name
             page.student_firstname = student.firstname
+            page.student_email = student.email
     show_marks(page, project)
     auto_marks(page, matrix_inv, clair=clair)
     score = score_page(
@@ -1601,6 +1605,7 @@ def _page_to_state(page: ScannedPage) -> dict:
         "student_eid": page.student_eid,
         "student_name": page.student_name,
         "student_firstname": page.student_firstname,
+        "student_email": page.student_email,
         "barcode": page.barcode,
         "value": page.value,
         "total": page.total,
@@ -1644,6 +1649,7 @@ def _page_from_state(page: ScannedPage, state: dict) -> None:
     page.student_eid = state.get("student_eid")
     page.student_name = state.get("student_name")
     page.student_firstname = state.get("student_firstname")
+    page.student_email = state.get("student_email")
     page.barcode = state.get("barcode", "")
     page.value = state.get("value")
     page.total = state.get("total")

@@ -651,6 +651,7 @@ class Student:
     nip: str = ""  # code_nip (commence par 'p' dans Scodoc)
     name: str = ""
     firstname: str = ""
+    email: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -659,6 +660,7 @@ class Student:
             "nip": self.nip,
             "name": self.name,
             "firstname": self.firstname,
+            "email": self.email,
         }
 
     @classmethod
@@ -669,6 +671,7 @@ class Student:
             nip=str(d.get("nip", "")),
             name=str(d.get("name", "")),
             firstname=str(d.get("firstname", "")),
+            email=str(d.get("email", "")),
         )
 
 
