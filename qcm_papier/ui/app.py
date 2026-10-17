@@ -133,12 +133,18 @@ def _student_email(page) -> str:
     return getattr(page, "student_email", None) or ""
 
 
-def _send_mark(page) -> str:
-    """Marque de la colonne Envoi : « ✉ » si la copie est envoyable."""
+def _send_mark(page, mailed: set[str] | None = None) -> str:
+    """Marque de la colonne Envoi.
+
+    « ✓ » si la copie a déjà été envoyée avec succès (mémorisée),
+    « ✉ » si elle est envoyable mais pas encore partie, vide sinon.
+    """
     if not _student_email(page):
         return ""
     if page.matrix_inv is None or page.variant_id is None:
         return ""
+    if mailed is not None and _student_email(page) in mailed:
+        return "✓"
     return "✉"
 
 
@@ -2109,7 +2115,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             if not failed:
                 row[2] = _student_display(page)
                 row[3] = _student_email(page)
-                row[8] = _send_mark(page)
+                row[8] = _send_mark(page, self.project.mailed)
         # Reconstruit la table des notes indexée par EID, pour que l'export
         # Scodoc (qui cherche les notes par '!EID') trouve les bons étudiants.
         # Avant la levée d'anonymat, _last_notes était indexé par student_id.
@@ -2213,7 +2219,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                             "complète" if page.complete else "incomplète",
                             f"{getattr(page, 'malus', 0.0):g}",
                             len(self.marked_pages),
-                            _send_mark(page),
+                            _send_mark(page, self.project.mailed),
                         ]
                     )
                     label = f"{fname} v{page.variant_id} {page.student_id or ''}"
@@ -2242,7 +2248,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                             reason,
                             f"{getattr(page, 'malus', 0.0):g}",
                             len(self.marked_pages),
-                            _send_mark(page),
+                            _send_mark(page, self.project.mailed),
                         ]
                     )
                     label = f"{fname} ⚠ {reason}"
@@ -2355,7 +2361,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                         reason,
                         f"{getattr(page, 'malus', 0.0):g}",
                         idx,
-                        _send_mark(page),
+                        _send_mark(page, self.project.mailed),
                     ]
                 )
             else:
@@ -2369,7 +2375,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                         "complète" if page.complete else "incomplète",
                         f"{getattr(page, 'malus', 0.0):g}",
                         idx,
-                        _send_mark(page),
+                        _send_mark(page, self.project.mailed),
                     ]
                 )
         self._refresh_page_selector()
@@ -2395,7 +2401,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         if not isinstance(page_idx, int) or not (0 <= page_idx < len(self.marked_pages)):
             return
         _label, page = self.marked_pages[page_idx]
-        if not _send_mark(page):
+        if not _send_mark(page, self.project.mailed):
             self.marking_status.set_text("Envoi impossible : pas d'email pour cet étudiant (levée d'anonymat ?).")
             return
         self._send_one_copy_dialog(page_idx)
@@ -2905,6 +2911,12 @@ class QcmWindow(Gtk.ApplicationWindow):
             else:
                 status.set_markup(f"<span color='#080'>{ok} mail(s) envoyé(s) avec succès.</span>")
                 self.marking_status.set_text(f"Envoi terminé : {ok} copie(s) envoyée(s) par mail.")
+                # Rafraîchir les coches ✓ du tableau avant de désactiver.
+                for row in self.results_store:
+                    idx = row[7]
+                    if isinstance(idx, int) and 0 <= idx < len(self.marked_pages):
+                        _lbl, page = self.marked_pages[idx]
+                        row[8] = _send_mark(page, self.project.mailed)
                 # Tout est parti : plus rien à envoyer — on désactive le
                 # bouton pour éviter un double envoi accidentel.
                 btn_send.set_sensitive(False)
@@ -3269,7 +3281,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                         "complète" if page.complete else "incomplète",
                         f"{getattr(page, 'malus', 0.0):g}",
                         len(self.marked_pages),
-                        _send_mark(page),
+                        _send_mark(page, self.project.mailed),
                     ]
                 )
                 label = f"{fname} v{page.variant_id} {page.student_id or ''}"
