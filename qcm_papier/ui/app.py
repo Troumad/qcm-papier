@@ -2406,17 +2406,39 @@ class QcmWindow(Gtk.ApplicationWindow):
         main.set_margin_bottom(12)
         win.set_child(main)
 
-        main.append(
-            Gtk.Label(
-                label=(
-                    f"Destinataire : {name} <{email}>\n"
-                    f"Copie : {os.path.basename(getattr(page, 'copy_path', '') or '')} — "
-                    f"note {scanner.final_value(page):g}/{page.total:g}"
-                    if page.total is not None and scanner.final_value(page) is not None
-                    else f"Copie : {os.path.basename(getattr(page, 'copy_path', '') or '')}"
-                )
+        try:
+            account = mail_config.load_account()
+            sender_line = (
+                f"Expéditeur : {account.sender} — serveur {account.host}:{account.port}"
+                if account.complete
+                else "Compte mail non configuré : utilisez le bouton ci-dessous."
             )
+        except mail_config.MailConfigError as e:
+            sender_line = f"Compte mail illisible : {e}"
+        account_ok = account.complete
+        info = Gtk.Label(
+            label=(
+                f"Destinataire : {name} <{email}>\n"
+                f"Copie : {os.path.basename(getattr(page, 'copy_path', '') or '')} — "
+                f"note {scanner.final_value(page):g}/{page.total:g}"
+                if page.total is not None and scanner.final_value(page) is not None
+                else f"Copie : {os.path.basename(getattr(page, 'copy_path', '') or '')}"
+            )
+            + f"\n{sender_line}"
         )
+        info.set_use_markup(True)
+        if not account_ok:
+            info.set_markup(f"{info.get_text()}\n<span color='#C00'>{sender_line}</span>")
+        main.append(info)
+        if not account_ok:
+            btn_cfg = Gtk.Button(label="Configurer le compte mail…")
+            btn_cfg.get_style_context().add_class("suggested-action")
+            btn_cfg.set_halign(Gtk.Align.CENTER)
+            btn_cfg.connect(
+                "clicked",
+                lambda _b: (win.destroy(), self._on_mail_account(None)),
+            )
+            main.append(btn_cfg)
 
         entry_subject = Gtk.Entry()
         entry_subject.set_text(f"Votre copie corrigée — {ds_name}" if ds_name else "Votre copie corrigée")
@@ -2642,14 +2664,40 @@ class QcmWindow(Gtk.ApplicationWindow):
         win.set_child(main)
 
         n_pages = sum(len(r.pages) for r in recipients)
-        main.append(
-            Gtk.Label(
-                label=(
-                    f"{len(recipients)} destinataire(s), {n_pages} copie(s) corrigée(s) au total.\n"
-                    "Chaque étudiant reçoit un mail individuel avec ses copies (PNG) en pièces jointes."
-                )
+        try:
+            account = mail_config.load_account()
+            sender_line = (
+                f"Expéditeur : {account.sender} — serveur {account.host}:{account.port}"
+                if account.complete
+                else "Compte mail non configuré : utilisez le bouton « Compte mail… »."
+            )
+        except mail_config.MailConfigError as e:
+            sender_line = f"Compte mail illisible : {e}"
+        account_ok = account.complete
+        summary = Gtk.Label(
+            label=(
+                f"{len(recipients)} destinataire(s), {n_pages} copie(s) corrigée(s) au total.\n"
+                f"{sender_line}\n"
+                "Chaque étudiant reçoit un mail individuel avec ses copies (PNG) en pièces jointes."
             )
         )
+        summary.set_use_markup(True)
+        if not account_ok:
+            summary.set_markup(
+                f"{len(recipients)} destinataire(s), {n_pages} copie(s) corrigée(s) au total.\n"
+                f"<span color='#C00'>{sender_line}</span>\n"
+                "Chaque étudiant reçoit un mail individuel avec ses copies (PNG) en pièces jointes."
+            )
+        main.append(summary)
+        if not account_ok:
+            btn_cfg = Gtk.Button(label="Configurer le compte mail…")
+            btn_cfg.get_style_context().add_class("suggested-action")
+            btn_cfg.set_halign(Gtk.Align.CENTER)
+            btn_cfg.connect(
+                "clicked",
+                lambda _b: (win.destroy(), self._on_mail_account(None)),
+            )
+            main.append(btn_cfg)
 
         ds_name = self.project.settings.evaluation_full or self.project.settings.evaluation_short
         entry_subject = Gtk.Entry()
