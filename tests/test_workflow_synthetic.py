@@ -115,6 +115,30 @@ def test_correction_images_et_reprise_api(project_path, tmp_path):
             assert after[0][key] == before[0][key]
 
 
+def test_saisie_manuelle_de_la_variante(project_path, tmp_path):
+    """Code-barres illisible : la variante saisie relit les cases et recalcule la note (fenêtre GTK agrandie)."""
+    pdf = tmp_path / "sujet.pdf"
+    cli.main(["generate", "-p", project_path, "-o", str(pdf), "--save-project", project_path])
+    session = Session(work_dir=str(tmp_path))
+    session.load_project(project_path)
+    session.add_copy("sujet.pdf", pdf.read_bytes())
+    with TestClient(create_app(session), base_url="http://127.0.0.1:8060") as client:
+        assert client.post("/api/correction/start").status_code == 200
+        wait(client)
+        page = session.pages[0].page
+        expected = client.get("/api/pages/0").json()
+        page.variant_id, page.marks, page.value = None, [], None  # simule un code-barres illisible
+        assert client.get("/api/pages/0").json()["status"] == "Code-barres non trouvé"
+        assert client.post("/api/pages/0/variant", json={"variant_id": "abc"}).status_code == 400
+        assert client.post("/api/pages/0/variant", json={"variant_id": "999"}).status_code == 400
+        info = client.post("/api/pages/0/variant", json={"variant_id": "42"}).json()
+        for key in ("variant", "note", "total", "status"):
+            assert info[key] == expected[key]
+        n_marks = len(page.marks)
+        client.post("/api/pages/0/variant", json={"variant_id": "42"})
+        assert len(page.marks) == n_marks  # une seconde saisie ne double pas les cases
+
+
 def test_correction_cli_et_reprise(project_path, tmp_path, capsys):
     pdf = tmp_path / "sujet.pdf"
     cli.main(["generate", "-p", project_path, "-o", str(pdf), "--save-project", project_path])
@@ -130,3 +154,26 @@ def test_correction_cli_et_reprise(project_path, tmp_path, capsys):
     assert cli.main(args + ["--load", str(saved)]) == 0
     assert "état restauré" in capsys.readouterr().out
     assert output.read_bytes() == initial
+
+
+def test_malus_manuel_met_a_jour_les_notes_et_resiste_a_la_recorrection(project_path, tmp_path):
+    """Un malus saisi à la main est pris en compte dans les notes et n'est pas écrasé."""
+    pdf = tmp_path / "sujet.pdf"
+    cli.main(["generate", "-p", project_path, "-o", str(pdf), "--save-project", project_path])
+    (tmp_path / "session4").mkdir()
+    session = Session(work_dir=str(tmp_path / "session4"))
+    with TestClient(create_app(session), base_url="http://127.0.0.1:8060") as client:
+        client.post("/api/project/open", files={"file": ("projet.json", Path(project_path).read_bytes())})
+        client.post("/api/copies", files=[("files", ("sujet.pdf", pdf.read_bytes(), "application/pdf"))])
+        client.post("/api/correction/start")
+        wait(client)
+        client.post("/api/pages/0/student", json={"student_id": "p1234567"})
+        assert session.notes == {"p1234567": -1.0}
+        # Changer le malus doit mettre à jour les notes exportées.
+        client.post("/api/pages/0/malus", json={"malus": 0})
+        assert session.notes == {"p1234567": 0.0}
+        client.post("/api/pages/0/malus", json={"malus": 3})
+        assert session.notes == {"p1234567": -3.0}
+        # Forcer la variante relance la correction sans écraser le malus manuel.
+        response = client.post("/api/pages/0/variant", json={"variant_id": "42"})
+        assert response.json()["malus"] == 3

@@ -87,9 +87,12 @@ class Question:
     min0: bool = True  # Si True, la note minimale est 0 (pas de points négatifs)
     choices: list[Choice] = field(default_factory=list)
     index: int = 0
+    # Aide à la correction des réponses libres (jamais imprimée sur le sujet).
+    expected: str = ""
+    grading_notes: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "index": self.index,
             "name": self.name,
             "gain": self.gain,
@@ -106,6 +109,12 @@ class Question:
             "min0": self.min0,
             "choices": [c.to_dict() for c in self.choices],
         }
+        # Clés écrites seulement si renseignées : les projets sans aide restent inchangés.
+        if self.expected:
+            data["expected"] = self.expected
+        if self.grading_notes:
+            data["grading_notes"] = self.grading_notes
+        return data
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Question:
@@ -125,6 +134,8 @@ class Question:
             multiple_progressive=bool(d.get("multiple_progressive", False)),
             min0=bool(d.get("min0", True)),
             choices=[Choice.from_dict(c) for c in d.get("choices", [])],
+            expected=str(d.get("expected", "")),
+            grading_notes=str(d.get("grading_notes", "")),
         )
 
     @property
@@ -141,6 +152,9 @@ class Question:
           * choix multiples (exact/progressif) : -penalty × nombre de choix
             pénalisants (chaque erreur coûte la pénalité)
         """
+        if self.manual:
+            # Points saisis par le correcteur, entre 0 et le gain (cf. marking._question_score).
+            return (0.0, self.gain)
         has_correct = any(c.correct for c in self.choices)
         penalty_count = sum(1 for c in self.choices if c.penalty)
 
@@ -199,11 +213,10 @@ class Exercise:
         exercise_min = 0.0
         exercise_max = 0.0
 
-        # Calcul du max
+        # Calcul du max : questions avec au moins un choix correct, et réponses libres
         for question in self.questions:
-            # Seules les questions avec au moins un choix correct contribuent
-            if any(c.correct for c in question.choices):
-                exercise_max += question.gain
+            _, q_max = question.get_mark_range()
+            exercise_max += q_max
 
         # Calcul du min : somme des pires scores possibles de chaque question
         # (tient compte du type de question, via Question.get_mark_range).

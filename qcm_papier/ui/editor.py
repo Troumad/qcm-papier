@@ -10,6 +10,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, GLib, Gtk
 
+from ..editing import MANUAL_BOX_DEFAULT
 from ..model import Choice, Exercise, Project, Question
 
 
@@ -177,7 +178,7 @@ class StructureEditor(Gtk.Box):
             selected_iter = None
             for i, exercise in enumerate(self.project.structure):
                 ex_min, ex_max = exercise.get_mark_range()
-                ex_label = f"Exercice {i+1} : {exercise.name} {ex_min:.1f} 🡕 {ex_max:.1f}"
+                ex_label = f"Exercice {i+1} : {exercise.name} {ex_min:.1f} ↗ {ex_max:.1f}"
                 ex_up = '<span size="larger"><b>↑</b></span>' if i > 0 else ""
                 ex_down = '<span size="larger"><b>↓</b></span>' if i < n_ex - 1 else ""
                 ex_iter = self.store.append(None, [ex_label, "exercise", exercise, "", "", ex_up, ex_down])
@@ -218,7 +219,7 @@ class StructureEditor(Gtk.Box):
         choices_str = " ".join(
             [f'<span foreground="{self._get_choice_color(c)}">({c.name})</span>' for c in question.choices]
         )
-        return f"  Q{j+1} : {question.name} {q_min} 🡕 {q_max} {choices_str}"
+        return f"  Q{j+1} : {question.name} {q_min} ↗ {q_max} {choices_str}"
 
     def _choice_label_color(self, state_index):
         """Couleur d'un choix selon l'index du menu déroulant (0/1/2)."""
@@ -251,7 +252,7 @@ class StructureEditor(Gtk.Box):
             color = self._choice_label_color(d.get_selected())
             parts.append(f'<span foreground="{color}">({c.name})</span>')
         choices_str = " ".join(parts)
-        q_label = f"  Q{q_index+1} : {question.name} {q_min} 🡕 {q_max} {choices_str}"
+        q_label = f"  Q{q_index+1} : {question.name} {q_min} ↗ {q_max} {choices_str}"
         # Retrouver l'itérateur correspondant à cette question.
         ex_iter = self.store.get_iter_first()
         while ex_iter is not None:
@@ -307,7 +308,7 @@ class StructureEditor(Gtk.Box):
     def _update_interval_label(self):
         """Met à jour le label d'intervalle de notes."""
         global_min, global_max = self.project.get_mark_range()
-        self.label_interval.set_text(f"Intervalle : {global_min:.1f} 🡕 {global_max:.1f}")
+        self.label_interval.set_text(f"Intervalle : {global_min:.1f} ↗ {global_max:.1f}")
 
     def _on_add_exercise(self, _btn):
         """Ajoute un nouvel exercice avec 8 choix par défaut."""
@@ -771,7 +772,18 @@ class StructureEditor(Gtk.Box):
         gain.connect("value-changed", lambda b: self._set_and_notify(question, "gain", b.get_value()))
         line_box.append(gain_label)
         line_box.append(gain)
+        self.props_box.append(line_box)
+        if not question.manual:
+            # Réponse libre : ni malus ni choix, les points sont saisis à la correction.
+            self._append_choice_controls(question, line_box)
 
+        # 🔧 Type de question SUR LA MÊME LIGNE
+        self._append_type_selector(question)
+        if question.manual:
+            self._append_manual_fields(question)
+
+    def _append_choice_controls(self, question, line_box):
+        """Malus et boutons d'ajout/retrait de choix (questions à cocher)."""
         # Le malus est « par réponse fausse » uniquement pour les questions
         # à gain progressif ; pour les autres types, c'est le malus global de la
         # question.
@@ -792,9 +804,7 @@ class StructureEditor(Gtk.Box):
         btn_remove_c.connect("clicked", lambda _b: self.remove_choice(question))
         line_box.append(btn_remove_c)
 
-        self.props_box.append(line_box)
-
-        # 🔧 Type de question SUR LA MÊME LIGNE
+    def _append_type_selector(self, question):
         type_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         type_label = Gtk.Label(label="Type de question :")
         type_dropdown = Gtk.DropDown.new_from_strings(
@@ -822,6 +832,41 @@ class StructureEditor(Gtk.Box):
         type_box.append(type_dropdown)
         self.props_box.append(type_box)
 
+    def _append_manual_fields(self, question):
+        """Cadre de réponse et aide à la correction d'une question à réponse libre."""
+        self.props_box.append(Gtk.Label(label="<b>Cadre de réponse</b>", use_markup=True, xalign=0))
+        size_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        for label, attr in (("Largeur (mm) :", "width"), ("Hauteur (mm) :", "height")):
+            spin = Gtk.SpinButton.new_with_range(5, 400, 5)
+            spin.set_value(getattr(question, attr))
+            spin.connect("value-changed", lambda b, a=attr: self._set_and_notify(question, a, b.get_value()))
+            size_box.append(Gtk.Label(label=label))
+            size_box.append(spin)
+        self.props_box.append(size_box)
+
+        self.props_box.append(Gtk.Label(label="<b>Aide à la correction</b>", use_markup=True, xalign=0))
+        hint = Gtk.Label(
+            label="Facultatif, jamais imprimé : affiché à côté des réponses scannées lors de la notation.",
+            xalign=0,
+            wrap=True,
+        )
+        hint.get_style_context().add_class("dim-label")
+        self.props_box.append(hint)
+        for label, attr in (("Réponse attendue :", "expected"), ("Éléments de correction :", "grading_notes")):
+            self.props_box.append(Gtk.Label(label=label, xalign=0))
+            view = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD_CHAR, accepts_tab=False)
+            view.get_buffer().set_text(getattr(question, attr))
+            view.get_buffer().connect(
+                "changed",
+                lambda buf, a=attr: self._set_and_notify(
+                    question, a, buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False), update_tree=False
+                ),
+            )
+            frame = Gtk.ScrolledWindow(min_content_height=70)
+            frame.set_child(view)
+            frame.get_style_context().add_class("frame")
+            self.props_box.append(frame)
+
     def _on_question_type_changed(self, dropdown, _pspec, question):
         """Gère le changement de type de question."""
         selected = dropdown.get_selected()
@@ -840,8 +885,19 @@ class StructureEditor(Gtk.Box):
             question.multiple_progressive = True
         elif selected == 3:
             question.manual = True
+            if question.width <= 0 or question.height <= 0:
+                # Sans cadre, rien à scanner ni à noter.
+                question.width, question.height = MANUAL_BOX_DEFAULT
 
         self._schedule_update()
+        # Les champs affichés dépendent du type : panneau reconstruit hors du signal.
+        GLib.idle_add(self._refresh_question_props, question)
+
+    def _refresh_question_props(self, question):
+        for child in list(self.props_box):
+            self.props_box.remove(child)
+        self._edit_question(question)
+        return False
 
     def _set_and_notify(self, obj, attr, value, update_tree: bool = True):
         """Modifie un attribut et notifie les changements."""

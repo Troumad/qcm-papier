@@ -52,6 +52,21 @@ def test_remplacement_refuse_pendant_correction(app, path):
     assert client.get("/api/generate/bundle").status_code == 409
 
 
+def test_entete_personnalise_dans_le_pdf(app):
+    fitz = pytest.importorskip("fitz")
+    client, _ = app
+    client.post("/api/structure/exercises")
+    client.put("/api/settings", json={"generate_variants": "42", "evaluation_short": "Partiel"})
+    data = client.put("/api/settings", json={"header_middle": "Sujet ${name_short} maison", "footer_enabled": False})
+    assert data.json()["settings"]["header_middle"] == "Sujet ${name_short} maison"
+    assert any(m == {"macro": "name_short", "value": "Partiel"} for m in data.json()["header_footer"]["macros"])
+    client.post("/api/generate/variants")
+    with fitz.open(stream=client.get("/api/generate/pdf").content, filetype="pdf") as pdf:
+        text = pdf[0].get_text()
+    assert "Sujet Partiel maison" in text
+    assert "Toute détérioration" not in text  # pied de page désactivé
+
+
 def test_bundle_contient_pdf_et_projet_correspondant(app):
     client, _ = app
     client.post("/api/structure/exercises")

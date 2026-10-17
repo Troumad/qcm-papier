@@ -25,11 +25,12 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, Gio, GLib, Gtk
 
-from .. import generator, pdf_writer, scanner, scodoc
+from .. import generator, markdown_pango, pdf_writer, scanner, scodoc
 from .. import project as project_mod
 from ..marking import score_page
 from ..model import Project
 from .editor import StructureEditor
+from .manual_window import ManualGradingWindow
 
 
 def _file_dialog(parent, title: str, action, filters=None, initial_name=None, initial_folder=None):
@@ -1743,9 +1744,13 @@ class QcmWindow(Gtk.ApplicationWindow):
         btn_next.connect("clicked", lambda _b: self._show_marked_page(+1))
         btn_enlarge = Gtk.Button(label="Agrandir")
         btn_enlarge.connect("clicked", self._on_enlarge_page)
+        btn_manual = Gtk.Button(label="Réponses libres…")
+        btn_manual.set_tooltip_text("Noter les questions à réponse libre, question par question")
+        btn_manual.connect("clicked", self._on_manual_grading)
         view_box.append(btn_prev)
         view_box.append(btn_next)
         view_box.append(btn_enlarge)
+        view_box.append(btn_manual)
         box.append(view_box)
 
         self.marked_pages: list = []
@@ -1761,7 +1766,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         self._build_help_tab()
 
     def _build_help_tab(self) -> None:
-        """Onglet Aide : affiche le contenu de README.md en texte brut."""
+        """Onglet Aide : affiche le contenu de README.md mis en forme (Markdown → Pango)."""
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
         scroll.set_hexpand(True)
@@ -1778,7 +1783,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         if path:
             try:
                 with open(path, encoding="utf-8") as f:
-                    buf.set_text(f.read())
+                    buf.insert_markup(buf.get_start_iter(), markdown_pango.render(f.read()), -1)
             except Exception as e:
                 buf.set_text(f"Impossible de charger l'aide ({path}) : {e}")
         else:
@@ -2356,6 +2361,20 @@ class QcmWindow(Gtk.ApplicationWindow):
         if idx < 0 or idx >= len(self.marked_pages):
             return
         win = MarkedPageWindow(self.marked_pages, idx, self, on_navigate=self._enlarge_navigate, project=self.project)
+        win.present()
+
+    def _on_manual_grading(self, _btn) -> None:
+        if not self.marked_pages:
+            self.marking_status.set_text("Lancez d'abord la correction des copies.")
+            return
+
+        def describe(idx: int) -> tuple[str, str]:
+            label, page = self.marked_pages[idx]
+            return _student_display(page), label
+
+        win = ManualGradingWindow(
+            self.project, self.marked_pages, describe, on_change=self._update_result_row, parent=self
+        )
         win.present()
 
     def _enlarge_navigate(self, idx: int) -> None:
@@ -3172,6 +3191,7 @@ class MarkedPageWindow(Gtk.Window):
             self.lbl_malus_hint.set_text("Malus invalide : nombre attendu.")
             return
         page.malus = max(0.0, malus)
+        page.malus_manual = True
         self._load_page()
         if self.on_navigate is not None:
             self.on_navigate(self.idx)

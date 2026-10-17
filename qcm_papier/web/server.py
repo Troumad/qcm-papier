@@ -176,6 +176,7 @@ def create_app(session: Session | None = None) -> FastAPI:
                 "path": sess.project_path,
                 "name": os.path.basename(sess.project_path) if sess.project_path else None,
                 "settings": editing.settings_form(sess.project.settings),
+                "header_footer": editing.header_footer_view(sess.project.settings),
                 "structure": editing.structure_view(sess.project),
                 "variants": sess.variant_ids(),
             }
@@ -373,6 +374,20 @@ def create_app(session: Session | None = None) -> FastAPI:
             raise ValueError("Il faut exactement 5 repères.")
         ok = s().manual_align(i, points)
         return {**s().page_info(i), "ok": ok}
+
+    # -- Questions à réponse libre ---------------------------------------
+    @app.get("/api/manual")
+    def manual_grading() -> dict[str, Any]:
+        return {"questions": s().manual_grading()}
+
+    @app.get("/api/pages/{i}/manual/{e}/{q}/image")
+    def manual_image(i: int, e: int, q: int) -> Response:
+        return Response(content=s().manual_image(i, e, q), media_type="image/png")
+
+    @app.put("/api/pages/{i}/manual/{e}/{q}")
+    def manual_value(i: int, e: int, q: int, data: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        s().set_manual_value(i, e, q, data.get("value"))
+        return s().page_info(i)
 
     # -- Scodoc et sauvegarde --------------------------------------------
     @app.post("/api/scodoc/students")

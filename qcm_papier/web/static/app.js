@@ -1,6 +1,6 @@
 "use strict";
 // Interface web QCM-Papier : outils communs, onglets Fichier, Informations,
-// Structure, Génération et Aide. L'onglet Correction est dans correction.js.
+// En-tête et pied de page, Structure, Génération et Aide. L'onglet Correction est dans correction.js.
 
 const $ = (selector, root = document) => root.querySelector(selector);
 
@@ -92,6 +92,7 @@ function applyProject(data) {
   $("#btn-save").hidden = false;
   fillForm($("#info-form"), data.settings);
   fillForm($("#gen-form"), data.settings);
+  renderHeaderFooter(data);
   renderTree();
 }
 
@@ -115,6 +116,53 @@ function bindSettingsForm(form) {
     if (!field.name) return;
     guard(async () => applyProject(await api("PUT", "/api/settings", { [field.name]: fieldValue(field) })));
   });
+}
+
+// ---------------------------------------------------------------------------
+// En-tête et pied de page (onglet GTK « Entête et pied de page »)
+// ---------------------------------------------------------------------------
+const HF_COLUMNS = [["left", "Texte aligné à gauche"], ["middle", "Texte centré"], ["right", "Texte aligné à droite"]];
+let activeText = null; // dernière zone de texte utilisée : cible des macros
+
+document.querySelectorAll("#hf-form .hf-grid").forEach((grid) => {
+  grid.append(...HF_COLUMNS.map(([side, label]) => {
+    const name = `${grid.dataset.zone}_${side}`;
+    const area = el("textarea", { name, class: side, rows: "4", onfocus: (ev) => { activeText = ev.target; } });
+    return el("div", { class: "hf-col" },
+      el("label", {}, label, area),
+      el("button", { type: "button", onclick: () => setText(area, project.header_footer.defaults[name]) }, "Valeur par défaut"));
+  }));
+});
+
+// Le changement passe par le formulaire, qui l'envoie au serveur (bindSettingsForm).
+function setText(area, text) {
+  area.value = text;
+  area.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function insertMacro(macro) {
+  const area = activeText;
+  if (!area || area.disabled) { toast("Cliquez d'abord dans une zone de texte de l'en-tête ou du pied de page.", true); return; }
+  area.setRangeText(`\${${macro}}`, area.selectionStart, area.selectionEnd, "end");
+  area.focus();
+  area.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+// Un champ vide affiche le modèle par défaut, celui qu'utilise le générateur.
+function renderHeaderFooter(data) {
+  const form = $("#hf-form");
+  const { defaults, macros } = data.header_footer;
+  for (const name of Object.keys(defaults)) {
+    const area = form.elements[name];
+    if (area !== document.activeElement) area.value = data.settings[name] || defaults[name];
+  }
+  form.elements.footer_enabled.checked = data.settings.footer_enabled;
+  $("[data-zone=footer]").querySelectorAll("textarea, button").forEach((c) => { c.disabled = !data.settings.footer_enabled; });
+  $("#hf-macros").replaceChildren(...macros.map(({ macro, value }) => el("button", {
+    type: "button", title: `Insérer \${${macro}}`,
+    onmousedown: (ev) => ev.preventDefault(), // garde le curseur dans la zone de texte
+    onclick: () => insertMacro(macro),
+  }, `\${${macro}} = ${value}`)));
 }
 
 // ---------------------------------------------------------------------------
@@ -327,12 +375,34 @@ function renderProps() {
     el("label", {}, "Nom", textInput(question.name, (v) => patch({ name: v }))),
     el("div", { class: "row wrap" },
       el("label", {}, "Gain", numberInput(question.gain, (v) => patch({ gain: v }))),
-      el("label", {}, question.type === "multiple_progressive" ? "Malus par réponse fausse" : "Malus de la question", numberInput(question.penalty, (v) => patch({ penalty: v }))),
-      el("button", { onclick: () => guard(() => structureCall("POST", `${qUrl}/choices`)) }, "Ajouter un choix"),
-      el("button", { onclick: () => guard(() => structureCall("DELETE", `${qUrl}/choices`)) }, "Enlever un choix")),
+      // Réponse libre : ni malus ni choix, les points sont saisis à la correction.
+      ...(question.type === "manual" ? [] : [
+        el("label", {}, question.type === "multiple_progressive" ? "Malus par réponse fausse" : "Malus de la question", numberInput(question.penalty, (v) => patch({ penalty: v }))),
+        el("button", { onclick: () => guard(() => structureCall("POST", `${qUrl}/choices`)) }, "Ajouter un choix"),
+        el("button", { onclick: () => guard(() => structureCall("DELETE", `${qUrl}/choices`)) }, "Enlever un choix"),
+      ])),
     el("label", {}, "Type de question", typeSelect),
-    el("h2", {}, "Choix"),
-    states,
+  );
+  if (question.type !== "manual") {
+    panel.append(el("h2", {}, "Choix"), states);
+    return;
+  }
+  const sizeInput = (value, key) => el("input", {
+    type: "number", min: "5", max: "400", step: "5", value,
+    onchange: (ev) => patch({ [key]: Number(ev.target.value) }),
+  });
+  const helpArea = (value, key, placeholder) => el("textarea", {
+    rows: "3", placeholder, onchange: (ev) => patch({ [key]: ev.target.value }),
+  }, value);
+  panel.append(
+    el("h2", {}, "Cadre de réponse"),
+    el("div", { class: "row wrap" },
+      el("label", {}, "Largeur (mm)", sizeInput(question.width, "width")),
+      el("label", {}, "Hauteur (mm)", sizeInput(question.height, "height"))),
+    el("h2", {}, "Aide à la correction"),
+    el("p", { class: "muted" }, "Facultatif, jamais imprimé : affiché à côté des réponses scannées lors de la notation (Markdown)."),
+    el("label", {}, "Réponse attendue", helpArea(question.expected, "expected", "Ex. : f'(x) = 2x, donc f croissante sur ℝ+")),
+    el("label", {}, "Éléments de correction", helpArea(question.grading_notes, "grading_notes", "Ex. : 1 pt pour la dérivée, 1 pt pour la conclusion")),
   );
 }
 
@@ -414,5 +484,6 @@ onTab("help", () => guard(async () => {
 // ---------------------------------------------------------------------------
 bindSettingsForm($("#info-form"));
 bindSettingsForm($("#gen-form"));
+bindSettingsForm($("#hf-form"));
 window.QCM = { $, api, guard, toast, download, el, onTab, showTab, applyProject, get project() { return project; } };
 guard(async () => applyProject(await api("GET", "/api/project")));
