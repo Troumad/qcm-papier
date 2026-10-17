@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import smtplib
 import ssl
+import time
 from dataclasses import dataclass, field
 from email.message import EmailMessage
 from email.utils import formataddr
@@ -241,26 +242,49 @@ def send_all(
         sender_email = account.sender or account.username
     reports: list[SendReport] = []
     total = len(recipients)
+
+    def _send_one(server, recipient):
+        msg = build_message(
+            recipient,
+            subject,
+            body,
+            sender_email,
+            sender_name,
+            project=project,
+            ds_name=ds_name,
+            include_breakdown=include_breakdown,
+        )
+        server.send_message(msg)
+        return msg
+
     server = smtp_connection(password)
     try:
         for i, recipient in enumerate(recipients, 1):
             if progress is not None:
                 progress(i, total, recipient)
-            msg = build_message(
-                recipient,
-                subject,
-                body,
-                sender_email,
-                sender_name,
-                project=project,
-                ds_name=ds_name,
-                include_breakdown=include_breakdown,
-            )
             try:
-                server.send_message(msg)
+                _send_one(server, recipient)
                 reports.append(SendReport(recipient, sent=True))
-            except smtplib.SMTPException as exc:
-                reports.append(SendReport(recipient, sent=False, error=str(exc)))
+            except smtplib.SMTPServerDisconnected:
+                # Connexion coupée par le serveur (limite de taux, délai
+                # d'inactivité…) : on se reconnecte et on retente ce mail.
+                try:
+                    server = smtp_connection(password)
+                    _send_one(server, recipient)
+                    reports.append(SendReport(recipient, sent=True))
+                except (smtplib.SMTPException, MailingError) as exc:
+                    reports.append(SendReport(recipient, sent=False, error=str(exc)))
+            except smtplib.SMTPException:
+                # Limite de taux dépassée : le serveur refuse puis ferme.
+                # On attend un peu, on se reconnecte et on retente une fois.
+                time.sleep(10)
+                try:
+                    server = smtp_connection(password)
+                    _send_one(server, recipient)
+                    reports.append(SendReport(recipient, sent=True))
+                except (smtplib.SMTPException, MailingError) as exc2:
+                    reports.append(SendReport(recipient, sent=False, error=str(exc2)))
+            time.sleep(1)  # pace les envois pour respecter la limite du serveur
     finally:
         try:
             server.quit()
