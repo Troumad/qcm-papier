@@ -2470,9 +2470,17 @@ class QcmWindow(Gtk.ApplicationWindow):
             )
         )
 
+        ds_name = self.project.settings.evaluation_full or self.project.settings.evaluation_short
         entry_subject = Gtk.Entry()
-        entry_subject.set_text("Votre copie corrigée")
+        entry_subject.set_text(f"Votre copie corrigée — {ds_name}" if ds_name else "Votre copie corrigée")
         main.append(entry_subject)
+
+        chk_breakdown = Gtk.CheckButton(label="Inclure le décompte des points par question")
+        chk_breakdown.set_active(True)
+        chk_selftest = Gtk.CheckButton(label="Test : m'envoyer les mails à moi-même (expéditeur)")
+        chk_selftest.set_active(False)
+        main.append(chk_breakdown)
+        main.append(chk_selftest)
 
         scroll = Gtk.ScrolledWindow()
         scroll.set_vexpand(True)
@@ -2501,10 +2509,32 @@ class QcmWindow(Gtk.ApplicationWindow):
             btn_send.set_sensitive(False)
             body = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
             subject = entry_subject.get_text() or "Votre copie corrigée"
+            to_send = recipients
+            if chk_selftest.get_active():
+                try:
+                    account = mail_config.load_account()
+                except mail_config.MailConfigError as e:
+                    status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
+                    btn_send.set_sensitive(True)
+                    return
+                to_send = [
+                    mailing.Recipient(
+                        email=account.sender or account.username,
+                        name="Test",
+                        pages=[p for r in recipients for p in r.pages],
+                    )
+                ]
             status.set_text("Connexion au serveur SMTP…")
             self._ui_flush()
             try:
-                reports = mailing.send_all(recipients, subject, body)
+                reports = mailing.send_all(
+                    to_send,
+                    subject,
+                    body,
+                    project=self.project,
+                    ds_name=ds_name,
+                    include_breakdown=chk_breakdown.get_active(),
+                )
             except mailing.MailingError as e:
                 status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
                 btn_send.set_sensitive(True)

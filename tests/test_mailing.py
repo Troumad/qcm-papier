@@ -15,6 +15,7 @@ class FakePage:
         self.student_id = student_id
         self.matrix_inv = object() if ok else None
         self.variant_id = 1234 if ok else None
+        self.marks = []
 
 
 def test_group_by_email():
@@ -78,3 +79,57 @@ def test_send_all_compte_non_configure():
 def test_send_all_aucun_destinataire():
     with pytest.raises(mailing.MailingError, match="Aucun destinataire"):
         mailing.send_all([], "S", "B")
+
+
+def test_question_breakdown():
+    from qcm_papier.model import Choice, Exercise, Project, Question
+
+    q1 = Question(name="Q1", gain=2.0, choices=[Choice(correct=True, index=0), Choice(penalty=True, index=1)])
+    q2 = Question(name="Q2", gain=3.0, manual=True)
+    ex = Exercise(name="Exercice 1", questions=[q1, q2])
+    project = Project(structure=[ex])
+    project.settings.evaluation_full = "DS de test"
+
+    # Q1 : case correcte cochée ; Q2 : réponse libre notée 1,5.
+    marks = [
+        {"e": 0, "q": 0, "c": 0, "r": 2.0, "checked": True},
+        {"e": 0, "q": 1, "r": None, "c": None, "value": 1.5},
+    ]
+
+    page = FakePage(email="jean@x.fr", name="DUPONT", firstname="Jean", student_id="p1")
+    page.marks = marks
+    text = mailing.question_breakdown(project, page)
+    assert "Exercice 1 : 3.5/5" in text
+    assert "- Q1 : 2/2" in text
+    assert "- Q2 : 1.5/3" in text
+
+
+def test_build_message_avec_ds_et_decompte(monkeypatch):
+    from qcm_papier.model import Choice, Exercise, Project, Question
+
+    q1 = Question(
+        name="Q1",
+        gain=2.0,
+        choices=[Choice(correct=True, neutral=False, penalty=False, index=0), Choice(index=1)],
+    )
+    project = Project(structure=[Exercise(name="Exo", questions=[q1])])
+    project.settings.evaluation_full = "DS de mathématiques"
+
+    page = FakePage(email="jean@x.fr", name="DUPONT", firstname="Jean", student_id="p1")
+    page.marks = [{"e": 0, "q": 0, "c": 0, "r": 2.0, "checked": True}]
+
+    monkeypatch.setattr(mailing, "page_png_bytes", lambda p: b"img")
+    recipient = mailing.Recipient(email="jean@x.fr", name="DUPONT Jean", pages=[page])
+    msg = mailing.build_message(
+        recipient,
+        "Sujet",
+        "Corps",
+        "prof@univ.fr",
+        project=project,
+        ds_name="DS de mathématiques",
+        include_breakdown=True,
+    )
+    content = msg.get_body(preferencelist=("plain",)).get_content()
+    assert "DS : DS de mathématiques" in content
+    assert "Décompte des points par question" in content
+    assert "- Q1 : 2/2" in content

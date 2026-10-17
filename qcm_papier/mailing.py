@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from email.message import EmailMessage
 from email.utils import formataddr
 
-from . import mail_config
+from . import mail_config, marking
 
 
 class MailingError(Exception):
@@ -78,12 +78,45 @@ def page_png_bytes(page) -> bytes | None:
     return buf.getvalue()
 
 
+def question_breakdown(project, page) -> str:
+    """Décompte des points par exercice et par question d'une copie.
+
+    Reprend le calcul de ``marking.score_page`` question par question
+    (``_question_score``) pour afficher la ligne de chaque question :
+    nom, points obtenus / points possibles.
+    """
+    lines: list[str] = []
+    for i, exercise in enumerate(project.structure):
+        ex_value = 0.0
+        ex_total = 0.0
+        q_lines: list[str] = []
+        for q, question in enumerate(exercise.questions):
+            value, total, ok = marking._question_score(question, page.marks, i, q)
+            if not question.check and not question.manual:
+                continue
+            ex_value += value
+            ex_total += total
+            label = question.name or f"Question {q + 1}"
+            flag = "" if ok else " (incomplète)"
+            if question.manual:
+                q_lines.append(f"  - {label} : {value:g}/{total:g}{flag}")
+            else:
+                q_lines.append(f"  - {label} : {value:g}/{total:g}{flag}")
+        if q_lines:
+            lines.append(f"{exercise.name or f'Exercice {i + 1}'} : {ex_value:g}/{ex_total:g}")
+            lines.extend(q_lines)
+    return "\n".join(lines)
+
+
 def build_message(
     recipient: Recipient,
     subject: str,
     body: str,
     sender_email: str,
     sender_name: str = "",
+    project=None,
+    ds_name: str = "",
+    include_breakdown: bool = False,
 ) -> EmailMessage:
     """Construit le mail d'un destinataire avec ses copies en pièces jointes."""
     msg = EmailMessage()
@@ -93,7 +126,17 @@ def build_message(
         msg["From"] = sender_email
     msg["To"] = formataddr((recipient.display, recipient.email)) if recipient.name else recipient.email
     msg["Subject"] = subject
-    msg.set_content(body)
+    text = body
+    if ds_name:
+        text = f"DS : {ds_name}\n\n{text}"
+    if include_breakdown and project is not None:
+        parts = []
+        for page in recipient.pages:
+            parts.append(question_breakdown(project, page))
+        breakdown = "\n\n".join(p for p in parts if p)
+        if breakdown:
+            text += "\n\nDécompte des points par question :\n\n" + breakdown
+    msg.set_content(text)
     multiple = len(recipient.pages) > 1
     for i, page in enumerate(recipient.pages, 1):
         data = page_png_bytes(page)
@@ -136,6 +179,9 @@ def send_all(
     sender_email: str = "",
     sender_name: str = "",
     progress=None,
+    project=None,
+    ds_name: str = "",
+    include_breakdown: bool = False,
 ) -> list[SendReport]:
     """Envoie les copies à chaque destinataire, un mail par étudiant.
 
@@ -155,7 +201,16 @@ def send_all(
         for i, recipient in enumerate(recipients, 1):
             if progress is not None:
                 progress(i, total, recipient)
-            msg = build_message(recipient, subject, body, sender_email, sender_name)
+            msg = build_message(
+                recipient,
+                subject,
+                body,
+                sender_email,
+                sender_name,
+                project=project,
+                ds_name=ds_name,
+                include_breakdown=include_breakdown,
+            )
             try:
                 server.send_message(msg)
                 reports.append(SendReport(recipient, sent=True))
