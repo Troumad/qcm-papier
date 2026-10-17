@@ -148,8 +148,10 @@ def test_saisie_des_points_complete_la_copie(corrected):
     client, session = corrected
     page = client.put("/api/pages/0/manual/0/1", json={"value": 1.5}).json()
     assert page["complete"] is True
-    assert page["note"] == 1.5
-    assert session.notes == {"p1234567": 1.5}
+    # N° étudiant illisible sur le sujet vierge -> malus de 1 sur la note finale.
+    assert page["malus"] == 1
+    assert page["note"] == 0.5
+    assert session.notes == {"p1234567": 0.5}
     question = client.get("/api/manual").json()["questions"][0]
     assert question["rows"][0]["value"] == 1.5
     assert question["remaining"] == 0
