@@ -2593,7 +2593,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         Le mot de passe est rangé dans le trousseau du système, jamais écrit
         dans un fichier ; les autres réglages sont mémorisés durablement.
         """
-        win = Gtk.Window(title="Compte mail (envoi des copies)", transient_for=self, modal=True, default_width=520)
+        win = Gtk.Window(title="Compte mail (envoi des copies)", transient_for=self, modal=True, default_width=760)
         main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         main.set_margin_start(12)
         main.set_margin_end(12)
@@ -2604,11 +2604,13 @@ class QcmWindow(Gtk.ApplicationWindow):
         grid = Gtk.Grid()
         grid.set_row_spacing(8)
         grid.set_column_spacing(8)
+        grid.set_hexpand(True)
         main.append(grid)
 
         lbl_host = Gtk.Label(label="Serveur SMTP :")
         lbl_host.set_xalign(1)
         entry_host = Gtk.Entry()
+        entry_host.set_hexpand(True)
         entry_host.set_placeholder_text("smtp.univ.fr")
         lbl_port = Gtk.Label(label="Port :")
         lbl_port.set_xalign(1)
@@ -2618,9 +2620,12 @@ class QcmWindow(Gtk.ApplicationWindow):
         lbl_login = Gtk.Label(label="Login :")
         lbl_login.set_xalign(1)
         entry_login = Gtk.Entry()
+        entry_login.set_hexpand(True)
         lbl_sender = Gtk.Label(label="Expéditeur :")
         lbl_sender.set_xalign(1)
         entry_sender = Gtk.Entry()
+        entry_sender.set_hexpand(True)
+        entry_sender.set_width_chars(48)
         entry_sender.set_placeholder_text("prenom.nom@univ.fr")
         chk_starttls = Gtk.CheckButton(label="Chiffrement STARTTLS")
         chk_starttls.set_active(True)
