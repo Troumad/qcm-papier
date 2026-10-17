@@ -2416,20 +2416,25 @@ class QcmWindow(Gtk.ApplicationWindow):
         except mail_config.MailConfigError as e:
             sender_line = f"Compte mail illisible : {e}"
         account_ok = account.complete
-        info = Gtk.Label(
-            label=(
-                f"Destinataire : {name} <{email}>\n"
-                f"Copie : {os.path.basename(getattr(page, 'copy_path', '') or '')} — "
-                f"note {scanner.final_value(page):g}/{page.total:g}"
-                if page.total is not None and scanner.final_value(page) is not None
-                else f"Copie : {os.path.basename(getattr(page, 'copy_path', '') or '')}"
-            )
-            + f"\n{sender_line}"
+        note_txt = (
+            f"Copie : {os.path.basename(getattr(page, 'copy_path', '') or '')} — "
+            f"note {scanner.final_value(page):g}/{page.total:g}"
+            if page.total is not None and scanner.final_value(page) is not None
+            else f"Copie : {os.path.basename(getattr(page, 'copy_path', '') or '')}"
         )
-        info.set_use_markup(True)
-        if not account_ok:
-            info.set_markup(f"{info.get_text()}\n<span color='#C00'>{sender_line}</span>")
-        main.append(info)
+        plain = f"Destinataire : {name} <{email}>\n{note_txt}\n{sender_line}"
+        info = Gtk.Label(label=plain)
+        if account_ok:
+            main.append(info)
+        else:
+            escaped = GLib.markup_escape_text(plain)
+            info.set_markup(
+                escaped.replace(
+                    GLib.markup_escape_text(sender_line),
+                    f"<span color='#C00'>{GLib.markup_escape_text(sender_line)}</span>",
+                )
+            )
+            main.append(info)
         if not account_ok:
             btn_cfg = Gtk.Button(label="Configurer le compte mail…")
             btn_cfg.get_style_context().add_class("suggested-action")
@@ -2674,21 +2679,23 @@ class QcmWindow(Gtk.ApplicationWindow):
         except mail_config.MailConfigError as e:
             sender_line = f"Compte mail illisible : {e}"
         account_ok = account.complete
-        summary = Gtk.Label(
-            label=(
-                f"{len(recipients)} destinataire(s), {n_pages} copie(s) corrigée(s) au total.\n"
-                f"{sender_line}\n"
-                "Chaque étudiant reçoit un mail individuel avec ses copies (PNG) en pièces jointes."
-            )
+        plain = (
+            f"{len(recipients)} destinataire(s), {n_pages} copie(s) corrigée(s) au total.\n"
+            f"{sender_line}\n"
+            "Chaque étudiant reçoit un mail individuel avec ses copies (PNG) en pièces jointes."
         )
-        summary.set_use_markup(True)
-        if not account_ok:
+        summary = Gtk.Label(label=plain)
+        if account_ok:
+            main.append(summary)
+        else:
+            escaped = GLib.markup_escape_text(plain)
             summary.set_markup(
-                f"{len(recipients)} destinataire(s), {n_pages} copie(s) corrigée(s) au total.\n"
-                f"<span color='#C00'>{sender_line}</span>\n"
-                "Chaque étudiant reçoit un mail individuel avec ses copies (PNG) en pièces jointes."
+                escaped.replace(
+                    GLib.markup_escape_text(sender_line),
+                    f"<span color='#C00'>{GLib.markup_escape_text(sender_line)}</span>",
+                )
             )
-        main.append(summary)
+            main.append(summary)
         if not account_ok:
             btn_cfg = Gtk.Button(label="Configurer le compte mail…")
             btn_cfg.get_style_context().add_class("suggested-action")
