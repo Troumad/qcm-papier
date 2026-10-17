@@ -2031,9 +2031,28 @@ class QcmWindow(Gtk.ApplicationWindow):
                 return
             n = len(self.project.students)
             n_matched = self._apply_anonymat()
-            status.set_markup(
-                f"<span color='#080'>{n} étudiant(s) chargé(s), {n_matched} copie(s) identifiée(s).</span>"
+            win.destroy()
+            info = Gtk.Window(title="Levée d'anonymat Scodoc", transient_for=self, modal=True, default_width=380)
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+            box.set_margin_start(12)
+            box.set_margin_end(12)
+            box.set_margin_top(12)
+            box.set_margin_bottom(12)
+            info.set_child(box)
+            box.append(
+                Gtk.Label(
+                    label=(
+                        f"{n} étudiant(s) chargé(s) depuis la table Scodoc.\n"
+                        f"{n_matched} copie(s) identifiée(s) (nom, prénom, EID et email associés)."
+                    )
+                )
             )
+            btn_close_info = Gtk.Button(label="Fermer")
+            btn_close_info.get_style_context().add_class("suggested-action")
+            btn_close_info.set_halign(Gtk.Align.END)
+            btn_close_info.connect("clicked", lambda _b: info.destroy())
+            box.append(btn_close_info)
+            info.present()
 
         def _close(_b) -> None:
             win.destroy()
@@ -2663,11 +2682,8 @@ class QcmWindow(Gtk.ApplicationWindow):
             except mail_config.MailConfigError as e:
                 status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
                 return
-            account = mail_config.load_account()
-            status.set_markup(
-                f"<span color='#080'>Compte enregistré ({account.username} sur {account.host}).\n"
-                "Le mot de passe n'est jamais stocké : il sera demandé à chaque envoi.</span>"
-            )
+            mail_config.load_account()
+            win.destroy()
 
         btn_cancel.connect("clicked", lambda _b: win.destroy())
         btn_save.connect("clicked", _save)
