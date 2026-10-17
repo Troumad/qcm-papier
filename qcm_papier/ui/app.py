@@ -3162,62 +3162,37 @@ class QcmWindow(Gtk.ApplicationWindow):
             if not self.copies:
                 self.marking_status.set_text("Aucune copie dans la sauvegarde.")
                 return
+        # Restauration directe depuis la sauvegarde : les images et
+        # l'état de correction y sont déjà enregistrés — inutile de
+        # rescanner les copies (l'ancien comportement redécodait chaque
+        # PDF à 150 dpi puis écrasait le résultat par la sauvegarde).
+        try:
+            saved = scanner.load_all_pages_from_state(path)
+        except Exception as e:
+            self.marking_status.set_text(f"Erreur lecture sauvegarde : {e}")
+            return
         self.results_store.clear()
         self.marked_pages = []
         notes: dict[str, float] = {}
         n_ok = 0
-        n_err = 0
         n_skip = 0
-        total = len(self.copies)
-        for copy_idx, copy_path in enumerate(self.copies, 1):
+        total = len(saved)
+        for copy_idx, (copy_path, pages) in enumerate(sorted(saved.items()), 1):
             fname = os.path.basename(copy_path)
             info = self.copy_rows.get(copy_path)
             self.marking_status.set_text(f"Rechargement {copy_idx}/{total} : {fname}")
-            self._scroll_to_copy(copy_path)
             self._ui_flush()
-            try:
-                pages = scanner.load_pages_from_file(copy_path, dpi=150)
-            except Exception as e:
-                n_err += 1
-                self.results_store.append([fname, "", "", "", "", f"Erreur : {e}", "0", -1, ""])
-                if info:
-                    info["n_err"] = 1
-                    info["n_pages"] = 1
-                    self._update_copy_row(copy_path)
-                continue
             if info:
                 info["n_ok"] = 0
                 info["n_err"] = 0
                 info["n_pages"] = len(pages)
-            for page_idx, page in enumerate(pages):
-                page.copy_path = copy_path
-                restored = scanner.load_correction_state(copy_path, page, path, page_index=page_idx)
-                if not restored:
-                    n_err += 1
-                    if info:
-                        info["n_err"] += 1
-                    self.results_store.append(
-                        [fname, "", "", "", "", "Non trouvée dans la sauvegarde", "0", len(self.marked_pages), ""]
-                    )
-                    continue
+            for page in pages:
                 # Page non corrigée (alignement échoué) : on l'affiche
                 # quand même (statut « Non lue ») pour qu'on puisse l'ouvrir
                 # et la corriger manuellement.
                 if page.variant_id is None and not page.marks:
                     n_skip += 1
-                    self.results_store.append(
-                        [
-                            fname,
-                            "",
-                            "",
-                            "",
-                            "",
-                            "Non lue",
-                            "0",
-                            len(self.marked_pages),
-                            "",
-                        ]
-                    )
+                    self.results_store.append([fname, "", "", "", "", "Non lue", "0", len(self.marked_pages), ""])
                     label = f"{fname} ⚠ Non lue"
                     self.marked_pages.append((label, page))
                     continue
@@ -3249,7 +3224,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             if info:
                 info["check"].set_active(False)
         self._last_notes = notes
-        self.marking_status.set_text(f"{n_ok} restaurée(s), {n_err} en erreur, {n_skip} non lue(s).")
+        self.marking_status.set_text(f"{n_ok} restaurée(s), {n_skip} non lue(s).")
         self._refresh_page_selector()
 
     # ------------------------------------------------------------------

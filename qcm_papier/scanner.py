@@ -1728,6 +1728,42 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str], path:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
+def load_all_pages_from_state(state_path: str) -> dict[str, list[ScannedPage]]:
+    """Charge toutes les pages corrigées depuis une sauvegarde d'état.
+
+    Renvoie un dict {chemin de copie: [pages]} avec, pour chaque page,
+    l'état restauré (marks, matrices, note) et l'image enregistrée.
+    Aucun rescan des copies : les images de la sauvegarde sont
+    directement réutilisées. La clé « file » de chaque entrée est
+    ramenée en chemin absolu.
+    """
+    import json
+
+    with open(state_path, encoding="utf-8") as f:
+        data = json.load(f)
+    img_dir = data.get("image_dir")
+    base_dir = os.path.dirname(state_path)
+    if img_dir and not os.path.isabs(img_dir):
+        img_dir = os.path.join(base_dir, img_dir)
+    out: dict[str, list[ScannedPage]] = {}
+    for entry in data.get("copies", []):
+        cp = str(entry.get("file", ""))
+        if not cp:
+            continue
+        if not os.path.isabs(cp):
+            cp = os.path.join(base_dir, cp)
+        page = ScannedPage()
+        page.copy_path = cp
+        _page_from_state(page, entry["page"])
+        img_name = entry.get("image")
+        if img_name and img_dir:
+            img_path = os.path.join(img_dir, img_name)
+            if os.path.exists(img_path):
+                page.img = PixelImage(Image.open(img_path))
+        out.setdefault(cp, []).append(page)
+    return out
+
+
 def load_correction_state(copy_path: str, page: ScannedPage, state_path: str, page_index: int = 0) -> bool:
     """Recharge l'état de correction d'une copie depuis un fichier JSON.
 
