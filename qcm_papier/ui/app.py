@@ -3235,7 +3235,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         # rescanner les copies (l'ancien comportement redécodait chaque
         # PDF à 150 dpi puis écrasait le résultat par la sauvegarde).
         try:
-            saved = scanner.load_all_pages_from_state(path)
+            saved = scanner.load_all_pages_from_state(path, project=self.project)
         except Exception as e:
             self.marking_status.set_text(f"Erreur lecture sauvegarde : {e}")
             return
