@@ -1637,6 +1637,7 @@ def _page_to_state(page: ScannedPage) -> dict:
                 "value",
                 "total",
                 "gain",
+                "j",
             )
         }
         state["marks"].append(m)

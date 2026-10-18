@@ -169,3 +169,29 @@ def test_load_all_pages_from_state(tmp_path):
     assert p.student_id == "p1234567"
     assert p.value == 12.0
     assert p.img is not None
+
+
+def test_le_drapeau_joker_est_conserve_dans_la_sauvegarde(tmp_path):
+    """Le drapeau « j » (ligne joker) doit survivre à la sauvegarde d'état.
+
+    Sans lui, une correction rechargée ne reconnaît plus les cases de la
+    seconde chance et ne compte que la première ligne.
+    """
+    import json
+
+    from qcm_papier.scanner import ScannedPage, save_correction_state
+
+    page = ScannedPage()
+    page.copy_path = str(tmp_path / "copie.pdf")
+    page.variant_id = 1
+    page.marks = [
+        {"e": 0, "q": 0, "c": 0, "x": 1.0, "y": 1.0, "r": 2.0, "checked": True},
+        {"e": 0, "q": 0, "c": 0, "x": 1.0, "y": 7.0, "r": 2.0, "checked": True, "j": True},
+    ]
+    state_path = str(tmp_path / "correction.json")
+    save_correction_state([page], [page.copy_path], state_path)
+    with open(state_path, encoding="utf-8") as f:
+        data = json.load(f)
+    jokers = [m for m in data["copies"][0]["page"]["marks"] if m.get("j")]
+    assert len(jokers) == 1
+    assert jokers[0]["checked"] is True
