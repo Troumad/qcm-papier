@@ -3654,6 +3654,13 @@ class MarkedPageWindow(Gtk.Window):
         self.lbl_status = Gtk.Label(label="")
         self.lbl_status.set_use_markup(True)
         self.side.append(self.lbl_status)
+        # Décompte des points par exercice et question de la copie affichée.
+        self.lbl_breakdown = Gtk.Label(label="")
+        self.lbl_breakdown.set_use_markup(True)
+        self.lbl_breakdown.set_wrap(True)
+        self.lbl_breakdown.set_xalign(0)
+        self.lbl_breakdown.set_size_request(-1, -1)
+        self.side.append(self.lbl_breakdown)
 
         self.side.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
 
@@ -3818,7 +3825,28 @@ class MarkedPageWindow(Gtk.Window):
             self.lbl_malus_hint.set_text("")
         self.zoom_scale.set_value(self._zoom)
         self.zoom_label.set_text(f"{int(self._zoom * 100)} %")
-        self._update_image()
+        self._update_page_breakdown(page)
+
+    def _update_page_breakdown(self, page) -> None:
+        """Affiche le décompte des points de la copie dans le menu latéral."""
+        if self._project is None or page.matrix_inv is None or page.variant_id is None:
+            self.lbl_breakdown.set_markup("<span size='small'>Décompte indisponible</span>")
+            return
+        lines = ["<b>Décompte des points :</b>"]
+        try:
+            text = mailing.question_breakdown(self._project, page)
+            for ln in text.split("\n"):
+                escaped = GLib.markup_escape_text(ln)
+                if ln.startswith("  "):
+                    lines.append(f"<span size='small'>{escaped}</span>")
+                else:
+                    lines.append(f"<b>{escaped}</b>")
+            nl = mailing.note_line(page)
+            if nl:
+                lines.append(f"<span size='small'>{GLib.markup_escape_text(nl)}</span>")
+        except Exception as e:
+            lines.append(f"<span size='small' color='#C00'>Erreur décompte : {e}</span>")
+        self.lbl_breakdown.set_markup("\n".join(lines))
 
     def _on_send_copy(self) -> None:
         """Envoie la copie affichée à son étudiant, via le dialogue de la fenêtre principale."""
