@@ -367,3 +367,47 @@ def test_image_exif_est_chargee_droite(tmp_path):
     assert len(pages) == 1
     assert pages[0].img.width == 20  # pivotée : 40x20 -> 20x40
     assert pages[0].img.height == 40
+
+
+def test_render_redresse_une_page_tournee():
+    """Le rendu final est remis à l'endroit (repères 3 points à gauche).
+
+    Une page photographiée tournée d'un quart de tour (Ox page vers le bas
+    de l'image) doit donner un rendu final avec la page droite.
+    """
+    from PIL import Image as PILImage
+
+    from qcm_papier.scanner import Matrix, PixelImage, ScannedPage, render_marked_page
+
+    # matrix_inv : Ox page -> bas de l'image (a=0, b=1), Oy page -> gauche.
+    m = Matrix(a=0.0, b=1.0, c=-1.0, d=0.0, e=20.0, f=0.0)
+
+    page = ScannedPage()
+    page.img = PixelImage(PILImage.new("RGB", (20, 40), "white"))
+    page.matrix_inv = m
+    page.marks = [{"e": 0, "q": 0, "c": 0, "x": 10.0, "y": 100.0, "r": 2.0, "checked": True}]
+
+    # Validation par pixel : un point noir placé en (3, 5) page (haut-gauche)
+    # doit se retrouver en haut-gauche du rendu final, quelle que soit
+    # l'orientation de la photo d'origine (test sur les 4 rotations).
+    import numpy as np
+    from PIL import Image as PILImage
+    from PIL import ImageDraw
+
+    from qcm_papier.scanner import Matrix, PixelImage
+
+    for rot in (0, 90, 180, 270):
+        W, H = (40, 20) if rot in (90, 270) else (20, 40)
+        m = Matrix.compose(W / 2, H / 2, 1.0, rot, 10, 20)
+        ix, iy = m.apply(3, 5)
+        img = PILImage.new("RGB", (W, H), "white")
+        ImageDraw.Draw(img).ellipse([ix - 2, iy - 2, ix + 2, iy + 2], fill="black")
+        p = ScannedPage()
+        p.matrix_inv = m
+        p.img = PixelImage(img)
+        out = render_marked_page(p).convert("RGB")
+        a = np.asarray(out)
+        ys, xs = np.where((a[:, :, 0] < 100) & (a[:, :, 1] < 100) & (a[:, :, 2] < 100))
+        assert abs(xs.mean() - 3) <= 1.5, f"rot {rot}: x={xs.mean()}"
+        assert abs(ys.mean() - 5) <= 1.5, f"rot {rot}: y={ys.mean()}"
+        assert out.width == 20 and out.height == 40  # page portrait redressée

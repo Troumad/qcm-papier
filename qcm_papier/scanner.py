@@ -1470,6 +1470,51 @@ def _mark_color(mark: dict) -> str:
     return "yellow"
 
 
+def upright_quarter_turn(page: ScannedPage) -> int:
+    """Quart(s) de tour à appliquer à l'image pour la redresser (0, 1, 2 ou 3).
+
+    L'orientation est portée par la matrice page→canvas : on y lit le
+    vecteur image du bord « bas » de la page (Ox page). Si ce vecteur
+    pointe vers le haut de l'image, la page est droite ; vers la
+    droite/gauche/bas, il faut tourner l'image de 1/2/3 quarts.
+    """
+    m = page.matrix_inv
+    if m is None:
+        return 0
+    # Vecteur image du vecteur (1, 0) page : (a, b) de la matrice inverse.
+    ax, ay = m.a, m.b
+    if abs(ay) <= abs(ax):
+        return 0 if ax > 0 else 2  # droite ou tête en bas
+    # Le bord bas de la page pointe verticalement dans l'image.
+    # Pillow : ROTATE_90 = 90° anti-horaire ; le quart retourné est
+    # déduit du sens dans lequel la page est penchée.
+    if ay > 0:
+        # Bas de page vers le bas de l'image : tourner de 90° horaire.
+        return 1
+    # Bas de page vers le haut de l'image : tourner de 90° anti-horaire.
+    return 3
+
+
+def upright_image(page: ScannedPage):
+    """Renvoie l'image brute de la page redressée (repères 3 points à gauche).
+
+    Si la matrice est absente, l'image est renvoyée telle quelle.
+    """
+    base = page.img.img if page.img is not None else None
+    if base is None:
+        return None
+    from PIL import Image as PILImage
+
+    q = upright_quarter_turn(page)
+    if q == 0:
+        return base
+    return base.transpose(
+        PILImage.Transpose.ROTATE_90
+        if q == 1
+        else (PILImage.Transpose.ROTATE_180 if q == 2 else PILImage.Transpose.ROTATE_270)
+    )
+
+
 def render_marked_page(page: ScannedPage, max_width: int = 0):
     """Renvoie une image Pillow de la page avec l'overlay des cases.
 
@@ -1518,6 +1563,15 @@ def render_marked_page(page: ScannedPage, max_width: int = 0):
                 draw.rectangle(bbox, outline=outline, fill=fill, width=2)
 
     img = PILImage.alpha_composite(img, overlay)
+    # Redresser l'image finale (repères 3 points à gauche) : l'overlay a été
+    # dessiné sur l'image brute, on pivote l'ensemble d'un même quart de tour.
+    quarter = upright_quarter_turn(page)
+    if quarter == 1:
+        img = img.transpose(PILImage.Transpose.ROTATE_90)
+    elif quarter == 2:
+        img = img.transpose(PILImage.Transpose.ROTATE_180)
+    elif quarter == 3:
+        img = img.transpose(PILImage.Transpose.ROTATE_270)
 
     if max_width and max_width > 0 and img.width > max_width:
         ratio = max_width / img.width
