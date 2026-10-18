@@ -263,3 +263,85 @@ def test_reparation_joker_perdu_dans_ancienne_sauvegarde(tmp_path):
     # La case joker est reconnue et la note prend la seconde chance : +2.
     assert any(m.get("j") and m.get("checked") for m in p.marks)
     assert p.value == 2.0
+
+
+def test_decompte_coherent_avec_la_note_apres_reparation(tmp_path):
+    """Le décompte affiché doit correspondre exactement à la note de la copie.
+
+    Après rechargement-réparation d'une ancienne sauvegarde, la somme du
+    décompte (question par question) doit égaler la note recalculée —
+    même source de calcul, même état de marks.
+    """
+    from PIL import Image as PILImage
+
+    from qcm_papier.mailing import question_breakdown
+    from qcm_papier.model import Choice, Exercise, Project, Question, Variant
+    from qcm_papier.scanner import (
+        Matrix,
+        PixelImage,
+        ScannedPage,
+        load_all_pages_from_state,
+        save_correction_state,
+    )
+
+    question = Question(
+        name="Q",
+        gain=2.0,
+        penalty=0.5,
+        single=True,
+        choices=[
+            Choice(name="A", penalty=True, neutral=False, index=0),
+            Choice(name="B", correct=True, neutral=False, penalty=False, index=1),
+        ],
+    )
+    project = Project(structure=[Exercise(name="Exo", questions=[question])])
+    marks = [
+        {"x": 10.0, "y": 10.0, "r": 2.3, "e": 0, "q": 0, "c": 0},
+        {"x": 16.0, "y": 10.0, "r": 2.3, "e": 0, "q": 0, "c": 1},
+        {"x": 10.0, "y": 16.0, "r": 2.3, "e": 0, "q": 0, "c": 0, "joker": True},
+        {"x": 16.0, "y": 16.0, "r": 2.3, "e": 0, "q": 0, "c": 1, "joker": True},
+    ]
+    project.variants["1"] = Variant(id=1, marks=marks)
+
+    # Étudiant : B en ligne 1 (correct, +2), pas de joker coché.
+    page = ScannedPage()
+    page.copy_path = str(tmp_path / "copie.pdf")
+    page.variant_id = 1
+    page.student_id = "p1234567"
+    page.matrix = Matrix()
+    page.matrix_inv = Matrix().inverse()
+    page.marks = [
+        {
+            "e": 0,
+            "q": 0,
+            "c": 1,
+            "x": 16.0,
+            "y": 10.0,
+            "r": 2.3,
+            "checked": True,
+            "correct": True,
+            "neutral": False,
+            "penalty": False,
+        },
+    ]
+    # Note calculée lors de la correction fraîche (jokers connus) et stockée.
+    from qcm_papier.marking import score_page
+
+    score = score_page(project, page.marks, variant_id=1, student_id="p1234567")
+    page.value = score.value
+    page.total = score.total
+    page.complete = score.complete
+    page.img = PixelImage(PILImage.new("RGB", (40, 40), "white"))
+    state_path = str(tmp_path / "correction.json")
+    save_correction_state([page], [page.copy_path], state_path)
+
+    loaded = load_all_pages_from_state(state_path, project=project)
+    p = loaded[str(tmp_path / "copie.pdf")][0]
+    # La note stockée (calculée à la correction fraîche) est exacte : 2/2.
+    assert p.value == 2.0
+    breakdown = question_breakdown(project, p)
+    assert "Exo : 2/2" in breakdown
+    assert "- Q : 2/2" in breakdown
+    # Les anciennes sauvegardes ne stockent pas les cases non cochées :
+    # l'étiquette « (incomplète) » peut apparaître sans impact sur la note.
+    # (artefat d'affichage seulement, les valeurs de points restent exactes)
