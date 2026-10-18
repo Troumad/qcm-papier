@@ -1759,8 +1759,10 @@ def _repair_joker_flags(page: ScannedPage, project) -> None:
             round(float(mark.get("x", 0)), 1),
             round(float(mark.get("y", 0)), 1),
         )
-        if key in index:
-            mark["j"] = index[key]
+        if key in index and index[key]:
+            # Convention : une case de première ligne n'a PAS de clé « j »
+            # (mark.get("j") is None). Seuls les vrais jokers portent j=True.
+            mark["j"] = True
             changed = True
     if not changed:
         return
