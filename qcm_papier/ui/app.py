@@ -4024,6 +4024,11 @@ class MarkedPageWindow(Gtk.Window):
         resized = display.resize((w, h), PILImage.LANCZOS)
         self.image.set_size_request(w, h)
         self.image.set_paintable(_img_to_texture(resized))
+        # Forcer le rafraîchissement : sans interaction (zoom), Gtk.Picture
+        # peut ne pas se redessiner quand la texture change entre deux pages
+        # (notamment quand les dimensions changent — image redressée).
+        self.image.queue_draw()
+        self.image.queue_resize()
 
     # ------------------------------------------------------------------
     # Alignement manuel des 5 repères d'orientation
