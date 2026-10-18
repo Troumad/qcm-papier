@@ -2621,6 +2621,12 @@ class QcmWindow(Gtk.ApplicationWindow):
             ratio = max_w / img.width
             img = img.resize((max_w, int(img.height * ratio)), PILImage.LANCZOS)
         self.marked_image.set_paintable(_img_to_texture(img))
+        # Même rafraîchissement forcé que la visionneuse : sans lui, le
+        # remplacement de texture peut ne pas se redessiner.
+        self.marked_image.queue_draw()
+        # Même rafraîchissement forcé que la visionneuse : sans lui, le
+        # remplacement de texture peut ne pas se redessiner.
+        self.marked_image.queue_draw()
 
     def _on_enlarge_page(self, _btn) -> None:
         idx = self.page_selector.get_selected()
@@ -3624,6 +3630,7 @@ class MarkedPageWindow(Gtk.Window):
         click_ctrl.set_button(1)
         click_ctrl.connect("pressed", self._on_image_click)
         self.image.add_controller(click_ctrl)
+        self._click_controller = click_ctrl
 
         # Menu latéral droit
         self.side = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
@@ -3969,6 +3976,11 @@ class MarkedPageWindow(Gtk.Window):
         self.zoom_label.set_text(f"{int(value * 100)} %")
         self._update_image()
 
+    def _image_controllers(self):
+        """Contrôleurs à ré-attacher quand le Gtk.Picture est reconstruit."""
+        ctrl = getattr(self, "_click_controller", None)
+        return [ctrl] if ctrl is not None else []
+
     def _update_image(self):
         from PIL import Image as PILImage
         from PIL import ImageDraw
@@ -4022,13 +4034,21 @@ class MarkedPageWindow(Gtk.Window):
         w = max(1, int(display.width * self._zoom))
         h = max(1, int(display.height * self._zoom))
         resized = display.resize((w, h), PILImage.LANCZOS)
+        # Reconstruire le Gtk.Picture à chaque image : sur certaines
+        # configurations GTK, remplacer la texture d'un Picture existant ne
+        # redessine pas (image qui n'apparaît qu'après un coup de zoom, page
+        # précédente qui reste affichée). Un widget neuf est infaillible.
+        self.scroll.set_child(None)
+        self.image = Gtk.Picture()
+        self.image.set_halign(Gtk.Align.START)
+        self.image.set_valign(Gtk.Align.START)
+        # Conserver les contrôleurs de clic (alignement manuel) sur le
+        # nouveau widget.
+        for controller in self._image_controllers():
+            self.image.add_controller(controller)
         self.image.set_size_request(w, h)
         self.image.set_paintable(_img_to_texture(resized))
-        # Forcer le rafraîchissement : sans interaction (zoom), Gtk.Picture
-        # peut ne pas se redessiner quand la texture change entre deux pages
-        # (notamment quand les dimensions changent — image redressée).
-        self.image.queue_draw()
-        self.image.queue_resize()
+        self.scroll.set_child(self.image)
 
     # ------------------------------------------------------------------
     # Alignement manuel des 5 repères d'orientation
