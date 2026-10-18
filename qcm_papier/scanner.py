@@ -1579,6 +1579,12 @@ def load_pages_from_file(path: str, dpi: int = 150) -> list[ScannedPage]:
         img = Image.open(path)
         img.load()  # Forcer la lecture en mémoire (sinon Pillow est paresseux
         # et peut relire un fichier modifié trop tard).
+        # Appliquer l'orientation EXIF (photos de téléphone) : sans ça, les
+        # pixels restent « tournés » et les images sauvegardées dans la
+        # correction apparaissent de travers.
+        from PIL import ImageOps
+
+        img = ImageOps.exif_transpose(img)
         pages.append(ScannedPage(img=PixelImage(img)))
     return pages
 

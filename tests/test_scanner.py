@@ -345,3 +345,25 @@ def test_decompte_coherent_avec_la_note_apres_reparation(tmp_path):
     # Les anciennes sauvegardes ne stockent pas les cases non cochées :
     # l'étiquette « (incomplète) » peut apparaître sans impact sur la note.
     # (artefat d'affichage seulement, les valeurs de points restent exactes)
+
+
+def test_image_exif_est_chargee_droite(tmp_path):
+    """Une photo avec orientation EXIF 6 (90°) est chargée droite.
+
+    Sans exif_transpose, les pixels restent tournés et l'image
+    sauvegardée dans la correction apparaît de travers.
+    """
+    from PIL import Image as PILImage
+
+    from qcm_papier.scanner import load_pages_from_file
+
+    # Image brute « paysage » avec l'EXIF qui dit « tourner de 90° ».
+    img = PILImage.new("RGB", (40, 20), "white")
+    exif = PILImage.Exif()
+    exif[274] = 6  # Orientation : tourner 90° CV
+    path = str(tmp_path / "photo.jpg")
+    img.save(path, exif=exif)
+    pages = load_pages_from_file(path, dpi=150)
+    assert len(pages) == 1
+    assert pages[0].img.width == 20  # pivotée : 40x20 -> 20x40
+    assert pages[0].img.height == 40
