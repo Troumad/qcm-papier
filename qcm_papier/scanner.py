@@ -1728,7 +1728,51 @@ def save_correction_state(pages: list[ScannedPage], copy_paths: list[str], path:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-def load_all_pages_from_state(state_path: str) -> dict[str, list[ScannedPage]]:
+def _repair_joker_flags(page: ScannedPage, project) -> None:
+    """Restaure les drapeaux « j » (joker) perdus par les anciennes sauvegardes.
+
+    Les sauvegardes faites avant la correction du bug omettaient la clé
+    « j » des marks : les cases de la ligne seconde chance n'étaient plus
+    reconnues au rechargement et le scoring ne comptait que la première
+    ligne. On identifie chaque case par (e, q, c) + position (x, y) dans
+    la variante du projet, puis on recalcule la note de la page.
+    """
+    if project is None or page.variant_id is None:
+        return
+    variant = project.variants.variant(page.variant_id)
+    if variant is None:
+        return
+    index: dict[tuple, bool] = {}
+    for vm in variant.marks:
+        if vm.get("r") is None:
+            continue
+        key = (vm.get("e"), vm.get("q"), vm.get("c"), round(float(vm.get("x", 0)), 1), round(float(vm.get("y", 0)), 1))
+        index[key] = bool(vm.get("joker"))
+    changed = False
+    for mark in page.marks:
+        if mark.get("r") is None or "j" in mark:
+            continue
+        key = (
+            mark.get("e"),
+            mark.get("q"),
+            mark.get("c"),
+            round(float(mark.get("x", 0)), 1),
+            round(float(mark.get("y", 0)), 1),
+        )
+        if key in index and index[key]:
+            # Convention : une case de première ligne n'a PAS de clé « j »
+            # (mark.get("j") is None). Seuls les vrais jokers portent j=True.
+            mark["j"] = True
+            changed = True
+    if not changed:
+        return
+    score = score_page(project, page.marks, variant_id=page.variant_id, student_id=page.student_id)
+    page.value = score.value
+    page.total = score.total
+    page.complete = score.complete
+
+
+def load_all_pages_from_state(state_path: str, project=None) -> dict[str, list[ScannedPage]]:
     """Charge toutes les pages corrigées depuis une sauvegarde d'état.
 
     Renvoie un dict {chemin de copie: [pages]} avec, pour chaque page,
@@ -1736,6 +1780,10 @@ def load_all_pages_from_state(state_path: str) -> dict[str, list[ScannedPage]]:
     Aucun rescan des copies : les images de la sauvegarde sont
     directement réutilisées. La clé « file » de chaque entrée est
     ramenée en chemin absolu.
+
+    Avec ``project``, les sauvegardes anciennes sont réparées : les
+    drapeaux joker perdus sont restaurés depuis la variante et la note
+    de la page est recalculée (voir ``_repair_joker_flags``).
     """
     import json
 
@@ -1760,6 +1808,7 @@ def load_all_pages_from_state(state_path: str) -> dict[str, list[ScannedPage]]:
             img_path = os.path.join(img_dir, img_name)
             if os.path.exists(img_path):
                 page.img = PixelImage(Image.open(img_path))
+        _repair_joker_flags(page, project)
         out.setdefault(cp, []).append(page)
     return out
 

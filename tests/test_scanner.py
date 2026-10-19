@@ -169,3 +169,97 @@ def test_load_all_pages_from_state(tmp_path):
     assert p.student_id == "p1234567"
     assert p.value == 12.0
     assert p.img is not None
+
+
+def test_reparation_joker_perdu_dans_ancienne_sauvegarde(tmp_path):
+    """Une ancienne sauvegarde sans « j » est réparée au rechargement.
+
+    La case joker cochée doit être reconnue (ligne seconde chance) et
+    la note recalculée : première ligne pénalisante → -0,5 ; joker
+    correct → +2.
+    """
+    import json
+
+    from qcm_papier.model import Choice, Exercise, Project, Question
+    from qcm_papier.scanner import (
+        Matrix,
+        PixelImage,
+        ScannedPage,
+        load_all_pages_from_state,
+        save_correction_state,
+    )
+
+    question = Question(
+        name="Q",
+        gain=2.0,
+        penalty=0.5,
+        single=True,
+        choices=[
+            Choice(name="A", penalty=True, neutral=False, index=0),
+            Choice(name="B", correct=True, neutral=False, penalty=False, index=1),
+        ],
+    )
+    project = Project(structure=[Exercise(name="Exo", questions=[question])])
+
+    # Variante 1 : deux cases ligne 1 + deux cases joker (y + 6).
+    marks = [
+        {"x": 10.0, "y": 10.0, "r": 2.3, "e": 0, "q": 0, "c": 0},
+        {"x": 16.0, "y": 10.0, "r": 2.3, "e": 0, "q": 0, "c": 1},
+        {"x": 10.0, "y": 16.0, "r": 2.3, "e": 0, "q": 0, "c": 0, "joker": True},
+        {"x": 16.0, "y": 16.0, "r": 2.3, "e": 0, "q": 0, "c": 1, "joker": True},
+    ]
+    from qcm_papier.model import Variant
+
+    project.variants["1"] = Variant(id=1, marks=marks)
+
+    # Page : l'étudiant a coché A (ligne 1) et B (joker).
+    page = ScannedPage()
+    page.copy_path = str(tmp_path / "copie.pdf")
+    page.variant_id = 1
+    page.matrix = Matrix()
+    page.matrix_inv = Matrix().inverse()
+    page.marks = [
+        {
+            "e": 0,
+            "q": 0,
+            "c": 0,
+            "x": 10.0,
+            "y": 10.0,
+            "r": 2.3,
+            "checked": True,
+            "correct": False,
+            "neutral": False,
+            "penalty": True,
+        },
+        {
+            "e": 0,
+            "q": 0,
+            "c": 1,
+            "x": 16.0,
+            "y": 16.0,
+            "r": 2.3,
+            "checked": True,
+            "correct": True,
+            "neutral": False,
+            "penalty": False,
+        },
+    ]
+    from PIL import Image as PILImage
+
+    page.img = PixelImage(PILImage.new("RGB", (40, 40), "white"))
+    state_path = str(tmp_path / "correction.json")
+    save_correction_state([page], [page.copy_path], state_path)
+
+    # Simuler l'ancien bug : retirer les « j » de la sauvegarde.
+    with open(state_path, encoding="utf-8") as f:
+        data = json.load(f)
+    for m in data["copies"][0]["page"]["marks"]:
+        m.pop("j", None)
+    with open(state_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    loaded = load_all_pages_from_state(state_path, project=project)
+    p = loaded[str(tmp_path / "copie.pdf")][0]
+    # La case joker est reconnue et la note prend la seconde chance : +2.
+    assert any(m.get("j") and m.get("checked") for m in p.marks)
+    assert p.value == 2.0
