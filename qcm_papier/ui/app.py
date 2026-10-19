@@ -3860,6 +3860,7 @@ class MarkedPageWindow(Gtk.Window):
             self.lbl_malus_hint.set_text("")
         self.zoom_scale.set_value(self._zoom)
         self.zoom_label.set_text(f"{int(self._zoom * 100)} %")
+        self._update_image()
         self._update_page_breakdown(page)
 
     def _update_page_breakdown(self, page) -> None:
