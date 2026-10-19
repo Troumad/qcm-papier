@@ -27,6 +27,8 @@
 
   // Les pages ont changé : la notation des réponses libres se recharge.
   const pagesChanged = () => document.dispatchEvent(new CustomEvent("qcm:correction-refreshed"));
+  // Fin d'un envoi de mails : la colonne Envoi et l'état du projet changent.
+  document.addEventListener("qcm:mail-done", () => guard(() => refresh()));
 
   function schedulePoll() {
     clearTimeout(pollTimer);
@@ -83,6 +85,18 @@
     return `${r.file} v${r.variant} ${r.student_id || ""}${note}`;
   }
 
+  // Colonne Envoi : ✓ déjà envoyée, ✉ envoi individuel possible (adresse connue, copie corrigée).
+  function sendCell(r) {
+    if (r.mailed) return "✓";
+    if (!r.email || !r.aligned || r.variant === null) return "";
+    return el("button", {
+      type: "button",
+      title: `Envoyer la copie à ${r.email}`,
+      "aria-label": `Envoyer la copie à ${r.email}`,
+      onclick: (ev) => { ev.stopPropagation(); window.QCMMail.open(r.index); },
+    }, "✉");
+  }
+
   function renderResults() {
     const previous = current;
     const visible = sortedResults();
@@ -97,7 +111,8 @@
         el("td", {}, r.student),
         el("td", {}, r.note === null ? "" : r.note.toFixed(2)),
         el("td", {}, String(r.malus ?? 0)),
-        el("td", { class: r.failed ? "failed" : "" }, r.status));
+        el("td", { class: r.failed ? "failed" : "" }, r.status),
+        el("td", { class: "send", title: r.email || "" }, sendCell(r)));
       row.classList.toggle("selected", r.index === current);
       return row;
     }));

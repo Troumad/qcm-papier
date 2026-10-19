@@ -22,7 +22,19 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
-from .. import editing, generator, manual_grading, pdf_preview, pdf_writer, scanner, scodoc, scodoc_api, scodoc_config
+from .. import (
+    editing,
+    generator,
+    mail_config,
+    mailing,
+    manual_grading,
+    pdf_preview,
+    pdf_writer,
+    scanner,
+    scodoc,
+    scodoc_api,
+    scodoc_config,
+)
 from .. import project as project_mod
 from ..marking import score_page
 from ..model import Project
@@ -98,6 +110,10 @@ class Session:
         self.clair = CLAIR_DEFAULT
         self.job = Job()
         self.scodoc_client: scodoc_api.ScoDocClient | None = None
+        # Envoi des copies par mail : commandes et compte-rendu du dernier envoi.
+        self.mail_control: mailing.SendControl | None = None
+        self.mail_reports: list[dict[str, Any]] = []
+        self.mail_retrying = False
         # Sujet rendu pour l'aperçu, gardé entre deux pages affichées.
         self.preview_pdf: bytes | None = None
         self.variants_stale = False
@@ -258,7 +274,8 @@ class Session:
                 self.job.error = str(e)
             finally:
                 with self.lock:
-                    self.correction_revision += 1
+                    if kind != "mail":  # l'envoi des mails ne modifie pas la correction
+                        self.correction_revision += 1
                     if kind == "reprise" and not self.job.error:
                         self.saved_project_token = self.project_token()
                         self.saved_correction_revision = self.correction_revision
@@ -327,6 +344,7 @@ class Session:
             "student_id": page.student_id,
             "student": name or page.student_id or "",
             "email": page.student_email or "",
+            "mailed": bool(page.student_email) and page.student_email in self.project.mailed,
             "note": scanner.final_value(page) if page.matrix_inv is not None else None,
             "total": page.total,
             "complete": page.complete,
@@ -340,6 +358,162 @@ class Session:
     def results(self) -> list[dict[str, Any]]:
         with self.lock:
             return [self.page_info(i) for i in range(len(self.pages))]
+
+    # ------------------------------------------------------------------
+    # Envoi des copies par mail
+    # ------------------------------------------------------------------
+    def _marked_pages(self) -> list[tuple[str, scanner.ScannedPage]]:
+        return [(m.file_name, m.page) for m in self.pages]
+
+    def _ds_name(self) -> str:
+        settings = self.project.settings
+        return settings.evaluation_full or settings.evaluation_short
+
+    def mail_state(self) -> dict[str, Any]:
+        """Résumé avant envoi, progression et compte-rendu du dernier envoi."""
+        with self.lock:
+            recipients = mailing.group_by_email(self._marked_pages())
+            already = [r for r in recipients if r.email in self.project.mailed]
+            pending = [r for r in recipients if r.email not in self.project.mailed] or recipients
+            ds_name = self._ds_name()
+            try:
+                loaded = mail_config.load_account()
+                account = {**vars(loaded), "complete": loaded.complete}
+            except mail_config.MailConfigError as e:
+                account = {"complete": False, "error": str(e)}
+            running = self.job.running and self.job.kind == "mail"
+            return {
+                "recipients": len(pending),
+                "pages": sum(len(r.pages) for r in pending),
+                "already": len(already),
+                "total": len(recipients),
+                "account": account,
+                "ds_name": ds_name,
+                "subject": f"Votre copie corrigée — {ds_name}" if ds_name else "Votre copie corrigée",
+                "body": mailing.DEFAULT_BODY,
+                "running": running,
+                "retrying": running and self.mail_retrying,
+                "job": vars(self.job).copy() if self.job.kind == "mail" else None,
+                "reports": list(self.mail_reports),
+            }
+
+    def start_mail(
+        self,
+        password: str,
+        subject: str = "",
+        body: str = "",
+        include_breakdown: bool = True,
+        selftest: bool = False,
+        resend: bool = False,
+        index: int | None = None,
+        address: str = "",
+    ) -> None:
+        """Envoie les copies en arrière-plan (toutes, ou celle de la page ``index``).
+
+        Le mot de passe ne sert qu'à cet envoi : il n'est ni stocké ni renvoyé.
+        """
+        if not password:
+            raise ValueError("Mot de passe SMTP manquant : il est demandé à chaque envoi, jamais mémorisé.")
+        with self.lock:
+            if index is not None:
+                page = self.pages[index].page
+                email = (address or "").strip() or (page.student_email or "")
+                if not email:
+                    raise ValueError("Aucune adresse pour cette copie : levez l'anonymat ou saisissez une adresse.")
+                if page.matrix_inv is None or page.variant_id is None:
+                    raise ValueError("Copie non corrigée : rien à envoyer.")
+                name = f"{page.student_name or ''} {page.student_firstname or ''}".strip()
+                recipients = [mailing.Recipient(email=email, name=name, pages=[page])]
+            else:
+                recipients = mailing.group_by_email(self._marked_pages())
+                if not resend:
+                    recipients = [r for r in recipients if r.email not in self.project.mailed] or recipients
+            if selftest:
+                account = mail_config.load_account()
+                recipients = [
+                    mailing.Recipient(
+                        email=account.sender or account.username, name=f"[Test → {r.display}]", pages=r.pages
+                    )
+                    for r in recipients
+                ]
+            if not recipients:
+                raise ValueError("Aucun destinataire : chargez la table étudiants (levée d'anonymat) puis corrigez.")
+            project = self.project
+            ds_name = self._ds_name()
+            control = mailing.SendControl()
+            self.mail_control = control
+            self.mail_reports = []
+            self.mail_retrying = False
+        # Envoyés de cet envoi, reportés dans le projet sous verrou (le projet
+        # est lu par d'autres requêtes pendant l'envoi).
+        sent: set[str] = set()
+
+        def remember() -> None:
+            if not selftest:
+                with self.lock:
+                    project.mailed |= sent
+
+        def progress(i, total, ok, failed, retry=0, seconds=0) -> None:
+            remember()
+            self.mail_retrying = bool(retry)
+            self.job.done = i - 1
+            message = f"Envoi des copies {i}/{total} ({ok} envoyé(s), {failed} échec(s))"
+            if retry:
+                message += f" — essai {retry + 1} refusé" + (f", nouvel essai dans {seconds} s" if seconds else "")
+            self.job.message = message
+
+        def work() -> None:
+            try:
+                reports = mailing.send_all(
+                    recipients,
+                    subject or "Votre copie corrigée",
+                    body or mailing.DEFAULT_BODY,
+                    progress=progress,
+                    project=project,
+                    password=password,
+                    ds_name=ds_name,
+                    include_breakdown=include_breakdown,
+                    mailed=sent,
+                    control=control,
+                )
+                error = ""
+            except mailing.MailingError as e:
+                reports, error = e.reports, str(e)
+            remember()
+            ok = sum(1 for r in reports if r.sent)
+            with self.lock:
+                self.mail_reports = [
+                    {
+                        "email": r.recipient.email,
+                        "name": r.recipient.display,
+                        "sent": r.sent,
+                        "error": r.error,
+                        "kind": r.error_kind,
+                    }
+                    for r in reports
+                ]
+                self.mail_control = None
+                self.mail_retrying = False
+            self.job.done = len(reports)
+            remaining = len(recipients) - len(reports)
+            message = f"{ok} mail(s) envoyé(s), {len(reports) - ok} échec(s)"
+            if remaining:
+                message += f", {remaining} non contacté(s)"
+            self.job.message = message + (" — envoi annulé." if control.cancelled else ".")
+            if error:
+                raise mailing.MailingError(error)
+
+        self._start_job("mail", len(recipients), work)
+
+    def mail_cancel(self) -> None:
+        control = self.mail_control
+        if control is not None:
+            control.cancel()
+
+    def mail_skip(self) -> None:
+        control = self.mail_control
+        if control is not None:
+            control.skip()
 
     # ------------------------------------------------------------------
     # Scodoc

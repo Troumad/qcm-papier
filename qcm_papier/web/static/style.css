@@ -164,3 +164,10 @@ img.scodoc { display: block; max-width: 100%; margin: .5rem auto; }
 .manual-points { display: flex; flex-direction: column; gap: .35rem; }
 .manual-points input { width: 6rem; }
 button.link { border: none; background: none; color: var(--muted); padding: 0; text-decoration: underline; align-self: start; }
+
+/* Envoi des copies par mail */
+#dlg-mail { width: min(640px, 94vw); }
+#dlg-mail .mail-body { display: flex; flex-direction: column; gap: .3rem; margin: .6rem 0; }
+#dlg-mail textarea { width: 100%; box-sizing: border-box; font: inherit; }
+.mail-failures { margin: 0; padding-left: 1.2rem; color: var(--err); }
+#results td.send button { padding: 0 .4rem; }

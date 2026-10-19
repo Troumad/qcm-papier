@@ -21,7 +21,7 @@ from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFil
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from .. import editing, pdf_preview, scodoc_config
+from .. import editing, mail_config, pdf_preview, scodoc_config
 from ..scodoc_api import ScoDocError
 from .session import Session
 
@@ -77,8 +77,8 @@ def create_app(session: Session | None = None) -> FastAPI:
         modifying = request.method in {"POST", "PUT", "PATCH", "DELETE"}
         if s().job.running and (
             modifying
-            and not path.startswith("/api/settings/scodoc")
-            and path not in {"/api/scodoc/api/login", "/api/scodoc/api/logout"}
+            and not path.startswith(("/api/settings/scodoc", "/api/settings/mail"))
+            and path not in {"/api/scodoc/api/login", "/api/scodoc/api/logout", "/api/mail/cancel", "/api/mail/skip"}
             or path in {"/api/state/save", "/api/generate/bundle"}
         ):
             return JSONResponse(
@@ -426,6 +426,60 @@ def create_app(session: Session | None = None) -> FastAPI:
     def scodoc_settings_test() -> dict[str, Any]:
         departements = scodoc_config.connect().departements()
         return {"message": f"Connexion réussie : {len(departements)} département(s) visible(s)."}
+
+    # -- Compte mail (SMTP) et envoi des copies corrigées ----------------
+    def _mail_account_view() -> dict[str, Any]:
+        account = mail_config.load_account()
+        return {**vars(account), "complete": account.complete}
+
+    @app.get("/api/settings/mail")
+    def mail_settings() -> dict[str, Any]:
+        return _mail_account_view()
+
+    @app.put("/api/settings/mail")
+    def mail_settings_save(data: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        mail_config.save_account(
+            str(data.get("host", "")),
+            data.get("port", 587),
+            str(data.get("username", "")),
+            str(data.get("sender", "")),
+            starttls=bool(data.get("starttls", True)),
+        )
+        return _mail_account_view()
+
+    @app.delete("/api/settings/mail")
+    def mail_settings_delete() -> dict[str, Any]:
+        mail_config.delete_account()
+        return _mail_account_view()
+
+    @app.get("/api/mail")
+    def mail_state() -> dict[str, Any]:
+        return s().mail_state()
+
+    @app.post("/api/mail/send")
+    def mail_send(data: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        index = data.get("index")
+        s().start_mail(
+            str(data.get("password") or ""),
+            subject=str(data.get("subject") or ""),
+            body=str(data.get("body") or ""),
+            include_breakdown=bool(data.get("include_breakdown", True)),
+            selftest=bool(data.get("selftest", False)),
+            resend=bool(data.get("resend", False)),
+            index=None if index is None else int(index),
+            address=str(data.get("address") or ""),
+        )
+        return s().mail_state()
+
+    @app.post("/api/mail/cancel")
+    def mail_cancel() -> dict[str, Any]:
+        s().mail_cancel()
+        return {"ok": True}
+
+    @app.post("/api/mail/skip")
+    def mail_skip() -> dict[str, Any]:
+        s().mail_skip()
+        return {"ok": True}
 
     # -- Levée d'anonymat via l'API ScoDoc ------------------------------
     @app.get("/api/scodoc/api/status")

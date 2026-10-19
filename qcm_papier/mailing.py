@@ -30,6 +30,9 @@ MAX_RECONNECTS = 3
 CANCELLED = "Envoi annulé"
 
 
+DEFAULT_BODY = "Bonjour,\n\nVeuillez trouver en pièce jointe votre copie corrigée.\n\nCordialement."
+
+
 class MailingError(Exception):
     """Erreur d'envoi (compte non configuré, refus du serveur…).
 

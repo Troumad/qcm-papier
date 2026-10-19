@@ -66,3 +66,55 @@
     message("Compte ScoDoc supprimé (fichier de réglages et trousseau).", "status ok");
   }));
 })();
+
+// Compte mail (SMTP) pour l'envoi des copies : le mot de passe n'est jamais enregistré.
+(() => {
+  const { $, api, guard, onTab } = window.QCM;
+  const form = $("#mail-settings");
+  const deleteButton = $("#mail-delete");
+
+  function message(text, cls = "status") {
+    const status = $("#mail-settings-status");
+    status.className = cls;
+    status.textContent = text;
+  }
+
+  function show(account) {
+    form.elements.host.value = account.host || "";
+    form.elements.port.value = account.port || 587;
+    form.elements.username.value = account.username || "";
+    form.elements.sender.value = account.sender || "";
+    form.elements.starttls.checked = account.starttls !== false;
+    deleteButton.disabled = !account.host;
+    delete deleteButton.dataset.confirm;
+    deleteButton.textContent = "Supprimer le compte";
+  }
+
+  onTab("settings", () => guard(async () => show(await api("GET", "/api/settings/mail"))));
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    guard(async () => {
+      const { host, port, username, sender, starttls } = form.elements;
+      try {
+        show(await api("PUT", "/api/settings/mail", {
+          host: host.value, port: Number(port.value), username: username.value, sender: sender.value, starttls: starttls.checked,
+        }));
+        message("Compte mail enregistré.", "status ok");
+      } catch (error) {
+        message(error.message, "status error");
+      }
+    });
+  });
+
+  // Suppression en deux clics (pas de boîte de confirmation du navigateur).
+  deleteButton.addEventListener("click", () => guard(async () => {
+    if (!deleteButton.dataset.confirm) {
+      deleteButton.dataset.confirm = "1";
+      deleteButton.textContent = "Confirmer la suppression";
+      return;
+    }
+    show(await api("DELETE", "/api/settings/mail"));
+    message("Compte mail supprimé.", "status ok");
+  }));
+})();

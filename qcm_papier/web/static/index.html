@@ -153,6 +153,7 @@
       <button id="btn-run">Lancer la correction</button>
       <button id="btn-students">Table étudiants (Scodoc)…</button>
       <button id="btn-export">Exporter les notes Scodoc…</button>
+      <button id="btn-mail">Envoyer les copies par mail…</button>
       <button id="btn-remove">Supprimer…</button>
       <button id="btn-save-state">Sauvegarder…</button>
       <button id="btn-load-state">Recharger…</button>
@@ -180,7 +181,7 @@
       <table id="results">
         <thead><tr>
           <th data-sort="file">Fichier</th><th data-sort="variant">Variante</th>
-          <th data-sort="student">Étudiant</th><th data-sort="note">Note</th><th data-sort="malus">Malus</th><th data-sort="status">Statut</th>
+          <th data-sort="student">Étudiant</th><th data-sort="note">Note</th><th data-sort="malus">Malus</th><th data-sort="status">Statut</th><th data-sort="mailed">Envoi</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -233,6 +234,23 @@
         <button type="button" id="scodoc-delete">Supprimer le compte</button>
       </div>
       <p id="scodoc-settings-status" class="status"></p>
+    </form>
+    <form id="mail-settings" class="panel">
+      <h3>Compte mail (envoi des copies corrigées)</h3>
+      <p class="muted">Serveur d'envoi (SMTP) utilisé pour envoyer à chaque étudiant sa copie corrigée.
+        Le mot de passe n'est jamais enregistré : il est demandé à chaque envoi.</p>
+      <div class="grid-form">
+        <label>Serveur SMTP <input name="host" placeholder="smtp.univ.fr" required></label>
+        <label>Port <input name="port" type="number" min="1" max="65535" value="587" required></label>
+        <label>Identifiant <input name="username" autocomplete="off" required></label>
+        <label>Expéditeur <input name="sender" type="email" placeholder="prenom.nom@univ.fr" required></label>
+      </div>
+      <label class="check"><input name="starttls" type="checkbox" checked> Chiffrement STARTTLS (port 587) — le port 465 chiffre toujours (SSL)</label>
+      <div class="row wrap">
+        <button type="submit">Enregistrer</button>
+        <button type="button" id="mail-delete">Supprimer le compte</button>
+      </div>
+      <p id="mail-settings-status" class="status"></p>
     </form>
   </section>
 
@@ -302,6 +320,29 @@
   </label>
   <p id="export-status" class="status"></p>
   <div class="row end"><button id="btn-do-export">Exporter</button><button data-close>Fermer</button></div>
+</dialog>
+
+<!-- Envoi des copies corrigées par mail -->
+<dialog id="dlg-mail" aria-labelledby="mail-title">
+  <h2 id="mail-title">Envoyer les copies par mail</h2>
+  <p id="mail-summary" class="status"></p>
+  <p id="mail-account" class="status"></p>
+  <div class="grid-form mail-form">
+    <label id="mail-address-label">Adresse de réception <input id="mail-address" type="email"></label>
+    <label>Objet <input id="mail-subject"></label>
+  </div>
+  <label class="mail-body">Message <textarea id="mail-body" rows="6"></textarea></label>
+  <label class="check"><input type="checkbox" id="mail-breakdown" checked> Inclure le décompte des points par question</label>
+  <label class="check"><input type="checkbox" id="mail-selftest"> Test : m'envoyer ces mails à moi-même (expéditeur), un par étudiant</label>
+  <label class="check" id="mail-resend-label"><input type="checkbox" id="mail-resend"> Renvoyer aussi aux étudiants ayant déjà reçu leur copie</label>
+  <label>Mot de passe SMTP <input id="mail-password" type="password" autocomplete="off" placeholder="saisi à chaque envoi, jamais mémorisé"></label>
+  <p id="mail-status" class="status" role="status"></p>
+  <ul id="mail-failures" class="mail-failures"></ul>
+  <div class="row end">
+    <button id="mail-skip" hidden>Passer au suivant</button>
+    <button id="mail-close">Fermer</button>
+    <button id="mail-send">Envoyer</button>
+  </div>
 </dialog>
 
 <!-- Confirmation de suppression -->
@@ -402,5 +443,6 @@
 <script src="/static/manual.js"></script>
 <script src="/static/preview.js"></script>
 <script src="/static/settings.js"></script>
+<script src="/static/mail.js"></script>
 </body>
 </html>
