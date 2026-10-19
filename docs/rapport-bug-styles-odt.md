@@ -50,15 +50,25 @@ personnalisés portant au minimum :
    créer des styles plats du même nom.
 2. Toujours préserver `style:default-outline-level` et `style:class="chapter"` :
    c'est la sémantique, pas le nom, qui fait un titre ODF.
-3. Rappel de structure d'archive ODF : `mimetype` en première entrée,
+3. Un paragraphe peut porter un style de titre sans être un élément titre :
+   la conversion doit produire de vrais éléments `<text:h text:outline-level="N">`,
+   pas seulement appliquer le style à un `<text:p>`. Symptôme observé : le style
+   Titre est appliqué, la mise en forme est correcte à l'écran, mais les titres
+   n'apparaissent ni dans le navigateur ni dans l'index (3 titres sur 22
+   manquaient, dont le tout premier).
+4. Rappel de structure d'archive ODF : `mimetype` en première entrée,
    stocké sans compression.
-4. Les agents capables de lire/écrire le XML ODF disposent de tout le
+5. Les agents capables de lire/écrire le XML ODF disposent de tout le
    nécessaire pour appliquer ces règles sans passer par LibreOffice — autant
    les systématiser pour éviter de la dette de mise en forme chez les
    utilisateurs.
 
 ## Reproduction
 
-Voir commit `bbf9ce2` du dépôt `Troumad/qcm-papier` : le fichier original
-contenait 12 paragraphes `Heading2`, 5 `Heading1`, 4 `Heading3`, 2
-`Heading4`, tous sans niveau de plan.
+Voir commits `bbf9ce2`, `a78a240` et `59084b5` du dépôt `Troumad/qcm-papier` :
+
+- le fichier original contenait 12 paragraphes `Heading2`, 5 `Heading1`,
+  4 `Heading3`, 2 `Heading4`, tous sans niveau de plan ;
+- après correction des styles, 3 titres restaient invisibles dans le
+  navigateur et l'index car codés comme des `<text:p>` avec style de titre
+  au lieu de `<text:h>` (voir recommandation 3).
