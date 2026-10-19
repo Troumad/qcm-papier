@@ -488,6 +488,28 @@ Onglet **Correction** → bouton **Exporter les notes Scodoc…**
 - Option « Monter les notes négatives à 0 » : les notes négatives sont
   ramenées à 0.
 
+#### Envoi des copies corrigées par mail
+
+Après la levée d'anonymat (l'adresse mail vient de la table étudiants
+Scodoc), chaque étudiant peut recevoir sa copie corrigée en PNG, avec en
+option le décompte des points par question, le malus et la note sur 20.
+
+- Réglez une fois le compte d'envoi : bouton **Compte mail…** (GTK) ou
+  onglet **Réglages** (web) — serveur SMTP, port, identifiant, expéditeur.
+  Le port 587 utilise STARTTLS, le port 465 SSL. Le mot de passe n'est
+  **jamais enregistré** : il est demandé à chaque envoi, et il n'est jamais
+  envoyé sur une connexion non chiffrée.
+- Onglet **Correction** → **Envoyer les copies par mail…** : un mail
+  individuel par étudiant. La case « Test » envoie les mêmes mails à
+  l'expéditeur pour vérifier le rendu. Le bouton ✉ d'une ligne envoie une
+  seule copie, éventuellement à une autre adresse.
+- Les copies envoyées sont mémorisées dans le projet (coche ✓) : une relance
+  ne reprend que les étudiants qui n'ont pas reçu leur copie.
+- Si le serveur limite le débit (erreur 4xx), l'envoi réessaie toutes les
+  10 s ; **Passer au suivant** abandonne ce destinataire. Une adresse refusée
+  (erreur 5xx) n'est pas réessayée. **Annuler l'envoi** s'arrête après le
+  mail en cours et affiche le compte-rendu.
+
 #### Alignement manuel des repères
 
 Si une copie est mal scannée et que les 5 repères d'orientation ne sont pas
