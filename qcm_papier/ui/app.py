@@ -118,22 +118,21 @@ def _img_to_surface(img) -> object:
     redessine pas (GTK 4.24 / Plasma par exemple). Renvoie None si
     pycairo n'est pas disponible (l'appelant replie sur Gtk.Picture).
     """
-    import io
-
     try:
         import cairo
     except ImportError:
         return None
 
-    buf = io.BytesIO()
-    img.convert("RGBA").save(buf, format="png")
-    buf.seek(0)
     from PIL import Image as PILImage
 
-    data = PILImage.open(buf).convert("RGBA").tobytes("raw", "BGRA")
-    return cairo.ImageSurface.create_for_data(
-        bytearray(data), cairo.Format.ARGB32, img.width, img.height, img.width * 4
-    )
+    data = PILImage.Image.frombytes("RGBA", img.size, img.convert("RGBA").tobytes()).tobytes("raw", "BGRA")
+    buf = bytearray(data)
+    surface = cairo.ImageSurface.create_for_data(buf, cairo.Format.ARGB32, img.width, img.height, img.width * 4)
+    # create_for_data ne copie pas les données : le buffer doit rester
+    # vivant aussi longtemps que la surface, sinon le dessin lit de la
+    # mémoire libérée (affichage figé/aléatoire). On attache la référence.
+    surface._keepalive = buf
+    return surface
 
 
 def _label_font(size: int = 16):
