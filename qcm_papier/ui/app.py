@@ -130,9 +130,8 @@ def _img_to_surface(img) -> object:
     surface = cairo.ImageSurface.create_for_data(buf, cairo.Format.ARGB32, img.width, img.height, img.width * 4)
     # create_for_data ne copie pas les données : le buffer doit rester
     # vivant aussi longtemps que la surface, sinon le dessin lit de la
-    # mémoire libérée (affichage figé/aléatoire). On attache la référence.
-    surface._keepalive = buf
-    return surface
+    # mémoire libérée (affichage figé/aléatoire). On renvoie les deux.
+    return surface, buf
 
 
 def _label_font(size: int = 16):
@@ -4070,7 +4069,7 @@ class MarkedPageWindow(Gtk.Window):
         w = max(1, int(display.width * self._zoom))
         h = max(1, int(display.height * self._zoom))
         resized = display.resize((w, h), PILImage.LANCZOS)
-        self._display_surface = _img_to_surface(resized)
+        self._display_surface, self._surface_buffer = _img_to_surface(resized)
         self.image.set_size_request(w, h)
         self.image.queue_draw()
 
