@@ -3039,9 +3039,8 @@ class QcmWindow(Gtk.ApplicationWindow):
     def _on_mail_account(self, _btn) -> None:
         """Ouvre le dialogue de configuration du compte mail (envoi des copies).
 
-        Serveur, port, login, expéditeur et mot de passe (saisie masquée).
-        Le mot de passe est rangé dans le trousseau du système, jamais écrit
-        dans un fichier ; les autres réglages sont mémorisés durablement.
+        Serveur, port, login et expéditeur sont mémorisés durablement. Le mot
+        de passe n'est jamais stocké : il est saisi à chaque envoi.
         """
         win = Gtk.Window(title="Compte mail (envoi des copies)", transient_for=self, modal=True, default_width=760)
         main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
@@ -3077,7 +3076,7 @@ class QcmWindow(Gtk.ApplicationWindow):
         entry_sender.set_hexpand(True)
         entry_sender.set_width_chars(48)
         entry_sender.set_placeholder_text("prenom.nom@univ.fr")
-        chk_starttls = Gtk.CheckButton(label="Chiffrement STARTTLS")
+        chk_starttls = Gtk.CheckButton(label="Chiffrement STARTTLS (port 587) — le port 465 chiffre toujours (SSL)")
         chk_starttls.set_active(True)
 
         widgets = [

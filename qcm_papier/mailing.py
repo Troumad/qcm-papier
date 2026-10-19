@@ -2,7 +2,8 @@
 
 Les pages corrigées sont rendues en PNG (overlay vert/rouge, comme dans
 l'interface) et envoyées en pièces jointes, une adresse par étudiant.
-Le compte SMTP vient de ``mail_config`` (mot de passe dans le trousseau).
+Le compte SMTP vient de ``mail_config`` ; le mot de passe est saisi à
+chaque envoi et n'est jamais stocké.
 """
 
 from __future__ import annotations
@@ -156,10 +157,7 @@ def question_breakdown(project, page) -> str:
             ex_total += total
             label = question.name or f"Question {q + 1}"
             flag = "" if ok else " (incomplète)"
-            if question.manual:
-                q_lines.append(f"  - {label} : {value:g}/{total:g}{flag}")
-            else:
-                q_lines.append(f"  - {label} : {value:g}/{total:g}{flag}")
+            q_lines.append(f"  - {label} : {value:g}/{total:g}{flag}")
         if q_lines:
             lines.append(f"{exercise.name or f'Exercice {i + 1}'} : {ex_value:g}/{ex_total:g}")
             lines.extend(q_lines)
@@ -169,9 +167,9 @@ def question_breakdown(project, page) -> str:
 def note_line(page) -> str:
     """Ligne de résumé de la note d'une page : « note : X/T (Y/20) ».
 
-    La note ramenée sur 20 n'est ajoutée que si le total du QCM n'est
-    pas déjà 20. ``with_malus`` ajoute le détail du malus quand il est
-    non nul.
+    Le détail du malus et la note finale sont ajoutés quand le malus est
+    non nul ; la note ramenée sur 20 seulement si le total du QCM n'est
+    pas déjà 20.
     """
     from . import marking, scanner
 
@@ -186,14 +184,6 @@ def note_line(page) -> str:
         sur20 = marking.scale_note(note or 0.0, total, note_max=20.0, notemax=total)
         txt += f" — ramenée sur 20 : {sur20:.2f}/20"
     return txt
-
-
-def malus_line(page) -> str:
-    """Ligne de résumé du malus et de la note d'une page (vide si pas de malus)."""
-    malus = float(getattr(page, "malus", 0.0) or 0.0)
-    if not malus:
-        return ""
-    return note_line(page)
 
 
 def build_message(
