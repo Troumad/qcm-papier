@@ -110,6 +110,30 @@ def _img_to_texture(img) -> object:
     return Gdk.Texture.new_from_bytes(GLib.Bytes.new(buf.getvalue()))
 
 
+def _img_to_surface(img) -> object:
+    """Convertit une image Pillow en Cairo ImageSurface (rendu logiciel).
+
+    Contrairement à Gdk.Texture/Gtk.Picture (rendu GPU), Cairo dessine
+    toujours : contournement des environnements où Gtk.Picture ne se
+    redessine pas (GTK 4.24 / Plasma par exemple). Renvoie None si
+    pycairo n'est pas disponible (l'appelant replie sur Gtk.Picture).
+    """
+    try:
+        import cairo
+    except ImportError:
+        return None
+
+    from PIL import Image as PILImage
+
+    data = PILImage.Image.convert(img, "RGBA").tobytes("raw", "BGRA")
+    buf = bytearray(data)
+    surface = cairo.ImageSurface.create_for_data(buf, cairo.Format.ARGB32, img.width, img.height, img.width * 4)
+    # create_for_data ne copie pas les données : le buffer doit rester
+    # vivant aussi longtemps que la surface, sinon le dessin lit de la
+    # mémoire libérée (affichage figé/aléatoire). On renvoie les deux.
+    return surface, buf
+
+
 def _label_font(size: int = 16):
     """Police pour les pastilles de numéro des repères bleus.
 
@@ -2621,6 +2645,12 @@ class QcmWindow(Gtk.ApplicationWindow):
             ratio = max_w / img.width
             img = img.resize((max_w, int(img.height * ratio)), PILImage.LANCZOS)
         self.marked_image.set_paintable(_img_to_texture(img))
+        # Même rafraîchissement forcé que la visionneuse : sans lui, le
+        # remplacement de texture peut ne pas se redessiner.
+        self.marked_image.queue_draw()
+        # Même rafraîchissement forcé que la visionneuse : sans lui, le
+        # remplacement de texture peut ne pas se redessiner.
+        self.marked_image.queue_draw()
 
     def _on_enlarge_page(self, _btn) -> None:
         idx = self.page_selector.get_selected()
@@ -3606,7 +3636,11 @@ class MarkedPageWindow(Gtk.Window):
         self.scroll = Gtk.ScrolledWindow()
         self.scroll.set_hexpand(True)
         self.scroll.set_vexpand(True)
-        self.image = Gtk.Picture()
+        # DrawingArea + Cairo (rendu logiciel) : sur certains environnements
+        # (GTK 4.24 / Plasma), Gtk.Picture ne redessine pas quand sa texture
+        # change. Le rendu Cairo, lui, s'affiche toujours.
+        self.image = Gtk.DrawingArea()
+        self.image.set_draw_func(self._draw_image)
         # On épingle l'image en haut-gauche pour que les coordonnées de clic
         # soient toujours relatives au coin haut-gauche de l'image, quel que
         # soit le zoom ou la taille de la fenêtre (pas de centrage).
@@ -3624,6 +3658,7 @@ class MarkedPageWindow(Gtk.Window):
         click_ctrl.set_button(1)
         click_ctrl.connect("pressed", self._on_image_click)
         self.image.add_controller(click_ctrl)
+        self._click_controller = click_ctrl
 
         # Menu latéral droit
         self.side = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
@@ -3969,6 +4004,18 @@ class MarkedPageWindow(Gtk.Window):
         self.zoom_label.set_text(f"{int(value * 100)} %")
         self._update_image()
 
+    def _draw_image(self, _area, cr, _w, _h) -> None:
+        """Dessine l'image de la page (rendu Cairo, toujours affiché)."""
+        surface = getattr(self, "_display_surface", None)
+        if surface is None:
+            return
+        cr.set_source_surface(surface, 0, 0)
+        cr.paint()
+
+    # Le repli sans pycairo n'existe pas volontairement : pycairo fait
+    # partie des dépendances standard de PyGObject (paquet python3-gobject
+    # de Mageia). Sans lui, la visionneuse afficherait des pages vides.
+
     def _update_image(self):
         from PIL import Image as PILImage
         from PIL import ImageDraw
@@ -4022,8 +4069,9 @@ class MarkedPageWindow(Gtk.Window):
         w = max(1, int(display.width * self._zoom))
         h = max(1, int(display.height * self._zoom))
         resized = display.resize((w, h), PILImage.LANCZOS)
+        self._display_surface, self._surface_buffer = _img_to_surface(resized)
         self.image.set_size_request(w, h)
-        self.image.set_paintable(_img_to_texture(resized))
+        self.image.queue_draw()
 
     # ------------------------------------------------------------------
     # Alignement manuel des 5 repères d'orientation
