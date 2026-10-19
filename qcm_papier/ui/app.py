@@ -18,6 +18,7 @@ Modifié pour inclure les paramètres de génération dans l'onglet Génération
 from __future__ import annotations
 
 import os
+import threading
 
 import gi
 
@@ -150,6 +151,82 @@ def _label_font(size: int = 16):
             return ImageFont.truetype("DejaVuSans.ttf", size)
         except Exception:
             return ImageFont.load_default()
+
+
+class _MailSender:
+    """Envoi des mails dans un fil séparé, piloté depuis un dialogue GTK.
+
+    L'interface reste réactive : la progression et le résultat reviennent
+    dans la boucle GTK par ``GLib.idle_add``. Pendant l'envoi, le bouton
+    de fermeture annule (après le mail en cours) au lieu de fermer, et la
+    fenêtre ne peut pas être fermée tant que l'envoi n'est pas terminé.
+    """
+
+    def __init__(self, win, btn_send, btn_close, btn_skip=None) -> None:
+        self.win = win
+        self.btn_send = btn_send
+        self.btn_close = btn_close
+        self.btn_skip = btn_skip
+        self.control: mailing.SendControl | None = None
+        btn_close.connect("clicked", self._on_close_clicked)
+        win.connect("close-request", self._on_close_request)
+        if btn_skip is not None:
+            btn_skip.set_visible(False)
+            btn_skip.connect("clicked", lambda _b: self.control and self.control.skip())
+
+    @property
+    def running(self) -> bool:
+        return self.control is not None
+
+    def _on_close_clicked(self, _btn) -> None:
+        if self.control is not None:
+            self.control.cancel()
+            self.btn_close.set_label("Annulation…")
+            self.btn_close.set_sensitive(False)
+        else:
+            self.win.destroy()
+
+    def _on_close_request(self, _win) -> bool:
+        if self.control is not None:
+            self._on_close_clicked(None)
+            return True  # garder la fenêtre : le compte-rendu arrive à la fin de l'envoi
+        return False
+
+    def start(self, recipients, on_progress, on_done, **send_kwargs) -> None:
+        """Lance ``mailing.send_all`` dans un fil.
+
+        ``on_progress(i, total, ok, failed, retry=0, seconds=0)`` et
+        ``on_done(reports, error, cancelled)`` sont appelés dans la boucle GTK.
+        """
+        control = mailing.SendControl()
+        self.control = control
+        self.btn_send.set_sensitive(False)
+        self.btn_close.set_label("Annuler l'envoi")
+        self.btn_close.set_sensitive(True)
+
+        def progress(*args, **kwargs) -> None:
+            GLib.idle_add(lambda: on_progress(*args, **kwargs) and False)
+
+        def finish(reports, error) -> bool:
+            self.control = None
+            self.btn_close.set_label("Fermer")
+            self.btn_close.set_sensitive(True)
+            if self.btn_skip is not None:
+                self.btn_skip.set_visible(False)
+            on_done(reports, error, control.cancelled)
+            return False
+
+        def worker() -> None:
+            try:
+                reports = mailing.send_all(recipients, progress=progress, control=control, **send_kwargs)
+                error = ""
+            except mailing.MailingError as e:
+                reports, error = e.reports, str(e)
+            except Exception as e:  # noqa: BLE001 - affiché à l'utilisateur, l'envoi ne doit pas rester bloqué
+                reports, error = [], f"Erreur inattendue : {e}"
+            GLib.idle_add(finish, reports, error)
+
+        threading.Thread(target=worker, daemon=True).start()
 
 
 def _student_email(page) -> str:
@@ -2539,61 +2616,84 @@ class QcmWindow(Gtk.ApplicationWindow):
         btn_box.append(btn_cancel)
         btn_box.append(btn_send)
         main.append(btn_box)
+        sender = _MailSender(win, btn_send, btn_cancel)
 
         def _send(_b) -> None:
-            btn_send.set_sensitive(False)
             if not entry_pass.get_text():
                 self._warn_no_password(status, btn_send)
                 return
-            status.set_text("Envoi…")
-            self._ui_flush()
             body = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
             dest_email = entry_addr.get_text().strip() or email
             recipient = mailing.Recipient(email=dest_email, name=name, pages=[page])
             to = recipient
-            if chk_selftest.get_active():
+            selftest = chk_selftest.get_active()
+            if selftest:
                 try:
                     account = mail_config.load_account()
                 except mail_config.MailConfigError as e:
-                    status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
-                    btn_send.set_sensitive(True)
+                    status.set_markup(f"<span color='#F00'>Erreur : {GLib.markup_escape_text(str(e))}</span>")
                     return
                 to = mailing.Recipient(
                     email=account.sender or account.username,
                     name=f"[Test → {recipient.display}]",
                     pages=recipient.pages,
                 )
-            try:
-                reports = mailing.send_all(
-                    [to],
-                    entry_subject.get_text() or "Votre copie corrigée",
-                    body,
-                    project=self.project,
-                    ds_name=ds_name,
-                    include_breakdown=chk_breakdown.get_active(),
-                    password=entry_pass.get_text() or None,
-                )
-            except mailing.MailingError as e:
-                status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
-                btn_send.set_sensitive(True)
-                return
-            if reports and reports[0].sent:
-                if chk_selftest.get_active():
-                    status.set_markup(
-                        f"<span color='#080'>Mail de test envoyé à {to.email} " f"(copie de {name or email}).</span>"
-                    )
-                else:
-                    status.set_markup(f"<span color='#080'>Copie envoyée à {name or email}.</span>")
-                # Le mail est parti : désactiver Envoyer pour éviter un
-                # double envoi accidentel au même étudiant.
-                btn_send.set_sensitive(False)
-                return
-            status.set_markup(f"<span color='#C00'>Échec : {reports[0].error if reports else '?'}</span>")
-            btn_send.set_sensitive(True)
+            status.set_text("Connexion au serveur SMTP…")
 
-        btn_cancel.connect("clicked", lambda _b: win.destroy())
+            def _progress(i, total, ok, failed, retry=0, seconds=0) -> None:
+                if retry:
+                    status.set_text(f"Essai {retry + 1} refusé par le serveur, nouvel essai dans {seconds or 10} s…")
+                else:
+                    status.set_text("Envoi…")
+
+            def _done(reports, error, cancelled) -> None:
+                if reports and reports[0].sent:
+                    if selftest:
+                        status.set_markup(
+                            f"<span color='#080'>Mail de test envoyé à {GLib.markup_escape_text(to.email)} "
+                            f"(copie de {GLib.markup_escape_text(name or email)}).</span>"
+                        )
+                    else:
+                        status.set_markup(
+                            f"<span color='#080'>Copie envoyée à {GLib.markup_escape_text(name or email)}.</span>"
+                        )
+                        self._refresh_send_marks()
+                    # Le mail est parti : Envoyer reste désactivé pour éviter un
+                    # double envoi accidentel au même étudiant.
+                    return
+                if error:
+                    message = f"Erreur : {error}"
+                elif reports:
+                    message = f"Échec : {reports[0].error_kind} ({reports[0].error})"
+                else:
+                    message = "Envoi annulé." if cancelled else "Échec de l'envoi."
+                status.set_markup(f"<span color='#C00'>{GLib.markup_escape_text(message)}</span>")
+                btn_send.set_sensitive(True)
+
+            sender.start(
+                [to],
+                _progress,
+                _done,
+                subject=entry_subject.get_text() or "Votre copie corrigée",
+                body=body,
+                project=self.project,
+                ds_name=ds_name,
+                include_breakdown=chk_breakdown.get_active(),
+                password=entry_pass.get_text() or None,
+                # Un mail de test (à soi-même) ne marque pas la copie comme envoyée.
+                mailed=None if selftest else self.project.mailed,
+            )
+
         btn_send.connect("clicked", _send)
         win.present()
+
+    def _refresh_send_marks(self) -> None:
+        """Met à jour les coches ✓/✉ de la colonne Envoi du tableau des résultats."""
+        for row in self.results_store:
+            idx = row[7]
+            if isinstance(idx, int) and 0 <= idx < len(self.marked_pages):
+                _lbl, page = self.marked_pages[idx]
+                row[8] = _send_mark(page, self.project.mailed)
 
     def _on_result_selected(self, selection) -> None:
         model, tree_iter = selection.get_selected()
@@ -2837,15 +2937,18 @@ class QcmWindow(Gtk.ApplicationWindow):
 
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         btn_box.set_halign(Gtk.Align.END)
+        btn_skip = Gtk.Button(label="Passer au suivant")
+        btn_skip.get_style_context().add_class("destructive-action")
         btn_cancel = Gtk.Button(label="Fermer")
         btn_send = Gtk.Button(label="Envoyer")
         btn_send.get_style_context().add_class("suggested-action")
+        btn_box.append(btn_skip)
         btn_box.append(btn_cancel)
         btn_box.append(btn_send)
         main.append(btn_box)
+        sender = _MailSender(win, btn_send, btn_cancel, btn_skip)
 
         def _send(_b) -> None:
-            btn_send.set_sensitive(False)
             if not entry_pass.get_text():
                 self._warn_no_password(status, btn_send)
                 return
@@ -2854,12 +2957,12 @@ class QcmWindow(Gtk.ApplicationWindow):
             to_send = recipients
             if chk_resend.get_visible() and chk_resend.get_active():
                 to_send = all_recipients
-            if chk_selftest.get_active():
+            selftest = chk_selftest.get_active()
+            if selftest:
                 try:
                     account = mail_config.load_account()
                 except mail_config.MailConfigError as e:
-                    status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
-                    btn_send.set_sensitive(True)
+                    status.set_markup(f"<span color='#F00'>Erreur : {GLib.markup_escape_text(str(e))}</span>")
                     return
                 to_send = [
                     mailing.Recipient(
@@ -2870,67 +2973,43 @@ class QcmWindow(Gtk.ApplicationWindow):
                     for r in to_send
                 ]
             status.set_text("Connexion au serveur SMTP…")
-            self._ui_flush()
-            cancel_flag: list = []
-            skip_flag: list = []
-            btn_skip = Gtk.Button(label="Passer au suivant")
-            btn_skip.get_style_context().add_class("destructive-action")
-            btn_skip.set_visible(False)
-            btn_box.append(btn_skip)
-            btn_skip.connect("clicked", lambda _b: skip_flag.append(True))
-            btn_cancel.set_label("Annuler l'envoi")
-            btn_cancel.connect("clicked", lambda _b: cancel_flag.append(True))
 
-            def _progress(i, total, ok, failed, retry=0, seconds=0):
+            def _progress(i, total, ok, failed, retry=0, seconds=0) -> None:
                 base = f"Envoi {i}/{total} ({ok} envoyé(s), {failed} échec(s))"
                 if retry:
                     essai = retry + 1
                     base += (
-                        f" — essai {essai} refusé, nouvel essai dans {seconds or 10} s"
+                        f" — essai {essai} refusé, nouvel essai dans {seconds} s"
                         if seconds
                         else f" — essai {essai} refusé par le serveur"
                     )
-                    # Le bouton n'apparaît qu'au deuxième refus : au premier,
-                    # on laisse la reconnexion automatique faire son office.
-                    btn_skip.set_visible(retry >= 1)
-                else:
-                    btn_skip.set_visible(False)
+                btn_skip.set_visible(bool(retry))
                 self.marking_status.set_text(f"Envoi des copies : {base}…")
                 status.set_text(f"{base}…")
-                self._ui_flush()
 
-            self._ui_flush()
-            try:
-                reports = mailing.send_all(
-                    to_send,
-                    subject,
-                    body,
-                    project=self.project,
-                    ds_name=ds_name,
-                    include_breakdown=chk_breakdown.get_active(),
-                    password=entry_pass.get_text() or None,
-                    progress=_progress,
-                    mailed=self.project.mailed,
-                    cancelled=cancel_flag,
-                    skip=skip_flag,
-                )
-            except mailing.MailingError as e:
-                status.set_markup(f"<span color='#F00'>Erreur : {e}</span>")
-                btn_send.set_sensitive(True)
-                return
-            ok = sum(1 for r in reports if r.sent)
-            failed = [r for r in reports if not r.sent]
-            if failed:
+            def _done(reports, error, cancelled) -> None:
+                self._refresh_send_marks()
+                ok = sum(1 for r in reports if r.sent)
+                failed = [r for r in reports if not r.sent]
+                if not error and not failed and not cancelled:
+                    status.set_markup(f"<span color='#080'>{ok} mail(s) envoyé(s) avec succès.</span>")
+                    self.marking_status.set_text(f"Envoi terminé : {ok} copie(s) envoyée(s) par mail.")
+                    # Tout est parti : Envoyer reste désactivé pour éviter un
+                    # double envoi accidentel.
+                    return
+                lines = [f"{ok} envoyé(s), {len(failed)} échec(s)."]
+                if error:
+                    lines.append(f"\nErreur : {error}")
                 kinds: dict[str, list[str]] = {}
                 for r in failed:
                     kinds.setdefault(r.error_kind, []).append(r.recipient.display)
-                lines = [f"{ok} envoyé(s), {len(failed)} échec(s) :"]
                 for kind, names in kinds.items():
                     lines.append(f"\n• {kind} ({len(names)}) : {', '.join(names[:5])}")
                     if len(names) > 5:
                         lines.append(f"  … et {len(names) - 5} autre(s)")
-                if cancel_flag:
-                    lines.append("\nEnvoi interrompu : les destinataires restants n'ont pas été contactés.")
+                if cancelled or error:
+                    remaining = len(to_send) - len(reports)
+                    lines.append(f"\nEnvoi interrompu : {remaining} destinataire(s) restant(s) non contacté(s).")
                 status.set_markup(
                     "<span color='#C00'>" + "\n".join(GLib.markup_escape_text(li) for li in lines) + "</span>"
                 )
@@ -2938,23 +3017,22 @@ class QcmWindow(Gtk.ApplicationWindow):
                     f"Envoi interrompu : {ok} envoyé(s), {len(failed)} échec(s). "
                     "Les envoyés sont mémorisés : relancez pour ne reprendre que les absents."
                 )
-            else:
-                status.set_markup(f"<span color='#080'>{ok} mail(s) envoyé(s) avec succès.</span>")
-                self.marking_status.set_text(f"Envoi terminé : {ok} copie(s) envoyée(s) par mail.")
-                # Rafraîchir les coches ✓ du tableau avant de désactiver.
-                for row in self.results_store:
-                    idx = row[7]
-                    if isinstance(idx, int) and 0 <= idx < len(self.marked_pages):
-                        _lbl, page = self.marked_pages[idx]
-                        row[8] = _send_mark(page, self.project.mailed)
-                # Tout est parti : plus rien à envoyer — on désactive le
-                # bouton pour éviter un double envoi accidentel.
-                btn_send.set_sensitive(False)
-                return
-            btn_send.set_sensitive(True)
-            btn_cancel.set_label("Fermer")
+                btn_send.set_sensitive(True)
 
-        btn_cancel.connect("clicked", lambda _b: win.destroy())
+            sender.start(
+                to_send,
+                _progress,
+                _done,
+                subject=subject,
+                body=body,
+                project=self.project,
+                ds_name=ds_name,
+                include_breakdown=chk_breakdown.get_active(),
+                password=entry_pass.get_text() or None,
+                # Les mails de test (à soi-même) ne marquent pas les copies comme envoyées.
+                mailed=None if selftest else self.project.mailed,
+            )
+
         btn_send.connect("clicked", _send)
         win.present()
 
