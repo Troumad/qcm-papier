@@ -125,7 +125,7 @@ def _img_to_surface(img) -> object:
 
     from PIL import Image as PILImage
 
-    data = PILImage.Image.frombytes("RGBA", img.size, img.convert("RGBA").tobytes()).tobytes("raw", "BGRA")
+    data = PILImage.Image.convert(img, "RGBA").tobytes("raw", "BGRA")
     buf = bytearray(data)
     surface = cairo.ImageSurface.create_for_data(buf, cairo.Format.ARGB32, img.width, img.height, img.width * 4)
     # create_for_data ne copie pas les données : le buffer doit rester
