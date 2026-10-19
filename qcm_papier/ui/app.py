@@ -110,6 +110,32 @@ def _img_to_texture(img) -> object:
     return Gdk.Texture.new_from_bytes(GLib.Bytes.new(buf.getvalue()))
 
 
+def _img_to_surface(img) -> object:
+    """Convertit une image Pillow en Cairo ImageSurface (rendu logiciel).
+
+    Contrairement à Gdk.Texture/Gtk.Picture (rendu GPU), Cairo dessine
+    toujours : contournement des environnements où Gtk.Picture ne se
+    redessine pas (GTK 4.24 / Plasma par exemple). Renvoie None si
+    pycairo n'est pas disponible (l'appelant replie sur Gtk.Picture).
+    """
+    import io
+
+    try:
+        import cairo
+    except ImportError:
+        return None
+
+    buf = io.BytesIO()
+    img.convert("RGBA").save(buf, format="png")
+    buf.seek(0)
+    from PIL import Image as PILImage
+
+    data = PILImage.open(buf).convert("RGBA").tobytes("raw", "BGRA")
+    return cairo.ImageSurface.create_for_data(
+        bytearray(data), cairo.Format.ARGB32, img.width, img.height, img.width * 4
+    )
+
+
 def _label_font(size: int = 16):
     """Police pour les pastilles de numéro des repères bleus.
 
@@ -3612,7 +3638,11 @@ class MarkedPageWindow(Gtk.Window):
         self.scroll = Gtk.ScrolledWindow()
         self.scroll.set_hexpand(True)
         self.scroll.set_vexpand(True)
-        self.image = Gtk.Picture()
+        # DrawingArea + Cairo (rendu logiciel) : sur certains environnements
+        # (GTK 4.24 / Plasma), Gtk.Picture ne redessine pas quand sa texture
+        # change. Le rendu Cairo, lui, s'affiche toujours.
+        self.image = Gtk.DrawingArea()
+        self.image.set_draw_func(self._draw_image)
         # On épingle l'image en haut-gauche pour que les coordonnées de clic
         # soient toujours relatives au coin haut-gauche de l'image, quel que
         # soit le zoom ou la taille de la fenêtre (pas de centrage).
@@ -3976,10 +4006,17 @@ class MarkedPageWindow(Gtk.Window):
         self.zoom_label.set_text(f"{int(value * 100)} %")
         self._update_image()
 
-    def _image_controllers(self):
-        """Contrôleurs à ré-attacher quand le Gtk.Picture est reconstruit."""
-        ctrl = getattr(self, "_click_controller", None)
-        return [ctrl] if ctrl is not None else []
+    def _draw_image(self, _area, cr, _w, _h) -> None:
+        """Dessine l'image de la page (rendu Cairo, toujours affiché)."""
+        surface = getattr(self, "_display_surface", None)
+        if surface is None:
+            return
+        cr.set_source_surface(surface, 0, 0)
+        cr.paint()
+
+    # Le repli sans pycairo n'existe pas volontairement : pycairo fait
+    # partie des dépendances standard de PyGObject (paquet python3-gobject
+    # de Mageia). Sans lui, la visionneuse afficherait des pages vides.
 
     def _update_image(self):
         from PIL import Image as PILImage
@@ -4034,21 +4071,9 @@ class MarkedPageWindow(Gtk.Window):
         w = max(1, int(display.width * self._zoom))
         h = max(1, int(display.height * self._zoom))
         resized = display.resize((w, h), PILImage.LANCZOS)
-        # Reconstruire le Gtk.Picture à chaque image : sur certaines
-        # configurations GTK, remplacer la texture d'un Picture existant ne
-        # redessine pas (image qui n'apparaît qu'après un coup de zoom, page
-        # précédente qui reste affichée). Un widget neuf est infaillible.
-        self.scroll.set_child(None)
-        self.image = Gtk.Picture()
-        self.image.set_halign(Gtk.Align.START)
-        self.image.set_valign(Gtk.Align.START)
-        # Conserver les contrôleurs de clic (alignement manuel) sur le
-        # nouveau widget.
-        for controller in self._image_controllers():
-            self.image.add_controller(controller)
+        self._display_surface = _img_to_surface(resized)
         self.image.set_size_request(w, h)
-        self.image.set_paintable(_img_to_texture(resized))
-        self.scroll.set_child(self.image)
+        self.image.queue_draw()
 
     # ------------------------------------------------------------------
     # Alignement manuel des 5 repères d'orientation
