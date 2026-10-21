@@ -60,7 +60,9 @@
     if (index === null && !state.total) {
       throw new Error("Aucune adresse : chargez la table étudiants (levée d'anonymat) puis corrigez.");
     }
-    $("#mail-title").textContent = page ? `Envoyer la copie de ${page.student || page.email}` : "Envoyer les copies par mail";
+    $("#mail-title").textContent = page
+      ? `Envoyer la copie de ${page.student || page.email || "l'étudiant non identifié"}`
+      : "Envoyer les copies par mail";
     $("#mail-summary").textContent = page
       ? `Copie : ${page.file}${page.note === null ? "" : ` — note ${page.note}/${page.total}`}`
       : `${state.recipients} destinataire(s), ${state.pages} copie(s) corrigée(s). `

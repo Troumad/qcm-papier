@@ -85,14 +85,16 @@
     return `${r.file} v${r.variant} ${r.student_id || ""}${note}`;
   }
 
-  // Colonne Envoi : ✓ déjà envoyée, ✉ envoi individuel possible (adresse connue, copie corrigée).
+  // Colonne Envoi : ✓ déjà envoyée, ✉ envoi individuel possible (copie corrigée ;
+  // l'adresse est proposée si l'étudiant est identifié, sinon saisie dans la fenêtre).
   function sendCell(r) {
     if (r.mailed) return "✓";
-    if (!r.email || !r.aligned || r.variant === null) return "";
+    if (!r.aligned || r.variant === null) return "";
+    const to = r.email || "une adresse à saisir";
     return el("button", {
       type: "button",
-      title: `Envoyer la copie à ${r.email}`,
-      "aria-label": `Envoyer la copie à ${r.email}`,
+      title: `Envoyer la copie à ${to}`,
+      "aria-label": `Envoyer la copie à ${to}`,
       onclick: (ev) => { ev.stopPropagation(); window.QCMMail.open(r.index); },
     }, "✉");
   }
