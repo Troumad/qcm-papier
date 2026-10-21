@@ -239,9 +239,9 @@ def _send_mark(page, mailed: set[str] | None = None) -> str:
 
     « ✓ » si la copie a déjà été envoyée avec succès (mémorisée),
     « ✉ » si elle est envoyable mais pas encore partie, vide sinon.
+    L'adresse peut être inconnue (copie non identifiée) : elle sera
+    saisie dans le dialogue d'envoi.
     """
-    if not _student_email(page):
-        return ""
     if page.matrix_inv is None or page.variant_id is None:
         return ""
     if mailed is not None and _student_email(page) in mailed:
@@ -2503,7 +2503,7 @@ class QcmWindow(Gtk.ApplicationWindow):
             return
         _label, page = self.marked_pages[page_idx]
         if not _send_mark(page, self.project.mailed):
-            self.marking_status.set_text("Envoi impossible : pas d'email pour cet étudiant (levée d'anonymat ?).")
+            self.marking_status.set_text("Envoi impossible : copie non corrigée (alignement ou code-barres manquant).")
             return
         self._send_one_copy_dialog(page_idx)
 
@@ -2514,7 +2514,12 @@ class QcmWindow(Gtk.ApplicationWindow):
         name = f"{page.student_name or ''} {page.student_firstname or ''}".strip()
         ds_name = self.project.settings.evaluation_full or self.project.settings.evaluation_short
 
-        win = Gtk.Window(title=f"Envoyer la copie à {name or email}", transient_for=self, modal=True, default_width=620)
+        win = Gtk.Window(
+            title=f"Envoyer la copie à {name or email or 'l\'étudiant non identifié'}",
+            transient_for=self,
+            modal=True,
+            default_width=620,
+        )
         main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         main.set_margin_start(12)
         main.set_margin_end(12)
@@ -2539,7 +2544,11 @@ class QcmWindow(Gtk.ApplicationWindow):
                 from ..marking import scale_note
 
                 note_txt += f" (ramenée sur 20 : {scale_note(scanner.final_value(page), float(page.total)):.2f}/20)"
-        plain = f"Destinataire : {name} <{email}>\n{note_txt}\n{sender_line}"
+        plain = (
+            f"Destinataire : {name} <{email}>\n{note_txt}\n{sender_line}"
+            if email
+            else f"Destinataire : {name or 'étudiant non identifié'}\n(adresse à saisir ci-dessous)\n{note_txt}\n{sender_line}"
+        )
         info = Gtk.Label(label=plain)
         addr_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         lbl_addr = Gtk.Label(label="Adresse de réception :")
@@ -2624,6 +2633,12 @@ class QcmWindow(Gtk.ApplicationWindow):
                 return
             body = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
             dest_email = entry_addr.get_text().strip() or email
+            if not dest_email:
+                status.set_markup(
+                    "<span color='#C00'>Saisissez une adresse de réception pour cette copie non identifiée.</span>"
+                )
+                entry_addr.grab_focus()
+                return
             recipient = mailing.Recipient(email=dest_email, name=name, pages=[page])
             to = recipient
             selftest = chk_selftest.get_active()
@@ -3964,8 +3979,7 @@ class MarkedPageWindow(Gtk.Window):
     def _on_send_copy(self) -> None:
         """Envoie la copie affichée à son étudiant, via le dialogue de la fenêtre principale."""
         _label, page = self.pages[self.idx]
-        email = _student_email(page)
-        if not email or page.matrix_inv is None or page.variant_id is None:
+        if page.matrix_inv is None or page.variant_id is None:
             return
         parent = self._parent_window
         if parent is not None and hasattr(parent, "_send_one_copy_dialog"):
