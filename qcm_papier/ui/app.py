@@ -2670,7 +2670,7 @@ class QcmWindow(Gtk.ApplicationWindow):
                         )
                     else:
                         status.set_markup(
-                            f"<span color='#080'>Copie envoyée à {GLib.markup_escape_text(name or email)}.</span>"
+                            f"<span color='#080'>Copie envoyée à {GLib.markup_escape_text(dest_email)}.</span>"
                         )
                         self._refresh_send_marks()
                     # Le mail est parti : Envoyer reste désactivé pour éviter un
